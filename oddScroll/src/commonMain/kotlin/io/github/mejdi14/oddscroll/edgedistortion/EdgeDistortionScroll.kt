@@ -38,25 +38,24 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
- * Subdivision of a warped card. The fisheye varies across a card the size of a
- * third of the frame, so one quad cannot carry it — each tile is drawn with its
- * own affine transform taken from where its own edges land, and the curve shows
- * up in the difference between neighbours. Tiles overlap slightly or hairline
- * seams show between them.
+ * Subdivision of a warped card. The fisheye varies across a card that covers
+ * most of a phone's width, so one quad cannot carry it: each tile is drawn with
+ * its own affine transform taken from where its own edges land, and the curve
+ * shows up in the difference between neighbours. Six is the point where the
+ * facets stop being visible along a card's outline; raising it costs draws for
+ * nothing. Tiles overlap slightly or hairline seams show between them.
  */
-private const val TILES = 8
+private const val TILES = 6
 private const val TILE_OVERLAP = 0.6f
 
 /** Under this the card sits in the undistorted middle and goes down as one quad. */
 private const val FLAT_ENOUGH = 0.002f
 
-/** Under this the fringe would land inside a pixel; not worth three passes. */
-private const val FRINGE_FLOOR = 0.03f
+/** Under this the fringe lands inside a pixel; not worth three passes. */
+private const val FRINGE_FLOOR = 0.04f
 
-/** Lattice steps a card index is advanced by, chosen so neither axis repeats
-    on a short cycle and the grid does not read as stripes. */
-private const val STRIDE_X = 7
-private const val STRIDE_Y = 3
+/** The reference lattice repeats on this period, as the original's wrap does. */
+private const val BLOCK = 5
 
 private val RedOnly = channel(1f, 0f, 0f)
 private val GreenOnly = channel(0f, 1f, 0f)
@@ -72,44 +71,46 @@ fun rememberEdgeDistortionScrollState(
  * borders of the frame.
  *
  * Nothing is scrolled in the usual sense: there is no list and no extent. The
- * camera is unbounded, and whichever lattice cells it happens to cover are the
- * ones drawn, each taking its picture from the supplied set by position. Pan
- * far enough in any direction and the pictures come round again, but no edge is
- * ever reached.
+ * camera is unbounded, and whichever lattice cells it covers are the ones
+ * drawn, each taking its picture from the supplied set by position on a
+ * five-by-five period. Pan far enough in any direction and the pictures come
+ * round again, but no edge is ever reached.
  *
  * The borders carry a fisheye and a colour fringe. Both are screen-space
- * treatments in their usual form — a pass over the rendered frame — and are
- * done here as geometry instead: the fisheye by subdividing each card and
- * warping the pieces, the fringe by laying the red and blue channels down at
- * slightly different scales about the centre of the frame. That second one is
- * close to the usual fixed radial offset where it is visible, and better
- * behaved than it in the middle, where it correctly comes to nothing.
+ * treatments in their usual form — one pass over the rendered frame — and are
+ * done here as geometry instead, since the cards *are* the frame: the fisheye
+ * by subdividing each card and warping the pieces, the fringe by laying the red
+ * and blue channels down at slightly different scales about the centre.
  *
- * Left to itself the lattice drifts. A drag takes it over and is thrown when
- * released, and the drift resumes once the throw is spent.
+ * Left to itself the lattice drifts diagonally. A drag takes it over and the
+ * drift resumes on release.
  *
  * @param images pictures to lay over the lattice, cover-fitted to [cardRatio].
  * @param background the page colour behind the cards.
  * @param cardHeight card height as a share of the viewport's height.
  * @param cardRatio card width / height.
- * @param gap space between cards as a share of the card's own size.
+ * @param gapX space between columns as a share of the card's width.
+ * @param gapY space between rows as a share of the card's height.
  * @param corner corner rounding as a share of the card's shorter side.
  * @param distortion how hard the borders bend. 0 leaves the frame flat.
- * @param aberration width of the colour fringe at the borders, as a share of
- *   the frame. 0 drops it, and with it two of every three edge draws.
+ * @param aberration colour fringe width as a share of the viewport's width.
+ *   0 drops it, and with it two of every three draws along the border.
+ * @param panSpeed lattice pixels moved per pixel of drag.
  * @param drift idle movement per second, as a share of the viewport's height.
  */
 @Composable
 fun EdgeDistortionScroll(
     images: List<ImageBitmap>,
     modifier: Modifier = Modifier,
-    background: Color = Color(0xFFF7F6F3),
+    background: Color = Color.White,
     cardHeight: Float = 0.375f,
     cardRatio: Float = 0.8f,
-    gap: Float = 0.27f,
-    corner: Float = 0.055f,
+    gapX: Float = 0.333f,
+    gapY: Float = 0.267f,
+    corner: Float = 0.053f,
     distortion: Float = 0.3f,
     aberration: Float = 0.008f,
+    panSpeed: Float = 1.5f,
     drift: Offset = Offset(0.03f, 0.015f),
     state: EdgeDistortionScrollState = rememberEdgeDistortionScrollState(drift),
 ) {
@@ -140,7 +141,7 @@ fun EdgeDistortionScroll(
             Modifier
                 .fillMaxSize()
                 .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
-                .pointerInput(state) {
+                .pointerInput(state, panSpeed) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         state.onDragStart()
@@ -154,6 +155,7 @@ fun EdgeDistortionScroll(
                             state.onDrag(
                                 change.position.x - last.x,
                                 change.position.y - last.y,
+                                panSpeed,
                             )
                             last = change.position
                             change.consume()
@@ -177,7 +179,7 @@ fun EdgeDistortionScroll(
         ) {
             state.tick // read, so the grid redraws every frame while it drifts
             state.lastViewportHeight = size.height
-            drawLattice(cards, state, warp, cardHeight, cardRatio, gap, aberration)
+            drawLattice(cards, state, warp, cardHeight, cardRatio, gapX, gapY, aberration)
         }
     }
 }
@@ -190,7 +192,8 @@ private fun DrawScope.drawLattice(
     warp: EdgeWarp,
     cardHeight: Float,
     cardRatio: Float,
-    gap: Float,
+    gapX: Float,
+    gapY: Float,
     aberration: Float,
 ) {
     val halfW = size.width / 2f
@@ -199,8 +202,8 @@ private fun DrawScope.drawLattice(
 
     val cardH = cardHeight * size.height
     val cardW = cardH * cardRatio
-    val stepX = cardW * (1f + gap)
-    val stepY = cardH * (1f + gap)
+    val stepX = cardW * (1f + gapX)
+    val stepY = cardH * (1f + gapY)
     if (stepX <= 0f || stepY <= 0f) return
 
     // Which cells the viewport covers. The warp only ever pulls content inward,
@@ -211,13 +214,16 @@ private fun DrawScope.drawLattice(
     val firstY = floor((state.cameraY - halfH - cardH) / stepY).toInt()
     val lastY = ceil((state.cameraY + halfH + cardH) / stepY).toInt()
 
+    // The fringe is specified against the viewport's width in uv, where the
+    // frame spans one; as a scale about the centre it spans two, so it doubles.
+    val fringeScale = aberration * 2f
     val matrix = Matrix()
 
     for (cellY in firstY..lastY) {
         for (cellX in firstX..lastX) {
             val centreX = cellX * stepX
             val centreY = cellY * stepY
-            val card = cards[floorMod(cellX * STRIDE_X + cellY * STRIDE_Y, cards.size)]
+            val card = cards[pictureFor(cellX, cellY, cards.size)]
 
             // Normalised position of a point of this card, after the warp.
             fun warped(u: Float, v: Float): Offset {
@@ -274,26 +280,34 @@ private fun DrawScope.drawLattice(
                     val rowY = (bottom.y - top.y) * halfH
                     if (abs(colX) + abs(colY) < 0.05f) continue
 
+                    val originX = (top.x * 0.5f + 0.5f) * size.width - colX * 0.5f
+                    val originY = (top.y * 0.5f + 0.5f) * size.height - colY * 0.5f
+                    // Most of a lattice is off screen even after the cards are
+                    // culled; the corners of this parallelogram are exactly
+                    // where the tile lands, so the test is free.
+                    if (tileOffFrame(originX, originY, colX, colY, rowX, rowY)) continue
+
                     matrix.reset()
                     matrix[0, 0] = colX / srcW
                     matrix[0, 1] = colY / srcW
                     matrix[1, 0] = rowX / srcH
                     matrix[1, 1] = rowY / srcH
-                    matrix[3, 0] = (top.x * 0.5f + 0.5f) * size.width - colX * 0.5f
-                    matrix[3, 1] = (top.y * 0.5f + 0.5f) * size.height - colY * 0.5f
+                    matrix[3, 0] = originX
+                    matrix[3, 1] = originY
 
                     val edge = warp.edgeAt(warp.radiusOf(warped(uMid, vMid)))
                     if (aberration > 0f && edge > FRINGE_FLOOR) {
-                        val fringe = aberration * edge
-                        // Three channels, laid down at slightly different
-                        // scales about the centre of the frame. Lighten rather
-                        // than an additive blend: it gives the same result for
-                        // channels that do not overlap, and unlike addition it
-                        // is unchanged by drawing the same pixel twice, which
-                        // the tile overlap does constantly.
+                        val fringe = fringeScale * edge
+                        // Red is sampled further out by the screen-space
+                        // original, which lands it further IN; blue the other
+                        // way. Lighten rather than an additive blend: it gives
+                        // the same result for channels that do not overlap,
+                        // and unlike addition it is unchanged by drawing the
+                        // same pixel twice, which the tile overlap does
+                        // constantly.
                         tile(card, matrix, sxA, syA, srcW, srcH, GreenOnly, 1f, BlendMode.SrcOver)
-                        tile(card, matrix, sxA, syA, srcW, srcH, RedOnly, 1f + fringe, BlendMode.Lighten)
-                        tile(card, matrix, sxA, syA, srcW, srcH, BlueOnly, 1f - fringe, BlendMode.Lighten)
+                        tile(card, matrix, sxA, syA, srcW, srcH, RedOnly, 1f - fringe, BlendMode.Lighten)
+                        tile(card, matrix, sxA, syA, srcW, srcH, BlueOnly, 1f + fringe, BlendMode.Lighten)
                     } else {
                         tile(card, matrix, sxA, syA, srcW, srcH, null, 1f, BlendMode.SrcOver)
                     }
@@ -302,6 +316,15 @@ private fun DrawScope.drawLattice(
         }
     }
 }
+
+/**
+ * Which picture a cell shows. The reference builds one five-by-five block and
+ * teleports its cards around the camera; the lattice here is unbounded instead,
+ * so the block is reproduced by taking the cell's position within it — same
+ * arrangement, same period, without anything to keep in step.
+ */
+private fun pictureFor(cellX: Int, cellY: Int, count: Int): Int =
+    (floorMod(cellX, BLOCK) * BLOCK + floorMod(cellY, BLOCK)) % count
 
 /**
  * One tile, optionally through a single colour channel and scaled about the
@@ -344,6 +367,30 @@ private fun offFrame(a: Offset, b: Offset, c: Offset, d: Offset): Boolean {
     val minY = min(min(a.y, b.y), min(c.y, d.y))
     val maxY = max(max(a.y, b.y), max(c.y, d.y))
     return minX > margin || maxX < -margin || minY > margin || maxY < -margin
+}
+
+private fun DrawScope.tileOffFrame(
+    originX: Float,
+    originY: Float,
+    colX: Float,
+    colY: Float,
+    rowX: Float,
+    rowY: Float,
+): Boolean {
+    val margin = 2f
+    val xs0 = originX
+    val xs1 = originX + colX
+    val xs2 = originX + rowX
+    val xs3 = originX + colX + rowX
+    if (min(min(xs0, xs1), min(xs2, xs3)) > size.width + margin) return true
+    if (max(max(xs0, xs1), max(xs2, xs3)) < -margin) return true
+    val ys0 = originY
+    val ys1 = originY + colY
+    val ys2 = originY + rowY
+    val ys3 = originY + colY + rowY
+    if (min(min(ys0, ys1), min(ys2, ys3)) > size.height + margin) return true
+    if (max(max(ys0, ys1), max(ys2, ys3)) < -margin) return true
+    return false
 }
 
 private fun floorMod(value: Int, by: Int): Int {

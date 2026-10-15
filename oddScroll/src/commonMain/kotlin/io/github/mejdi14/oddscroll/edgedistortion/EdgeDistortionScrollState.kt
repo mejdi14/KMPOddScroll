@@ -5,26 +5,18 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
-import io.github.mejdi14.oddscroll.internal.FRAME_MS
-import io.github.mejdi14.oddscroll.internal.lerp
-import kotlin.math.pow
-
-/** Per-frame survival of the throw. Lower stops sooner. */
-private const val DECAY = 0.94f
-
-/** How fast the measured drag speed is allowed to follow the pointer. */
-private const val VELOCITY_TRACK = 0.4f
-
-/** Under this the throw is spent and the idle drift takes back over. */
-private const val REST = 0.02f
 
 /**
  * Where the viewport sits over the lattice, and how it is still moving.
  *
  * The grid is infinite, so there is nothing to scroll *within* — the camera is
  * the whole of the state, and it is unbounded on both axes. Positions are in
- * undistorted scene pixels with y running down, the same units the viewport is
- * measured in, which is what lets a drag track the finger one for one.
+ * undistorted scene pixels with y running down.
+ *
+ * A drag moves the camera and then stops dead; the idle drift takes straight
+ * back over. There is deliberately no throw. The drift is always running
+ * underneath, so a throw decaying into it would read as the gallery refusing to
+ * settle rather than as momentum.
  */
 class EdgeDistortionScrollState internal constructor(
     internal val drift: Offset,
@@ -44,40 +36,34 @@ class EdgeDistortionScrollState internal constructor(
         private set
 
     /**
-     * Last viewport height the draw pass saw. The drift is expressed as a share
-     * of it, and the frame loop advances the camera without having a layout to
-     * ask, so the draw pass leaves it here.
+     * Last viewport height the draw pass saw. The drift is a share of it, and
+     * the frame loop advances the camera without a layout to ask, so the draw
+     * pass leaves it here.
      */
     internal var lastViewportHeight: Float = 0f
 
-    private var velocityX = 0f
-    private var velocityY = 0f
     private var dragging = false
 
     // --- input ---------------------------------------------------------------
 
     internal fun onDragStart() {
         dragging = true
-        velocityX = 0f
-        velocityY = 0f
     }
 
     /**
      * [dx] and [dy] are pointer movement in pixels. The camera moves against
-     * them, so the card under the finger stays under the finger.
+     * them, so the lattice follows the finger.
      */
-    internal fun onDrag(dx: Float, dy: Float) {
-        cameraX -= dx
-        cameraY -= dy
-        velocityX = lerp(velocityX, -dx, VELOCITY_TRACK)
-        velocityY = lerp(velocityY, -dy, VELOCITY_TRACK)
+    internal fun onDrag(dx: Float, dy: Float, panSpeed: Float) {
+        cameraX -= dx * panSpeed
+        cameraY -= dy * panSpeed
     }
 
     internal fun onDragEnd() {
         dragging = false
     }
 
-    /** Jump the viewport, for programmatic moves. */
+    /** Jump the viewport, for the wheel and for programmatic moves. */
     fun offsetBy(dx: Float, dy: Float) {
         cameraX += dx
         cameraY += dy
@@ -87,22 +73,13 @@ class EdgeDistortionScrollState internal constructor(
 
     internal fun advance(deltaMs: Float, viewportHeight: Float) {
         tick++
-        if (dragging) return
-
-        val steps = deltaMs / FRAME_MS
-        val decay = DECAY.pow(steps)
-        velocityX *= decay
-        velocityY *= decay
-        if (velocityX * velocityX + velocityY * velocityY < REST * REST) {
-            velocityX = 0f
-            velocityY = 0f
-        }
+        if (dragging || viewportHeight <= 0f) return
 
         // The drift is given as a share of the viewport per second so it reads
-        // the same on a phone as on a desktop window, where a fixed pixel rate
+        // the same on a phone as in a desktop window, where a fixed pixel rate
         // would crawl on one and race on the other.
         val seconds = deltaMs / 1000f
-        cameraX += velocityX * steps + drift.x * viewportHeight * seconds
-        cameraY += velocityY * steps + drift.y * viewportHeight * seconds
+        cameraX += drift.x * viewportHeight * seconds
+        cameraY += drift.y * viewportHeight * seconds
     }
 }

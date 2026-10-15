@@ -75,9 +75,9 @@ HelixScroll(
 ### Edge Distortion
 
 An endless lattice of cards panned freely on both axes, bending away at the
-borders of the frame with a fisheye and a colour fringe. It drifts on its own,
-takes a drag, and throws when released. There is no extent and no edge — pan far
-enough and the pictures come round again.
+borders of the frame with a fisheye and a colour fringe. It drifts diagonally on
+its own and takes a drag, resuming the drift on release. There is no extent and
+no edge — pan far enough and the pictures come round again.
 
 ```kotlin
 EdgeDistortionScroll(
@@ -88,13 +88,15 @@ EdgeDistortionScroll(
 
 | Parameter | Default | |
 | --- | --- | --- |
-| `background` | `0xFFF7F6F3` | page colour behind the cards |
+| `background` | white | page colour behind the cards |
 | `cardHeight` | `0.375` | card height, share of the viewport |
 | `cardRatio` | `0.8` | card width / height |
-| `gap` | `0.27` | space between cards, share of card size |
-| `corner` | `0.055` | rounding, share of the shorter side |
+| `gapX` | `0.333` | space between columns, share of card width |
+| `gapY` | `0.267` | space between rows, share of card height |
+| `corner` | `0.053` | rounding, share of the shorter side |
 | `distortion` | `0.3` | how hard the borders bend; `0` is flat |
-| `aberration` | `0.008` | colour fringe width; `0` drops it |
+| `aberration` | `0.008` | fringe width, share of viewport width; `0` drops it |
+| `panSpeed` | `1.5` | lattice pixels per pixel of drag |
 | `drift` | `(0.03, 0.015)` | idle movement per second |
 
 ## Photo credits
@@ -111,3 +113,6 @@ Compose resources.
 | `helix_forest.jpg` | [Wolfgang Hasselmann](https://unsplash.com/photos/1788695968738-3c2818047036) |
 | `helix_basalt.jpg` | [Adrien Olichon](https://unsplash.com/photos/1762763955129-0ad8692095ce) |
 | `helix_towers.jpg` | [Heye Jensen](https://unsplash.com/photos/1790313157313-cbc2c66a61ab) |
+
+The `grid_*.jpg` set is the same six photographs, cut 800x1000 for the portrait
+cards of the Edge Distortion gallery.
