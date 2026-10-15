@@ -28,6 +28,7 @@ fun ScrollArtwork(route: String, modifier: Modifier = Modifier) {
         when (route) {
             "helix" -> helix()
             "edge_distortion" -> edgeDistortion()
+            "flex_carousel" -> flexCarousel()
             else -> helix()
         }
     }
@@ -82,5 +83,36 @@ private fun DrawScope.edgeDistortion() {
                 size = Size(w, h),
             )
         }
+    }
+}
+
+/**
+ * The row in miniature: cards of unequal width on one line, dragged upward as
+ * they reach the sides, which is the band of glass standing in for itself at
+ * this size.
+ */
+private fun DrawScope.flexCarousel() {
+    val widths = floatArrayOf(0.1f, 0.17f, 0.13f, 0.2f, 0.12f, 0.16f, 0.11f)
+    val gap = size.width * 0.025f
+    val cardH = size.height * 0.4f
+
+    var total = gap * (widths.size - 1)
+    for (w in widths) total += size.width * w
+    var x = (size.width - total) / 2f
+
+    for (w in widths) {
+        val cw = size.width * w
+        val centre = (x + cw / 2f) / size.width * 2f - 1f
+        // Lifted on a bell centred on the edge band, as the lens lifts the row.
+        val band = kotlin.math.abs(centre)
+        val lift = 16f * band * band * (1f - band) * (1f - band)
+        val y = size.height / 2f - cardH / 2f - lift * size.height * 0.16f *
+            (if (centre >= 0f) 1f else -1f)
+        drawRect(
+            color = Color(0xFFE4DCC9).copy(alpha = 0.3f + (1f - band) * 0.6f),
+            topLeft = Offset(x, y),
+            size = Size(cw, cardH),
+        )
+        x += cw + gap
     }
 }

@@ -103,6 +103,39 @@ EdgeDistortionScroll(
 | `panSpeed` | `1.5` | lattice pixels per pixel of drag |
 | `drift` | `(0.03, 0.015)` | idle movement per second |
 
+### Flex Carousel
+
+An infinite row of pictures that flows through invisible liquid glass at its
+edges. Cards keep their own proportions, so the row is a run of unequal widths
+and a step along it is half of this card plus the gap plus half of the next.
+Position is a spring: flick, wheel and tap all arrive as a new goal. The faster
+it runs, the narrower every card draws. Tap the centred card to open it.
+
+```kotlin
+FlexCarouselScroll(
+    items = listOf(FlexCarouselItem(image, "Forest Path"), /* ... */),
+    modifier = Modifier.fillMaxSize(),
+    lens = FlexLens.Liquid,
+)
+```
+
+| Parameter | Default | |
+| --- | --- | --- |
+| `lens` | `FlexLens.Liquid` | glass shape; also `Ribbon`, `Vortex`, `Arch` |
+| `cardHeight` | `0.5` | card height, share of the viewport |
+| `gap` | `12.dp` | space between cards |
+| `radius` | `0.dp` | corner rounding |
+| `fit` | `Natural` | or `Portrait`, `Square`, `Landscape` |
+| `squeeze` | `0.2` | how far cards narrow at full speed |
+| `focusOnClick` | `true` | tap the centred card to open it |
+| `autoplay` / `interval` | `false` / `4f` | step along on a timer |
+| `captions` | `true` | title and counter |
+| `intro` | `true` | the row rises into place |
+
+Like Edge Distortion, the glass is a single AGSL pass and needs **Android 13
+(API 33) or newer**; elsewhere the row runs undistorted and everything else is
+unchanged.
+
 ## Photo credits
 
 Demo card art is from [Unsplash](https://unsplash.com), used under the
