@@ -43,5 +43,8 @@ fun InfiniteMenuDemoScreen() {
     InfiniteMenuScroll(
         items = items,
         modifier = Modifier.fillMaxSize(),
+        // The sphere only turns when it is turned. Left to itself the reference
+        // steps on every few seconds, which fights whoever is reading a tile.
+        autoplay = 0f,
     )
 }
