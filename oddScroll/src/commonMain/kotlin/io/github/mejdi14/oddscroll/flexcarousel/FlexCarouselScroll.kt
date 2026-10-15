@@ -66,8 +66,10 @@ enum class FlexFit { Natural, Portrait, Square, Landscape }
  * without reaching for a different one.
  *
  * @param width half-width of the lens as a share of the viewport's width.
- * @param height half-height, also measured against the *width*, so the lens
- *   keeps its proportions when the frame gets shorter.
+ * @param height half-height as a share of the frame's *long* side, so the lens
+ *   stays taller than a portrait frame instead of banding across the middle of
+ *   it. On a landscape frame the long side is the width, which is what the
+ *   reference measures both against.
  * @param tilt rotation of the lens, in degrees.
  * @param roundness 1 is an ellipse, 0 a hard rectangle.
  * @param bend how far the glass drags what passes through it.
@@ -138,6 +140,10 @@ fun rememberFlexCarouselScrollState(count: Int): FlexCarouselScrollState =
  * @param contentColor colour of the caption and counter.
  * @param lens shape and behaviour of the glass. See [FlexLens].
  * @param cardHeight card height as a share of the viewport's height.
+ * @param maxCardWidth the widest a card may draw, as a share of the viewport's
+ *   width. It holds [cardHeight] down on a portrait frame, where height alone
+ *   would make a card wider than the frame it sits in; on a landscape one the
+ *   cap is never reached.
  * @param gap space between cards.
  * @param radius corner rounding. Square by default, as the reference is.
  * @param fit how cards are proportioned; [FlexFit.Natural] keeps each
@@ -157,6 +163,7 @@ fun FlexCarouselScroll(
     contentColor: Color = Color(0xFFF2F0EC),
     lens: FlexLens = FlexLens.Liquid,
     cardHeight: Float = 0.5f,
+    maxCardWidth: Float = 0.62f,
     gap: Dp = 12.dp,
     radius: Dp = 0.dp,
     fit: FlexFit = FlexFit.Natural,
@@ -183,9 +190,20 @@ fun FlexCarouselScroll(
             items[it].image.width.toFloat() / max(items[it].image.height, 1)
         }
     }
-    val metrics = remember(aspects, viewport, cardHeight, gapPx, fit) {
-        if (viewport.height <= 0) null
-        else buildMetrics(aspects, viewport.height.toFloat(), cardHeight, gapPx, fit.aspect())
+    val metrics = remember(aspects, viewport, cardHeight, maxCardWidth, gapPx, fit) {
+        if (viewport.height <= 0 || viewport.width <= 0) {
+            null
+        } else {
+            buildMetrics(
+                aspects = aspects,
+                viewportWidth = viewport.width.toFloat(),
+                viewportHeight = viewport.height.toFloat(),
+                cardHeight = cardHeight,
+                gap = gapPx,
+                fixedAspect = fit.aspect(),
+                maxCardWidth = maxCardWidth,
+            )
+        }
     }
     SideEffect { state.metrics = metrics }
 

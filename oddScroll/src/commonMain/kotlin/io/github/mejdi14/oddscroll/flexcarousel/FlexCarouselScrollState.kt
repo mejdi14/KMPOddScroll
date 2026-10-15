@@ -8,6 +8,7 @@ import io.github.mejdi14.oddscroll.internal.clamped
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.exp
+import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
 
@@ -267,12 +268,25 @@ class FlexCarouselScrollState internal constructor(
 
 internal fun buildMetrics(
     aspects: FloatArray,
+    viewportWidth: Float,
     viewportHeight: Float,
     cardHeight: Float,
     gap: Float,
     fixedAspect: Float?,
+    maxCardWidth: Float,
 ): FlexMetrics {
-    val cardH = (cardHeight * viewportHeight).coerceAtLeast(24f)
+    // Height alone cannot size a card. On a tall phone a half-height card is
+    // wider than the frame, which swallows its neighbours and leaves nothing
+    // for the row to read as a row, so the widest card is also held to a share
+    // of the width and the height follows it down. On a wide frame the cap is
+    // never reached and the height is the only thing that matters, which is why
+    // landscape is untouched by this.
+    var cardH = (cardHeight * viewportHeight).coerceAtLeast(24f)
+    var widest = 0f
+    for (i in aspects.indices) widest = max(widest, fixedAspect ?: aspects[i])
+    if (widest > 0f && viewportWidth > 0f) {
+        cardH = min(cardH, maxCardWidth * viewportWidth / widest).coerceAtLeast(24f)
+    }
     val widths = FloatArray(aspects.size) { (fixedAspect ?: aspects[it]) * cardH }
     val centers = FloatArray(widths.size)
     var cursor = 0f

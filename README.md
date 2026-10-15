@@ -106,8 +106,9 @@ EdgeDistortionScroll(
 ### Flex Carousel
 
 An infinite row of pictures that flows through invisible liquid glass at its
-edges. Cards keep their own proportions, so the row is a run of unequal widths
-and a step along it is half of this card plus the gap plus half of the next.
+edges. With `fit = Natural` cards keep their own proportions and the row is a
+run of unequal widths; any other `fit` draws them all at one size. Either way a
+step along is half of this card plus the gap plus half of the next.
 Position is a spring: flick, wheel and tap all arrive as a new goal. The faster
 it runs, the narrower every card draws. Tap the centred card to open it.
 
@@ -122,7 +123,8 @@ FlexCarouselScroll(
 | Parameter | Default | |
 | --- | --- | --- |
 | `lens` | `FlexLens.Liquid` | glass shape; also `Ribbon`, `Vortex`, `Arch` |
-| `cardHeight` | `0.5` | card height, share of the viewport |
+| `cardHeight` | `0.5` | card height, share of the viewport height |
+| `maxCardWidth` | `0.62` | widest a card may draw, share of viewport width |
 | `gap` | `12.dp` | space between cards |
 | `radius` | `0.dp` | corner rounding |
 | `fit` | `Natural` | or `Portrait`, `Square`, `Landscape` |
@@ -131,6 +133,11 @@ FlexCarouselScroll(
 | `autoplay` / `interval` | `false` / `4f` | step along on a timer |
 | `captions` | `true` | title and counter |
 | `intro` | `true` | the row rises into place |
+
+`cardHeight` alone cannot size a card: on a portrait frame half the height is
+wider than the frame itself. `maxCardWidth` holds the widest card to a share of
+the width and brings the height down with it, so a tall phone shows the centre
+card with its neighbours either side. A landscape frame never reaches the cap.
 
 Like Edge Distortion, the glass is a single AGSL pass and needs **Android 13
 (API 33) or newer**; elsewhere the row runs undistorted and everything else is

@@ -118,10 +118,15 @@ internal actual fun Modifier.liquidLens(lens: FlexLens, strength: Float): Modifi
         val h = size.height
         if (w <= 0f || h <= 0f) return@graphicsLayer
 
-        // Both halves are measured against the width, so the lens keeps its
-        // proportions as the frame gets shorter rather than squashing with it.
+        // The width is measured against the frame's width, so the two vertical
+        // edges of the lens always land inside it and the row runs out through
+        // them. The height is measured against the frame's LONG side: on a
+        // landscape frame that is the width, which is what the reference does,
+        // but on a portrait one measuring against the width would leave the
+        // lens shorter than the frame and drag a band straight across the
+        // middle of the picture instead of down its sides.
         val halfW = max(lens.width * w / 2f, 1f)
-        val halfH = max(lens.height * w / 2f, 1f)
+        val halfH = max(lens.height * max(w, h) / 2f, 1f)
         val inner = max(4f, lens.reach * (halfW + halfH) * 0.5f)
 
         @Suppress("NewApi")
