@@ -3,6 +3,7 @@ package com.example.kmp_odd_scroll
 import androidx.compose.runtime.Composable
 import com.example.kmp_odd_scroll.demos.EdgeDistortionDemoScreen
 import com.example.kmp_odd_scroll.demos.FlexCarouselDemoScreen
+import com.example.kmp_odd_scroll.demos.InfiniteMenuDemoScreen
 import com.example.kmp_odd_scroll.demos.HelixDemoScreen
 
 /**
@@ -41,5 +42,12 @@ val scrollDemos: List<ScrollDemo> = listOf(
         title = "Flex Carousel",
         subtitle = "An infinite picture row flowing through invisible liquid glass",
         screen = { FlexCarouselDemoScreen() },
+    ),
+    ScrollDemo(
+        route = "infinite_menu",
+        category = "Spherical",
+        title = "Infinite Menu",
+        subtitle = "A sphere of tiles, dragged any way, that faces up the nearest",
+        screen = { InfiniteMenuDemoScreen() },
     ),
 )

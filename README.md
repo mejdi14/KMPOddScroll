@@ -146,6 +146,37 @@ Like Edge Distortion, the glass is a single AGSL pass and needs **Android 13
 (API 33) or newer**; elsewhere the row runs undistorted and everything else is
 unchanged.
 
+### Infinite Menu
+
+A sphere of tiles, dragged from any direction, that brings whichever tile ends
+up nearest the front round to face you. Pictures repeat around the sphere, so it
+reads as a surface rather than a list bent into a ball. Tiles turning away
+shrink, desaturate and fade; the camera backs off while you handle it and draws
+in again as it settles.
+
+```kotlin
+InfiniteMenuScroll(
+    items = listOf(InfiniteMenuItem(image, "Forest Path", "Autumn woodland"), /* ... */),
+    modifier = Modifier.fillMaxSize(),
+)
+```
+
+| Parameter | Default | |
+| --- | --- | --- |
+| `tileCount` | `160` | tiles on the sphere, 6 to 400 |
+| `tileSize` | `0.63` | tile size, share of its own patch of sphere |
+| `roundness` | `0.2` | corner rounding, 0 square to 1 circular |
+| `zoom` | `1.65` | how much of the frame the front tile fills |
+| `pullBack` | `1.0` | how far the camera backs off while moving |
+| `stretch` | `0.6` | smear along travel while spinning |
+| `inertia` | `0.6` | how long a throw runs |
+| `autoplay` | `3f` | seconds at rest before stepping on; `0` never |
+| `grayscale` / `dim` | `true` / `0.5` | how the tiles behind are drained |
+| `captions` | `true` | title and description of the front tile |
+
+Unlike the other two optical styles this one needs no shader anywhere — it is
+all geometry, one image per tile, so it runs the same on every target.
+
 ## Photo credits
 
 Demo card art is from [Unsplash](https://unsplash.com), used under the

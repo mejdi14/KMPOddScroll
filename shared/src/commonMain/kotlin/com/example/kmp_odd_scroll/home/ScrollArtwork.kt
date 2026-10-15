@@ -29,6 +29,7 @@ fun ScrollArtwork(route: String, modifier: Modifier = Modifier) {
             "helix" -> helix()
             "edge_distortion" -> edgeDistortion()
             "flex_carousel" -> flexCarousel()
+            "infinite_menu" -> infiniteMenu()
             else -> helix()
         }
     }
@@ -114,5 +115,31 @@ private fun DrawScope.flexCarousel() {
             size = Size(cw, cardH),
         )
         x += cw + gap
+    }
+}
+
+/**
+ * The sphere in miniature: tiles on a golden-angle spiral, those facing away
+ * drawn smaller and fainter, exactly as the menu shades them.
+ */
+private fun DrawScope.infiniteMenu() {
+    val count = 54
+    val golden = 3.1415927f * (3f - kotlin.math.sqrt(5f))
+    val r = size.minDimension * 0.4f
+    val cx = size.width / 2f
+    val cy = size.height / 2f
+
+    for (i in 0 until count) {
+        val y = 1f - (2f * (i + 0.5f)) / count
+        val ring = kotlin.math.sqrt((1f - y * y).coerceAtLeast(0f))
+        val px = kotlin.math.cos(golden * i) * ring
+        val pz = kotlin.math.sin(golden * i) * ring
+        if (pz < 0.02f) continue
+        val tile = size.minDimension * 0.1f * (0.5f + 0.5f * pz)
+        drawRect(
+            color = Color(0xFFE4DCC9).copy(alpha = 0.12f + pz * 0.75f),
+            topLeft = Offset(cx + px * r - tile / 2f, cy - y * r - tile / 2f),
+            size = Size(tile, tile),
+        )
     }
 }
