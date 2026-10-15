@@ -134,10 +134,13 @@ FlexCarouselScroll(
 | `captions` | `true` | title and counter |
 | `intro` | `true` | the row rises into place |
 
-`cardHeight` alone cannot size a card: on a portrait frame half the height is
-wider than the frame itself. `maxCardWidth` holds the widest card to a share of
-the width and brings the height down with it, so a tall phone shows the centre
-card with its neighbours either side. A landscape frame never reaches the cap.
+Every size is a share of the bounds the row is given, including the lens, so
+handing it a band rather than the whole screen is the way to make its cards
+smaller — the demo gives it 62% of the height on a portrait screen and all of a
+landscape one. `maxCardWidth` is the backstop underneath that: it holds the
+widest card to a share of the width and brings `cardHeight` down with it, since
+on a tall frame half the height is wider than the frame itself. A landscape
+frame never reaches the cap.
 
 Like Edge Distortion, the glass is a single AGSL pass and needs **Android 13
 (API 33) or newer**; elsewhere the row runs undistorted and everything else is
