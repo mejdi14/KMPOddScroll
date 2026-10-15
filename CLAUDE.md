@@ -50,8 +50,21 @@ Rules:
 
 ## Rendering constraints
 
-The library is **common code only** — no `expect`/`actual`, no platform
-graphics APIs. That rules out runtime shaders, so the house techniques are:
+Prefer **common code**: a style that can be drawn with Compose's own primitives
+should be. The house techniques for that are below.
+
+A per-pixel treatment over a finished frame — a warp, a blur, a colour split —
+is the exception. Do **not** try to fake one by subdividing geometry and drawing
+the pieces: a few hundred `drawImage` calls a frame will not hold 60fps on a
+phone, which is how `EdgeDistortionScroll` was first written and why it was
+rewritten. Put it behind an `internal expect fun Modifier.<effect>(...)` instead:
+`androidMain` supplies an AGSL `RuntimeShader` through
+`graphicsLayer { renderEffect = ... }`, and the other targets return `this`, so
+the style still runs everywhere with that one treatment missing. Keep the actual
+in every source set (`jvmMain`, `jsMain`, `wasmJsMain`, `iosMain`) — the module
+has no shared non-Android set, and adding one is not worth the build config.
+
+House techniques for the common part:
 
 - **Perspective via strips.** A card is sliced into vertical strips and each
   strip is drawn with its own affine transform (`withTransform { transform(m) }`
@@ -66,6 +79,10 @@ graphics APIs. That rules out runtime shaders, so the house techniques are:
   composited column with `BlendMode.SrcAtop`, which affects only where content
   already exists. That needs
   `Modifier.graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)`.
+- **Count the draws per frame.** A visible-cell sweep plus one `drawImage` per
+  card is the target. `withTransform { translate(...); scale(...) }` around
+  `drawImage(image, topLeft)` keeps motion sub-pixel smooth where an integer
+  `dstOffset` would step.
 - Animation runs off a `withFrameNanos` loop, so easing constants are converted
   from per-frame to per-second: `1 - (1 - k).pow(dt / 16.67)`.
 

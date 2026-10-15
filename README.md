@@ -79,6 +79,10 @@ borders of the frame with a fisheye and a colour fringe. It drifts diagonally on
 its own and takes a drag, resuming the drift on release. There is no extent and
 no edge — pan far enough and the pictures come round again.
 
+The border treatment is a single AGSL shader pass over the frame, so it needs
+**Android 13 (API 33) or newer**. Everywhere else — older Android, desktop, web,
+iOS — the lattice draws flat and behaves identically otherwise.
+
 ```kotlin
 EdgeDistortionScroll(
     images = listOf(image, /* ... */),
@@ -95,7 +99,7 @@ EdgeDistortionScroll(
 | `gapY` | `0.267` | space between rows, share of card height |
 | `corner` | `0.053` | rounding, share of the shorter side |
 | `distortion` | `0.3` | how hard the borders bend; `0` is flat |
-| `aberration` | `0.008` | fringe width, share of viewport width; `0` drops it |
+| `aberration` | `0.008` | fringe offset in uv; `0` drops it |
 | `panSpeed` | `1.5` | lattice pixels per pixel of drag |
 | `drift` | `(0.03, 0.015)` | idle movement per second |
 
