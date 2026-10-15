@@ -30,6 +30,7 @@ fun ScrollArtwork(route: String, modifier: Modifier = Modifier) {
             "edge_distortion" -> edgeDistortion()
             "flex_carousel" -> flexCarousel()
             "infinite_menu" -> infiniteMenu()
+            "card_sphere" -> cardSphere()
             else -> helix()
         }
     }
@@ -142,4 +143,36 @@ private fun DrawScope.infiniteMenu() {
             size = Size(tile, tile),
         )
     }
+}
+
+/**
+ * The field in miniature: one big card at the front with small ones scattered
+ * round it, the lime of the hero standing in for the whole palette.
+ */
+private fun DrawScope.cardSphere() {
+    val golden = 3.1415927f * (3f - kotlin.math.sqrt(5f))
+    val r = size.minDimension * 0.46f
+    val cx = size.width / 2f
+    val cy = size.height / 2f
+
+    for (i in 0 until 26) {
+        val y = 1f - (2f * (i + 0.5f)) / 26
+        val ring = kotlin.math.sqrt((1f - y * y).coerceAtLeast(0f))
+        val px = kotlin.math.cos(golden * i + 0.37f) * ring
+        val pz = kotlin.math.sin(golden * i + 0.37f) * ring
+        if (pz < 0f) continue
+        val w = size.minDimension * 0.1f * (0.6f + 0.4f * pz)
+        drawRect(
+            color = Color(0xFFBFBFB6).copy(alpha = 0.2f + pz * 0.5f),
+            topLeft = Offset(cx + px * r - w / 2f, cy - y * r - w * 0.6f),
+            size = Size(w, w * 1.25f),
+        )
+    }
+
+    val hero = size.minDimension * 0.3f
+    drawRect(
+        color = Color(0xFFD5FE4F),
+        topLeft = Offset(cx - hero / 2f, cy - hero * 0.62f),
+        size = Size(hero, hero * 1.25f),
+    )
 }

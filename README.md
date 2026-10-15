@@ -177,6 +177,34 @@ InfiniteMenuScroll(
 Unlike the other two optical styles this one needs no shader anywhere — it is
 all geometry, one image per tile, so it runs the same on every target.
 
+### Card Sphere
+
+A field of flat graphic cards on a transparent sphere. Drag, flick or scroll to
+turn it; it coasts, then glides one of eight hero cards to the front. Double tap
+flips the page between white and `#111`.
+
+No photographs: every card is drawn — type, marks, swatches, dotted icons — in
+flat colour, so the cards are rendered live rather than baked, and text on the
+front card is rasterised at the size it is shown.
+
+```kotlin
+CardSphereScroll(
+    modifier = Modifier.fillMaxSize(),
+    theme = CardSphereTheme.Light,
+    onSettle = { hero -> },
+)
+```
+
+| Parameter | Default | |
+| --- | --- | --- |
+| `theme` | `Light` | starting page colour |
+| `allowThemeToggle` | `true` | double tap flips the page |
+| `onSettle` | `null` | hero index, each time the field rests |
+| `onThemeChange` | `null` | called when the page flips |
+
+The field itself is generated from a fixed seed, so the arrangement is the same
+every run. Like Infinite Menu it needs no shader anywhere.
+
 ## Photo credits
 
 Demo card art is from [Unsplash](https://unsplash.com), used under the

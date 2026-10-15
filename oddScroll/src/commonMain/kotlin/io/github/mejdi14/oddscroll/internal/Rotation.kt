@@ -1,5 +1,6 @@
 package io.github.mejdi14.oddscroll.internal
 
+import kotlin.math.acos
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -80,4 +81,117 @@ internal fun fibonacciSphere(count: Int): FloatArray {
         points[i * 3 + 2] = sin(golden * i) * ring
     }
     return points
+}
+
+internal fun Quat.setTo(other: Quat) {
+    x = other.x; y = other.y; z = other.z; w = other.w
+}
+
+internal fun Quat.dot(other: Quat): Float =
+    x * other.x + y * other.y + z * other.z + w * other.w
+
+/** Composes [other] before the turn already held, as `other * this`. */
+internal fun Quat.premultiplyBy(ox: Float, oy: Float, oz: Float, ow: Float) {
+    val nx = ow * x + ox * w + oy * z - oz * y
+    val ny = ow * y - ox * z + oy * w + oz * x
+    val nz = ow * z + ox * y - oy * x + oz * w
+    val nw = ow * w - ox * x - oy * y - oz * z
+    x = nx; y = ny; z = nz; w = nw
+    normalize()
+}
+
+/**
+ * The shortest turn taking one direction onto another, written into [out].
+ * Both are assumed unit length. Opposed directions have no shortest turn — any
+ * half-turn through a perpendicular axis will do — so one is picked.
+ */
+internal fun quatBetween(
+    fx: Float, fy: Float, fz: Float,
+    tx: Float, ty: Float, tz: Float,
+    out: Quat,
+) {
+    val c = (fx * tx + fy * ty + fz * tz).coerceIn(-1f, 1f)
+    if (c > 0.99999f) {
+        out.x = 0f; out.y = 0f; out.z = 0f; out.w = 1f
+        return
+    }
+    var ax: Float
+    var ay: Float
+    var az: Float
+    if (c < -0.99999f) {
+        ax = 0f; ay = 1f; az = 0f
+    } else {
+        ax = fy * tz - fz * ty
+        ay = fz * tx - fx * tz
+        az = fx * ty - fy * tx
+    }
+    val length = sqrt(ax * ax + ay * ay + az * az)
+    if (length <= 1e-9f) {
+        out.x = 0f; out.y = 0f; out.z = 0f; out.w = 1f
+        return
+    }
+    ax /= length; ay /= length; az /= length
+    val angle = acos(c)
+    val s = sin(angle / 2f)
+    out.x = ax * s; out.y = ay * s; out.z = az * s; out.w = cos(angle / 2f)
+}
+
+/**
+ * Turns along the shortest path between two orientations, written into [out].
+ *
+ * A quaternion and its negation are the same orientation, so the nearer of the
+ * two is taken first — without that, half the turns would go the long way
+ * round. Very close orientations fall back to a straight blend, where the
+ * angle between them is too small to divide by.
+ */
+internal fun slerp(a: Quat, b: Quat, t: Float, out: Quat) {
+    var bx = b.x; var by = b.y; var bz = b.z; var bw = b.w
+    var c = a.dot(b)
+    if (c < 0f) {
+        bx = -bx; by = -by; bz = -bz; bw = -bw
+        c = -c
+    }
+    if (c > 0.9995f) {
+        out.x = a.x + (bx - a.x) * t
+        out.y = a.y + (by - a.y) * t
+        out.z = a.z + (bz - a.z) * t
+        out.w = a.w + (bw - a.w) * t
+        out.normalize()
+        return
+    }
+    val theta = acos(c.coerceIn(-1f, 1f))
+    val s = sin(theta)
+    val ka = sin((1f - t) * theta) / s
+    val kb = sin(t * theta) / s
+    out.x = a.x * ka + bx * kb
+    out.y = a.y * ka + by * kb
+    out.z = a.z * ka + bz * kb
+    out.w = a.w * ka + bw * kb
+}
+
+/**
+ * A cubic bezier easing curve, solved by Newton's method the way browsers do.
+ * Six iterations is enough at the precision a frame can show.
+ */
+internal fun cubicBezierEase(x1: Float, y1: Float, x2: Float, y2: Float): (Float) -> Float = { x ->
+    var t = x
+    repeat(6) {
+        val one = 1f - t
+        val cx = 3f * x1 * t * one * one + 3f * x2 * t * t * one + t * t * t - x
+        val d = 3f * x1 * one * one + 6f * (x2 - x1) * t * one + 3f * (1f - x2) * t * t
+        if (d > -1e-6f && d < 1e-6f) return@repeat
+        t = (t - cx / d).coerceIn(0f, 1f)
+    }
+    val one = 1f - t
+    3f * y1 * t * one * one + 3f * y2 * t * t * one + t * t * t
+}
+
+/** Fibonacci sphere with a phase offset, so two fields do not line up. */
+internal fun fibonacciPoint(count: Int, index: Int, offset: Float, out: FloatArray) {
+    val y = 1f - (2f * (index + 0.5f)) / count
+    val r = sqrt((1f - y * y).coerceAtLeast(0f))
+    val t = PI_F * (3f - sqrt(5f)) * index + offset
+    out[0] = cos(t) * r
+    out[1] = y
+    out[2] = sin(t) * r
 }
