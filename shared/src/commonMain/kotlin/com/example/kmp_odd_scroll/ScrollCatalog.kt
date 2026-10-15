@@ -1,6 +1,7 @@
 package com.example.kmp_odd_scroll
 
 import androidx.compose.runtime.Composable
+import com.example.kmp_odd_scroll.demos.EdgeDistortionDemoScreen
 import com.example.kmp_odd_scroll.demos.HelixDemoScreen
 
 /**
@@ -25,5 +26,12 @@ val scrollDemos: List<ScrollDemo> = listOf(
         title = "Helix",
         subtitle = "A spiral column of cards, turned by dragging or scrolling",
         screen = { HelixDemoScreen() },
+    ),
+    ScrollDemo(
+        route = "edge_distortion",
+        category = "Infinite",
+        title = "Edge Distortion",
+        subtitle = "An endless card lattice that bends away at the borders",
+        screen = { EdgeDistortionDemoScreen() },
     ),
 )

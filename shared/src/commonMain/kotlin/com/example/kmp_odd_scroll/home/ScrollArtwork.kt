@@ -27,6 +27,7 @@ fun ScrollArtwork(route: String, modifier: Modifier = Modifier) {
         )
         when (route) {
             "helix" -> helix()
+            "edge_distortion" -> edgeDistortion()
             else -> helix()
         }
     }
@@ -48,5 +49,38 @@ private fun DrawScope.helix() {
         val bar = Color(0xFFE4DCC9).copy(alpha = 0.1f + fade * 0.75f)
 
         drawRect(bar, Offset(centre - width / 2f, y), Size(width, size.height * 0.055f))
+    }
+}
+
+/**
+ * The lattice in miniature, pushed through the same barrel curve the gallery
+ * uses, so the tile previews the bend rather than just the grid.
+ */
+private fun DrawScope.edgeDistortion() {
+    val cells = 4
+    val pad = size.width * 0.07f
+    val cellW = (size.width - pad * 2f) / cells
+    val cellH = (size.height - pad * 2f) / cells
+
+    for (row in 0 until cells) {
+        for (col in 0 until cells) {
+            val cx = pad + (col + 0.5f) * cellW
+            val cy = pad + (row + 0.5f) * cellH
+            val nx = (cx / size.width) * 2f - 1f
+            val ny = (cy / size.height) * 2f - 1f
+            val r = kotlin.math.max(kotlin.math.abs(nx), kotlin.math.abs(ny))
+            // Same squeeze as EdgeWarp, read forwards: cells near the border
+            // are pulled in and shrink, which is the bend in one frame.
+            val squeeze = 1f / (1f + 0.55f * r * r)
+            val w = cellW * 0.68f * squeeze
+            val h = cellH * 0.78f * squeeze
+            val x = (nx * squeeze * 0.5f + 0.5f) * size.width
+            val y = (ny * squeeze * 0.5f + 0.5f) * size.height
+            drawRect(
+                color = Color(0xFFE4DCC9).copy(alpha = 0.25f + (1f - r) * 0.6f),
+                topLeft = Offset(x - w / 2f, y - h / 2f),
+                size = Size(w, h),
+            )
+        }
     }
 }
