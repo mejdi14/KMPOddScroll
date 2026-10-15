@@ -44,3 +44,18 @@ Learn more about [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-mu
 
 We would appreciate your feedback on Compose/Web and Kotlin/Wasm in the public Slack channel [#compose-web](https://slack-chats.kotlinlang.org/c/compose-web).
 If you face any issues, please report them on [YouTrack](https://youtrack.jetbrains.com/newIssue?project=CMP).
+
+## Photo credits
+
+Demo card art is from [Unsplash](https://unsplash.com), used under the
+[Unsplash License](https://unsplash.com/license). Cut to 1200x600 and bundled as
+Compose resources.
+
+| File | Photographer |
+| --- | --- |
+| `helix_sounds.jpg` | [Samuel Harrington](https://unsplash.com/photos/1791681403982-fe65ea53288f) |
+| `helix_falls.jpg` | [Ingrid Eich](https://unsplash.com/photos/1767930704291-a12b91e5a261) |
+| `helix_peaks.jpg` | [Maciej Marko](https://unsplash.com/photos/1790019852739-349585111186) |
+| `helix_forest.jpg` | [Wolfgang Hasselmann](https://unsplash.com/photos/1788695968738-3c2818047036) |
+| `helix_basalt.jpg` | [Adrien Olichon](https://unsplash.com/photos/1762763955129-0ad8692095ce) |
+| `helix_towers.jpg` | [Heye Jensen](https://unsplash.com/photos/1790313157313-cbc2c66a61ab) |

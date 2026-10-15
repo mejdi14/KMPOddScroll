@@ -11,8 +11,10 @@ conveyors — plus a demo app that showcases them. Targets Android, iOS, Desktop
 - `shared/` — the demo app UI. `ScrollCatalog.kt` is the single source of truth:
   one `ScrollDemo` entry drives both the home gallery and the navigation state.
 - `shared/.../home/ScrollArtwork.kt` — procedural cover art for each demo tile.
-- `shared/.../demos/DemoImages.kt` — procedural card art, so the demos need no
-  network and no image-loading dependency.
+- `shared/src/commonMain/composeResources/drawable/helix_*.jpg` — Unsplash
+  photographs bundled as Compose resources, cut to 1200x600 for the default 2:1
+  card, so the demos need no network and no image-loading dependency. Credit new
+  ones in `README.md`.
 - `androidApp/`, `desktopApp/`, `webApp/`, `iosApp/` — thin entry points; they
   all call `App()` from `shared`.
 
