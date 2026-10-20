@@ -14,12 +14,12 @@ import io.github.mejdi14.oddscroll.flexcarousel.FlexCarouselItem
 import io.github.mejdi14.oddscroll.flexcarousel.FlexCarouselScroll
 import io.github.mejdi14.oddscroll.flexcarousel.FlexFit
 import kmpoddscroll.shared.generated.resources.Res
-import kmpoddscroll.shared.generated.resources.grid_basalt
-import kmpoddscroll.shared.generated.resources.grid_falls
-import kmpoddscroll.shared.generated.resources.grid_forest
-import kmpoddscroll.shared.generated.resources.grid_peaks
-import kmpoddscroll.shared.generated.resources.grid_sounds
-import kmpoddscroll.shared.generated.resources.grid_towers
+import kmpoddscroll.shared.generated.resources.wide_basalt
+import kmpoddscroll.shared.generated.resources.wide_falls
+import kmpoddscroll.shared.generated.resources.wide_forest
+import kmpoddscroll.shared.generated.resources.wide_peaks
+import kmpoddscroll.shared.generated.resources.wide_sounds
+import kmpoddscroll.shared.generated.resources.wide_towers
 import org.jetbrains.compose.resources.imageResource
 
 /** The carousel's own page colour, so the band it sits in leaves no seam. */
@@ -28,14 +28,22 @@ private val Page = Color(0xFF060607)
 /** How much of a portrait screen the row is given. */
 private const val PORTRAIT_BAND = 0.62f
 
+/**
+ * Landscape cards, all one size.
+ *
+ * [FlexFit.Landscape] holds every card to 4:3 whatever its picture measures,
+ * and the pictures handed to it are the 2:1 cuts — so the fit takes a third off
+ * the sides of a landscape photograph rather than most of the height off a
+ * portrait one. Credits are in the README.
+ */
 @Composable
 fun FlexCarouselDemoScreen() {
-    val sounds = imageResource(Res.drawable.grid_sounds)
-    val falls = imageResource(Res.drawable.grid_falls)
-    val peaks = imageResource(Res.drawable.grid_peaks)
-    val forest = imageResource(Res.drawable.grid_forest)
-    val basalt = imageResource(Res.drawable.grid_basalt)
-    val towers = imageResource(Res.drawable.grid_towers)
+    val sounds = imageResource(Res.drawable.wide_sounds)
+    val falls = imageResource(Res.drawable.wide_falls)
+    val peaks = imageResource(Res.drawable.wide_peaks)
+    val forest = imageResource(Res.drawable.wide_forest)
+    val basalt = imageResource(Res.drawable.wide_basalt)
+    val towers = imageResource(Res.drawable.wide_towers)
 
     val items = remember(sounds, falls, peaks, forest, basalt, towers) {
         listOf(
@@ -62,7 +70,7 @@ fun FlexCarouselDemoScreen() {
                 Modifier.fillMaxSize()
             },
             background = Page,
-            fit = FlexFit.Portrait,
+            fit = FlexFit.Landscape,
         )
     }
 }
