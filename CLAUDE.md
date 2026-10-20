@@ -94,7 +94,14 @@ House techniques for the common part:
 - **Per-frame values are read inside `graphicsLayer { }`**, not in composition.
   The block re-runs on the layer without recomposing the node, which is what
   makes a staggered reveal over dozens of pieces (`internal/SplitText.kt`)
-  affordable.
+  affordable. A spring value read in composition rebuilds the whole style —
+  canvas, gestures and all — sixty times a second for the length of its
+  animation; that is what made the flex carousel's focus stutter. Pass such a
+  value as `() -> Float` and read it in the layer, and tell composition only
+  about booleans, via `derivedStateOf`.
+- **Compose early, animate late.** Building dozens of nodes in the frame an
+  animation is supposed to land is a dropped frame. Compose them when the
+  gesture starts and hold the clock with `snapshotFlow(gate).first { it }`.
 
 ## Notes
 

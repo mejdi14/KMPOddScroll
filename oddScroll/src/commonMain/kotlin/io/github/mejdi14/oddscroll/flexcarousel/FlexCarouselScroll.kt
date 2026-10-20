@@ -15,12 +15,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -121,7 +121,7 @@ data class FlexLens(
  * the platform has one and nothing where it does not.
  */
 @Composable
-internal expect fun Modifier.liquidLens(lens: FlexLens, strength: Float): Modifier
+internal expect fun Modifier.liquidLens(lens: FlexLens, strength: () -> Float): Modifier
 
 /** Copies either side of the row, so the loop has no visible end. */
 private const val REPEATS = 3
@@ -251,11 +251,14 @@ fun FlexCarouselScroll(
         }
     }
 
-    // Read here, not in the draw: the lens is a modifier, and it should be
-    // rebuilt when the focus opens or closes and at no other time.
-    val opened = state.focusAmount.clamped(0f, 1f)
-    val slid = state.asideAmount.clamped(0f, 1f)
-    val strength = 1f - inOutCubic(opened)
+    // Nothing here reads how far open the card is. Those values move every
+    // frame, and reading one in composition would rebuild the whole carousel —
+    // canvas, gestures, panel and all — sixty times a second for the length of
+    // the animation. They are read inside layers and inside the draw instead,
+    // and the only thing composition is told is whether the panel exists.
+    val panelOn by remember(state) {
+        derivedStateOf { state.opening && state.asideAmount > 0.004f }
+    }
     val beside = when (focus) {
         FlexFocus.Beside -> true
         FlexFocus.Centred -> false
@@ -267,7 +270,7 @@ fun FlexCarouselScroll(
             Modifier
                 .fillMaxSize()
                 .onSizeChanged { viewport = it }
-                .liquidLens(lens, strength)
+                .liquidLens(lens) { 1f - inOutCubic(state.focusAmount.clamped(0f, 1f)) }
                 .pointerInput(state, focusOnClick) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
@@ -340,19 +343,22 @@ fun FlexCarouselScroll(
                 contentColor = contentColor,
                 // The panel says all of this and more, so the caption gives way
                 // to it rather than repeating it along the bottom.
-                alpha = if (beside) 1f - inOutCubic(opened) else 1f,
+                alpha = {
+                    if (beside) 1f - inOutCubic(state.focusAmount.clamped(0f, 1f)) else 1f
+                },
             )
         }
-        if (beside && slid > 0.004f) {
+        if (beside && panelOn) {
             val shown = state.focusIndex.coerceIn(items.indices)
             FocusPanel(
                 title = items[shown].title,
                 description = items[shown].description,
                 contentColor = contentColor,
-                // Keyed to the move aside, not to the opening, so the text
-                // belongs to the space the card is clearing rather than
-                // arriving while it is still growing in the middle.
-                reveal = inOutCubic(slid),
+                // Laid out as the card sets off and held until it lands. Doing
+                // the measuring up front is the point: building eighty pieces
+                // of text in the frame the card arrives is what made the
+                // arrival stutter.
+                arrived = { state.asideAmount > 0.5f },
             )
         }
     }
@@ -536,16 +542,15 @@ private fun BoxScope.Caption(
     index: Int,
     count: Int,
     contentColor: Color,
-    alpha: Float,
+    alpha: () -> Float,
 ) {
-    if (alpha <= 0.004f) return
     if (title.isNotEmpty()) {
         BasicText(
             text = title,
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(horizontal = 24.dp, vertical = 28.dp)
-                .alpha(alpha),
+                .graphicsLayer { this.alpha = alpha() },
             style = TextStyle(
                 color = contentColor,
                 fontSize = 22.sp,
@@ -558,7 +563,7 @@ private fun BoxScope.Caption(
         modifier = Modifier
             .align(Alignment.BottomEnd)
             .padding(horizontal = 24.dp, vertical = 28.dp)
-            .alpha(alpha),
+            .graphicsLayer { this.alpha = alpha() },
         style = TextStyle(color = contentColor.copy(alpha = 0.55f), fontSize = 13.sp),
     )
 }
@@ -579,9 +584,8 @@ private fun BoxScope.FocusPanel(
     title: String,
     description: String,
     contentColor: Color,
-    reveal: Float,
+    arrived: () -> Boolean,
 ) {
-    if (reveal <= 0.55f) return
     Column(
         modifier = Modifier
             .align(Alignment.CenterEnd)
@@ -598,6 +602,7 @@ private fun BoxScope.FocusPanel(
             ),
             splitBy = SplitBy.Chars,
             rise = 26.dp,
+            startWhen = arrived,
         )
         if (description.isNotEmpty()) {
             SplitText(
@@ -610,6 +615,7 @@ private fun BoxScope.FocusPanel(
                 ),
                 splitBy = SplitBy.Words,
                 rise = 18.dp,
+                startWhen = arrived,
                 // Held back until the title is on its way, so the panel fills
                 // from the top down rather than all at once.
                 startDelay = 260,

@@ -3,6 +3,7 @@ package io.github.mejdi14.oddscroll.flexcarousel
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github.mejdi14.oddscroll.internal.clamped
 import kotlin.math.abs
@@ -101,6 +102,16 @@ class FlexCarouselScrollState internal constructor(
     internal var asideAmount by mutableFloatStateOf(0f)
         private set
 
+    /**
+     * Whether a card is being held open, as opposed to how far open it is.
+     *
+     * It flips the instant a tap lands rather than easing like the rest, which
+     * is what lets anything keyed to it leave at once instead of riding the
+     * card back down.
+     */
+    internal var opening by mutableStateOf(false)
+        private set
+
     internal var focusIndex by mutableIntStateOf(-1)
         private set
 
@@ -173,6 +184,7 @@ class FlexCarouselScrollState internal constructor(
         if (abs(rel) < m.widths[index] * 0.5f && focusOnClick) {
             focusIndex = index
             focusTarget = 1f
+            opening = true
             goal = snapTo(m, position + rel)
         } else {
             goal = snapTo(m, position + rel)
@@ -181,6 +193,7 @@ class FlexCarouselScrollState internal constructor(
 
     internal fun closeFocus() {
         focusTarget = 0f
+        opening = false
     }
 
     /** Move [by] cards. Public so a host can drive the row from its own chrome. */

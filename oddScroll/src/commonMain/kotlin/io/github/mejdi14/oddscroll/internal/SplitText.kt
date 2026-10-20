@@ -11,6 +11,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
@@ -19,6 +20,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.first
 import kotlin.math.min
 import kotlin.math.pow
 
@@ -54,6 +56,7 @@ internal fun SplitText(
     splitBy: SplitBy = SplitBy.Chars,
     rise: Dp = 40.dp,
     startDelay: Int = 0,
+    startWhen: (() -> Boolean)? = null,
 ) {
     if (text.isEmpty()) return
 
@@ -68,6 +71,11 @@ internal fun SplitText(
 
     val elapsed = remember(text, splitBy) { Animatable(0f) }
     LaunchedEffect(text, splitBy) {
+        // Composed and measured now, started later. Waiting for the signal here
+        // rather than waiting to be composed means the pieces are already laid
+        // out when their moment comes, instead of eighty of them being built in
+        // the one frame that is supposed to look smooth.
+        if (startWhen != null) snapshotFlow(startWhen).first { it }
         elapsed.animateTo(
             targetValue = total,
             animationSpec = tween(total.toInt(), startDelay, LinearEasing),

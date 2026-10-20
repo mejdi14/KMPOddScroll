@@ -99,7 +99,7 @@ half4 main(float2 fragCoord) {
 """
 
 @Composable
-internal actual fun Modifier.liquidLens(lens: FlexLens, strength: Float): Modifier {
+internal actual fun Modifier.liquidLens(lens: FlexLens, strength: () -> Float): Modifier {
     // Remembered unconditionally, so the slot table is the same shape whatever
     // the device turns out to support. AGSL arrived in 33; below that, and if
     // the shader fails to compile at all, the row runs undistorted.
@@ -111,12 +111,18 @@ internal actual fun Modifier.liquidLens(lens: FlexLens, strength: Float): Modifi
             runCatching { RuntimeShader(SOURCE) }.getOrNull()
         }
     }
-    if (shader == null || strength <= 0.001f || lens.bend <= 0f) return this
+    if (shader == null || lens.bend <= 0f) return this
 
     return graphicsLayer {
         val w = size.width
         val h = size.height
-        if (w <= 0f || h <= 0f) return@graphicsLayer
+        // Read in here, not in composition: it moves every frame while a card
+        // opens, and reading it out there would rebuild the carousel each time.
+        val amount = strength()
+        if (w <= 0f || h <= 0f || amount <= 0.001f) {
+            renderEffect = null
+            return@graphicsLayer
+        }
 
         // The width is measured against the frame's width, so the two vertical
         // edges of the lens always land inside it and the row runs out through
@@ -151,7 +157,7 @@ internal actual fun Modifier.liquidLens(lens: FlexLens, strength: Float): Modifi
                 },
             )
             shader.setFloatUniform("uDispersion", lens.dispersion * 0.12f)
-            shader.setFloatUniform("uStrength", strength)
+            shader.setFloatUniform("uStrength", amount)
             renderEffect = RenderEffect
                 .createRuntimeShaderEffect(shader, "content")
                 .asComposeRenderEffect()

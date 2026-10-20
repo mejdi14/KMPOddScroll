@@ -9,4 +9,5 @@ import androidx.compose.ui.Modifier
  * parallax, the focus — is unchanged; only the glass is missing.
  */
 @Composable
-internal actual fun Modifier.liquidLens(lens: FlexLens, strength: Float): Modifier = this
+internal actual fun Modifier.liquidLens(lens: FlexLens, strength: () -> Float): Modifier =
+    this
