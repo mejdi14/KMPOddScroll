@@ -20,6 +20,10 @@ conveyors — plus a demo app that showcases them. Targets Android, iOS, Desktop
 - `androidApp/`, `desktopApp/`, `webApp/`, `iosApp/` — thin entry points; they
   all call `App()` from `shared`.
 
+A demo fills the frame and nothing is drawn over it. The way back to the gallery
+is `BackHandler` in `App.kt` — the system's own back — so don't add chrome on
+top of a style that is the thing being looked at.
+
 ## Committing
 
 After finishing a change, `git add` the relevant files and commit it.

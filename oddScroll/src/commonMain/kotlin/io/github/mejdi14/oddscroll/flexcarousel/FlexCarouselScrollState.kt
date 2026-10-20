@@ -47,6 +47,9 @@ private const val ASIDE_SPRING = 42f
 /** How far open the card has to be before it starts moving aside. */
 private const val ASIDE_AFTER = 0.88f
 
+/** How far back to the middle it has to be before it may close. */
+private const val ASIDE_RETURNED = 0.03f
+
 /** Layout of the row for one viewport: every card's width and centre. */
 internal class FlexMetrics(
     val cardH: Float,
@@ -223,17 +226,9 @@ class FlexCarouselScrollState internal constructor(
         energy += (want - energy) *
             (1f - exp(-dt / if (want > energy) ENERGY_RISE else ENERGY_FALL))
 
-        focusVelocity += (FOCUS_SPRING * (focusTarget - focusAmount) -
-            2f * sqrt(FOCUS_SPRING) * focusVelocity) * dt
-        focusAmount += focusVelocity * dt
-        if (abs(focusTarget - focusAmount) < 0.0005f && abs(focusVelocity) < 0.001f) {
-            focusAmount = focusTarget
-            focusVelocity = 0f
-        }
-
-        // Only once the card has all but arrived. On the way back both run
-        // together, so closing is one motion rather than the opening replayed
-        // backwards a step at a time.
+        // The move aside goes first, both ways. Opening, it waits for the card
+        // to have all but arrived in the middle; closing, it is what runs while
+        // the card is still held open.
         val asideTarget = if (focusTarget == 1f && focusAmount > ASIDE_AFTER) 1f else 0f
         asideVelocity += (ASIDE_SPRING * (asideTarget - asideAmount) -
             2f * sqrt(ASIDE_SPRING) * asideVelocity) * dt
@@ -241,6 +236,19 @@ class FlexCarouselScrollState internal constructor(
         if (abs(asideTarget - asideAmount) < 0.0005f && abs(asideVelocity) < 0.001f) {
             asideAmount = asideTarget
             asideVelocity = 0f
+        }
+
+        // Held open until the card is back in the middle, so closing retraces
+        // the way it came — over first, then down into the row — instead of
+        // shrinking away from where it happened to be standing.
+        val held = focusTarget == 0f && asideAmount > ASIDE_RETURNED
+        val wants = if (held) 1f else focusTarget
+        focusVelocity += (FOCUS_SPRING * (wants - focusAmount) -
+            2f * sqrt(FOCUS_SPRING) * focusVelocity) * dt
+        focusAmount += focusVelocity * dt
+        if (abs(wants - focusAmount) < 0.0005f && abs(focusVelocity) < 0.001f) {
+            focusAmount = wants
+            focusVelocity = 0f
         }
 
         if (autoplay && !dragging && focusTarget == 0f && abs(velocity) < 1f) {

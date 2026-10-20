@@ -147,9 +147,10 @@ FlexCarouselScroll(
 | `captions` | `true` | title and counter |
 | `intro` | `true` | the row rises into place |
 
-Opening a card on a landscape frame slides it into the left half and gives the
-right half to its title and description; `FlexFocus.Centred` keeps the old
-behaviour of filling the frame with it. On a portrait frame `Auto` stays centred,
+Opening a card on a landscape frame grows it into the middle first, and only
+once it is there does it move over into the left half and give the right half to
+its title and description. Closing retraces that: over to the middle, then down
+into the row. `FlexFocus.Centred` keeps it in the middle throughout; On a portrait frame `Auto` stays centred,
 since there is no room to put text next to a card worth looking at.
 
 Every size is a share of the bounds the row is given, including the lens, so
