@@ -51,38 +51,50 @@ fun FlexCarouselDemoScreen() {
             FlexCarouselItem(
                 wheatfield,
                 "Green Wheat Fields",
-                "Vincent van Gogh. Young wheat laid down in curved strokes, " +
-                    "under a sky worked in the same hand.",
+                "Vincent van Gogh, Auvers-sur-Oise. Young wheat laid down in " +
+                    "short curved strokes, every one of them visible, with the " +
+                    "sky worked in the same hand so that field and air read as " +
+                    "one surface. Nothing in it is still.",
             ),
             FlexCarouselItem(
                 farmhouse,
                 "Farmhouse in Provence",
-                "Vincent van Gogh. A low wall, a gate, and standing wheat " +
-                    "against a turquoise sky.",
+                "Vincent van Gogh, Provence. A low rubble wall leads back to a " +
+                    "gate and a farmhouse, with poppies at the near corner and " +
+                    "a figure walking out through standing wheat. The sky above " +
+                    "it is turquoise rather than blue.",
             ),
             FlexCarouselItem(
                 night,
                 "Night with her Train of Stars",
-                "Edward Robert Hughes. Night passes overhead with a finger to " +
-                    "her lips, trailing sleeping children and a scatter of birds.",
+                "Edward Robert Hughes. Night crosses overhead with a finger to " +
+                    "her lips, dark wings spread the width of the picture, " +
+                    "carrying sleeping children and trailing a scatter of birds " +
+                    "and poppies. Stars gather in the cloud behind her.",
             ),
             FlexCarouselItem(
                 cowherd,
                 "The Cowherd",
-                "A woman and her cow on a pale road, below a hillside terraced " +
-                    "into the light.",
+                "A woman stands with her cow on a pale road, below a hillside " +
+                    "terraced into long bands of light. A cart waits further up " +
+                    "the track, and the whole of it is painted in greens so " +
+                    "close together that the depth comes from touch alone.",
             ),
             FlexCarouselItem(
                 village,
                 "Harbour Village",
-                "Houses stacked up the cliff, cattle in a blue field, and fish " +
-                    "in the water running below them.",
+                "Houses stacked up the cliff face, cattle lying in a blue " +
+                    "field, and fish in the water running below them. Everything " +
+                    "is seen at once and nothing is in perspective, which is the " +
+                    "point of it.",
             ),
             FlexCarouselItem(
                 cypresses,
                 "Wheat Field with Cypresses",
-                "Vincent van Gogh. Cypresses stand against rolling cloud over " +
-                    "a field of ripe wheat.",
+                "Vincent van Gogh. Cypresses stand almost black against rolling " +
+                    "white cloud, with ripe wheat worked in heavy strokes below " +
+                    "and the blue hills behind. The paint is thick enough to " +
+                    "throw its own shadow.",
             ),
         )
     }

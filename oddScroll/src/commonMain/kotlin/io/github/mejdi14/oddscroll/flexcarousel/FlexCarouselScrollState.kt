@@ -38,6 +38,15 @@ private const val ENERGY_FALL = 0.35f
 
 private const val FOCUS_SPRING = 64f
 
+/**
+ * Softer than the opening, so the move aside reads as a second, more
+ * deliberate step rather than a continuation of the first.
+ */
+private const val ASIDE_SPRING = 42f
+
+/** How far open the card has to be before it starts moving aside. */
+private const val ASIDE_AFTER = 0.88f
+
 /** Layout of the row for one viewport: every card's width and centre. */
 internal class FlexMetrics(
     val cardH: Float,
@@ -79,6 +88,16 @@ class FlexCarouselScrollState internal constructor(
     internal var focusAmount by mutableFloatStateOf(0f)
         private set
 
+    /**
+     * How far the opened card has moved out of the middle, 0 to 1.
+     *
+     * A second value rather than a later stretch of the first: the card has to
+     * finish arriving in the middle before it begins to leave it, and one
+     * spring cannot be made to stop and start again partway through.
+     */
+    internal var asideAmount by mutableFloatStateOf(0f)
+        private set
+
     internal var focusIndex by mutableIntStateOf(-1)
         private set
 
@@ -106,6 +125,7 @@ class FlexCarouselScrollState internal constructor(
     private var dragging = false
     private var focusTarget = 0f
     private var focusVelocity = 0f
+    private var asideVelocity = 0f
     private var nowMs = 0f
     private var autoplayAtMs = 0f
 
@@ -209,6 +229,18 @@ class FlexCarouselScrollState internal constructor(
         if (abs(focusTarget - focusAmount) < 0.0005f && abs(focusVelocity) < 0.001f) {
             focusAmount = focusTarget
             focusVelocity = 0f
+        }
+
+        // Only once the card has all but arrived. On the way back both run
+        // together, so closing is one motion rather than the opening replayed
+        // backwards a step at a time.
+        val asideTarget = if (focusTarget == 1f && focusAmount > ASIDE_AFTER) 1f else 0f
+        asideVelocity += (ASIDE_SPRING * (asideTarget - asideAmount) -
+            2f * sqrt(ASIDE_SPRING) * asideVelocity) * dt
+        asideAmount += asideVelocity * dt
+        if (abs(asideTarget - asideAmount) < 0.0005f && abs(asideVelocity) < 0.001f) {
+            asideAmount = asideTarget
+            asideVelocity = 0f
         }
 
         if (autoplay && !dragging && focusTarget == 0f && abs(velocity) < 1f) {

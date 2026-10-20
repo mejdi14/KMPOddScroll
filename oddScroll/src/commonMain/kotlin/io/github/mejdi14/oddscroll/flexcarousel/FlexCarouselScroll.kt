@@ -252,6 +252,7 @@ fun FlexCarouselScroll(
     // Read here, not in the draw: the lens is a modifier, and it should be
     // rebuilt when the focus opens or closes and at no other time.
     val opened = state.focusAmount.clamped(0f, 1f)
+    val slid = state.asideAmount.clamped(0f, 1f)
     val strength = 1f - inOutCubic(opened)
     val beside = when (focus) {
         FlexFocus.Beside -> true
@@ -340,13 +341,16 @@ fun FlexCarouselScroll(
                 alpha = if (beside) 1f - inOutCubic(opened) else 1f,
             )
         }
-        if (beside && opened > 0.004f) {
+        if (beside && slid > 0.004f) {
             val shown = state.focusIndex.coerceIn(items.indices)
             FocusPanel(
                 title = items[shown].title,
                 description = items[shown].description,
                 contentColor = contentColor,
-                reveal = inOutCubic(opened),
+                // Keyed to the move aside, not to the opening, so the text
+                // belongs to the space the card is clearing rather than
+                // arriving while it is still growing in the middle.
+                reveal = inOutCubic(slid),
             )
         }
     }
@@ -383,14 +387,19 @@ private fun DrawScope.drawRow(
     val focusWidth = state.focusIndex.let {
         if (it in m.widths.indices) m.widths[it] else m.cardH
     }
+    val aside = if (beside) inOutCubic(state.asideAmount.clamped(0f, 1f)) else 0f
+
     // Opened as far as the frame allows and no further, so a wide card and a
-    // narrow one both land inside it. With text beside it the card is measured
-    // against its own half of the frame, not the whole of it.
-    val lane = if (beside) width * FOCUS_SPLIT else width
-    val focusScale = min(
+    // narrow one both land inside it. There are two of these: the card arrives
+    // at the size the whole frame allows, and then gives up what it has to in
+    // order to fit its own half of it.
+    fun openedTo(lane: Float) = min(
         min(1.3f, height * 0.84f / m.cardH),
         lane * 0.92f / focusWidth,
     ).coerceAtLeast(1f)
+
+    val middleScale = openedTo(width)
+    val asideScale = if (beside) openedTo(width * FOCUS_SPLIT) else middleScale
     val focusHome = if (beside) width * FOCUS_SPLIT / 2f else homeX
 
     val arrival = if (!intro) 1f else (state.introAge / INTRO_SECONDS).clamped(0f, 1f)
@@ -423,10 +432,13 @@ private fun DrawScope.drawRow(
 
             if (focus > 0f) {
                 if (i == state.focusIndex && abs(rel) < m.widths[i]) {
-                    scale *= 1f + (focusScale - 1f) * focusEase
-                    // Slides out of the middle and into its half, leaving the
-                    // other one for the text.
-                    x += (focusHome - homeX) * focusEase
+                    // Two steps, not one: it opens into the middle at the size
+                    // the frame allows, and only then moves over and tucks down
+                    // to what its half of the frame allows.
+                    val middle = 1f + (middleScale - 1f) * focusEase
+                    val tucked = 1f + (asideScale - 1f) * focusEase
+                    scale *= middle + (tucked - middle) * aside
+                    x += (focusHome - homeX) * aside
                 } else {
                     // Everything else is swept out of the way, the near cards
                     // leaving first so the opening reads as an order.
@@ -552,9 +564,10 @@ private fun BoxScope.Caption(
 /**
  * The half of the frame the opened card left behind.
  *
- * It comes in a little later than the card moves and from slightly further
- * right, so the two read as one gesture — the card clearing the space and the
- * text arriving into it — rather than as two things happening at once.
+ * It waits until the card is most of the way over and then comes in from a
+ * little further right, so the two read as one gesture — the card clearing the
+ * space and the text arriving into it — rather than as two things happening at
+ * once.
  */
 @Composable
 private fun BoxScope.FocusPanel(
@@ -563,7 +576,7 @@ private fun BoxScope.FocusPanel(
     contentColor: Color,
     reveal: Float,
 ) {
-    val settled = ((reveal - 0.35f) / 0.65f).clamped(0f, 1f)
+    val settled = ((reveal - 0.55f) / 0.45f).clamped(0f, 1f)
     if (settled <= 0.004f) return
     Column(
         modifier = Modifier
