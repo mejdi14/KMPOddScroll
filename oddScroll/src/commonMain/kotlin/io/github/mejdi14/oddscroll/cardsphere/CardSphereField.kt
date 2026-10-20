@@ -6,8 +6,15 @@ import kotlin.math.sqrt
 /** Camera distance in sphere radii: a card at the front is three times the one at the back. */
 internal const val CAMERA = 2f
 
-/** Slots offered to the small cards. Some are refused, to keep air round the heroes. */
-internal const val SMALL_SLOTS = 64
+/**
+ * Slots offered to the small cards. Some are refused, to keep air round the
+ * heroes, so the field comes out a little under this.
+ *
+ * The reference offers 64. Its cards are a mix of shapes, some of them short
+ * and wide; these are all the plates' own 4:5, which makes every small card
+ * taller than that average. Fewer slots puts the ink back where it was.
+ */
+internal const val SMALL_SLOTS = 52
 
 /** Cards are cut to the plates' own proportions, so nothing is cropped twice. */
 internal const val CARD_RATIO = 0.8f
