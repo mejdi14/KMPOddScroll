@@ -13,7 +13,7 @@ conveyors — plus a demo app that showcases them. Targets Android, iOS, Desktop
 - `shared/.../home/ScrollArtwork.kt` — procedural cover art for each demo tile.
 - `shared/src/commonMain/composeResources/drawable/` — demo art bundled as
   Compose resources, so no demo needs a network call or an image-loading
-  dependency. `helix_*` are 1200x600 Unsplash photographs, `grid_*` the same six
+  dependency. `wide_*` are 1200x600 Unsplash photographs, `grid_*` the same six
   cut 800x1000 for portrait cards, `flower_*` watercolour illustrations cut out
   of two collection sheets. Credit new ones in `README.md`; the flowers are
   under a stock licence that the Unsplash ones are not, so keep the two apart.
@@ -28,7 +28,7 @@ Commit messages are short, lowercase, and plain — describe the change the way 
 developer would in a hurry:
 
 ```
-add helix scroll
+add infinite spiral scroll
 fix strip seams on wide cards
 upgrade compose multiplatform
 ```

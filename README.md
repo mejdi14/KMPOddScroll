@@ -47,30 +47,42 @@ If you face any issues, please report them on [YouTrack](https://youtrack.jetbra
 
 ## Scroll styles
 
-### Helix
+### Infinite Spiral
 
-A spiral column of cards on the surface of a cylinder. Drag or scroll to turn
-it; it settles on the nearest card, and tapping one brings it to the front.
+A column of cards wound onto a spiral, turning endlessly. Each card sits a fixed
+step further down than the one before and a fixed turn further round. Nothing is
+actually in depth — the cards stay on the plane, and the roundness comes from
+where the turn puts them across the frame and how large the near side draws
+them. The card at the middle is the largest and the sharpest; away from it they
+shrink, soften and fade out.
 
 ```kotlin
-HelixScroll(
-    items = listOf(HelixItem(image, "Forest Path"), /* ... */),
+InfiniteSpiralScroll(
+    items = listOf(InfiniteSpiralItem(image, "Forest Path"), /* ... */),
     modifier = Modifier.fillMaxSize(),
-    brand = "Studio",
+    motion = SpiralMotion.Both,
 )
 ```
 
 | Parameter | Default | |
 | --- | --- | --- |
-| `brand` | `null` | wordmark in the top-left |
-| `background` | `0xFF0A0A0B` | page colour the column fades into |
-| `contentColor` | `0xFFF3F0E9` | wordmark, title and counter |
-| `focusBand` | `0.25` | share of the height that stays lit |
-| `twist` | `0.8` | turn between cards, radians |
-| `rise` | `0.79` | rise between cards, card heights |
-| `cardRatio` | `2.0` | card width / height |
-| `entry` | `true` | glide the column in |
-| `hud` | `true` | draw the wordmark, title and counter |
+| `motion` | `Both` | `Drift`, `Hand`, or both |
+| `speed` | `0.55` | cards a second while drifting |
+| `direction` | `Up` | which way the drift runs |
+| `radius` | `170.dp` | how far the spiral swings across the frame |
+| `cardWidth` / `cardHeight` | `100.dp` | card size |
+| `verticalSpacing` | `60.dp` | step down between one card and the next |
+| `perspective` | `1000.dp` | depth the near side is enlarged against |
+| `cardsPerTurn` | `7` | cards in one full turn |
+| `rotation` / `cardTilt` | `0` / `0` | turn of the spiral, lie of each card |
+| `cardRadius` | `10.dp` | corner rounding |
+| `centerScale` | `1.2` | how much larger the middle card draws |
+| `edgeFade` / `edgeBlur` | `0.3` / `6.dp` | how the ends fade and soften |
+| `grayscale` | `0` | drain the colour |
+
+Compose has no blur in common code, so the softening at the ends is a blurred
+copy of each card made once — the picture laid down twenty-five times on a small
+offset lattice and added together — cross-faded against the sharp one.
 
 ### Edge Distortion
 
@@ -210,19 +222,19 @@ every run. Like Infinite Menu it needs no shader anywhere.
 
 ### Photographs
 
-Helix, Edge Distortion and Flex Carousel use photographs from
+Infinite Spiral, Edge Distortion and Flex Carousel use photographs from
 [Unsplash](https://unsplash.com), under the
 [Unsplash License](https://unsplash.com/license). Cut to 1200x600 and bundled as
 Compose resources.
 
 | File | Photographer |
 | --- | --- |
-| `helix_sounds.jpg` | [Samuel Harrington](https://unsplash.com/photos/1791681403982-fe65ea53288f) |
-| `helix_falls.jpg` | [Ingrid Eich](https://unsplash.com/photos/1767930704291-a12b91e5a261) |
-| `helix_peaks.jpg` | [Maciej Marko](https://unsplash.com/photos/1790019852739-349585111186) |
-| `helix_forest.jpg` | [Wolfgang Hasselmann](https://unsplash.com/photos/1788695968738-3c2818047036) |
-| `helix_basalt.jpg` | [Adrien Olichon](https://unsplash.com/photos/1762763955129-0ad8692095ce) |
-| `helix_towers.jpg` | [Heye Jensen](https://unsplash.com/photos/1790313157313-cbc2c66a61ab) |
+| `wide_sounds.jpg` | [Samuel Harrington](https://unsplash.com/photos/1791681403982-fe65ea53288f) |
+| `wide_falls.jpg` | [Ingrid Eich](https://unsplash.com/photos/1767930704291-a12b91e5a261) |
+| `wide_peaks.jpg` | [Maciej Marko](https://unsplash.com/photos/1790019852739-349585111186) |
+| `wide_forest.jpg` | [Wolfgang Hasselmann](https://unsplash.com/photos/1788695968738-3c2818047036) |
+| `wide_basalt.jpg` | [Adrien Olichon](https://unsplash.com/photos/1762763955129-0ad8692095ce) |
+| `wide_towers.jpg` | [Heye Jensen](https://unsplash.com/photos/1790313157313-cbc2c66a61ab) |
 
 The `grid_*.jpg` set is the same six photographs, cut 800x1000 for the portrait
 cards of the Edge Distortion gallery.

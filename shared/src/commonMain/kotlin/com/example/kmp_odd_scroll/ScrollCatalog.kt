@@ -5,7 +5,7 @@ import com.example.kmp_odd_scroll.demos.CardSphereDemoScreen
 import com.example.kmp_odd_scroll.demos.EdgeDistortionDemoScreen
 import com.example.kmp_odd_scroll.demos.FlexCarouselDemoScreen
 import com.example.kmp_odd_scroll.demos.InfiniteMenuDemoScreen
-import com.example.kmp_odd_scroll.demos.HelixDemoScreen
+import com.example.kmp_odd_scroll.demos.InfiniteSpiralDemoScreen
 
 /**
  * One entry per scroll style. Drives both the home gallery and the navigation
@@ -24,11 +24,11 @@ data class ScrollDemo(
 
 val scrollDemos: List<ScrollDemo> = listOf(
     ScrollDemo(
-        route = "helix",
+        route = "infinite_spiral",
         category = "Spatial",
-        title = "Helix",
-        subtitle = "A spiral column of cards, turned by dragging or scrolling",
-        screen = { HelixDemoScreen() },
+        title = "Infinite Spiral",
+        subtitle = "A column of cards wound onto a spiral, turning endlessly",
+        screen = { InfiniteSpiralDemoScreen() },
     ),
     ScrollDemo(
         route = "edge_distortion",

@@ -15,8 +15,8 @@ import kmpoddscroll.shared.generated.resources.grid_towers
 import org.jetbrains.compose.resources.imageResource
 
 /**
- * Portrait crops of the same Unsplash set the helix uses, cut 800x1000 to suit
- * the gallery's 0.8 card rather than being squeezed out of a landscape frame.
+ * Portrait crops of the Unsplash set, cut 800x1000 to suit the gallery's 0.8
+ * card rather than being squeezed out of a landscape frame.
  * Credits are in the README.
  */
 @Composable

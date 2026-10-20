@@ -26,32 +26,37 @@ fun ScrollArtwork(route: String, modifier: Modifier = Modifier) {
             )
         )
         when (route) {
-            "helix" -> helix()
+            "infinite_spiral" -> infiniteSpiral()
             "edge_distortion" -> edgeDistortion()
             "flex_carousel" -> flexCarousel()
             "infinite_menu" -> infiniteMenu()
             "card_sphere" -> cardSphere()
-            else -> helix()
+            else -> infiniteSpiral()
         }
     }
 }
 
 /**
- * The helix in miniature: a stack of bars swept around a cylinder, each taken
- * further down toward the page the further it sits from the waist.
+ * The spiral in miniature: cards stepped down the frame and swung across it by
+ * the turn, the middle one largest and the ends fading out.
  */
-private fun DrawScope.helix() {
-    val rows = 9
-    for (row in 0 until rows) {
-        val t = row / (rows - 1f)
-        val angle = t * 5.4f
-        val y = size.height * (0.1f + t * 0.8f)
-        val width = size.width * 0.52f * (0.6f + 0.4f * cos(angle))
-        val centre = size.width * (0.5f + 0.18f * sin(angle))
-        val fade = 1f - (kotlin.math.abs(t - 0.5f) * 2f)
-        val bar = Color(0xFFE4DCC9).copy(alpha = 0.1f + fade * 0.75f)
-
-        drawRect(bar, Offset(centre - width / 2f, y), Size(width, size.height * 0.055f))
+private fun DrawScope.infiniteSpiral() {
+    val cards = 9
+    for (i in 0 until cards) {
+        // Measured from the middle outward, as the spiral itself is.
+        val offset = i - (cards - 1) / 2f
+        val angle = offset * 0.9f
+        val focus = 1f - kotlin.math.min(kotlin.math.abs(offset) / 3f, 1f)
+        val edge = kotlin.math.min(kotlin.math.abs(offset) / 4.5f, 1f)
+        val card = size.minDimension * 0.17f * (0.78f + 0.3f * focus) *
+            (0.86f + 0.14f * cos(angle))
+        val cx = size.width * 0.5f + sin(angle) * size.width * 0.22f
+        val cy = size.height * 0.5f + offset * size.height * 0.115f
+        drawRect(
+            color = Color(0xFFE4DCC9).copy(alpha = (1f - edge) * 0.85f + 0.08f),
+            topLeft = Offset(cx - card / 2f, cy - card / 2f),
+            size = Size(card, card),
+        )
     }
 }
 
