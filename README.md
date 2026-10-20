@@ -210,7 +210,7 @@ every run. Like Infinite Menu it needs no shader anywhere.
 
 ### Photographs
 
-Helix, Edge Distortion, Flex Carousel and Infinite Menu use photographs from
+Helix, Edge Distortion and Flex Carousel use photographs from
 [Unsplash](https://unsplash.com), under the
 [Unsplash License](https://unsplash.com/license). Cut to 1200x600 and bundled as
 Compose resources.
@@ -234,7 +234,11 @@ collection sheets from [Freepik](https://www.freepik.com) — each flower found 
 its own run of ink on the paper, its neighbours painted back out, and the result
 framed to the card's 4:5.
 
-**These are not covered by the licences above.** Freepik's free licence wants
+The `animal_*.jpg` set used by Infinite Menu was cut the same way out of three
+flat-illustration sheets, also from Freepik, framed square for the sphere's
+tiles.
+
+**Neither set is covered by the licences above.** Freepik's free licence wants
 attribution and does not allow the assets to be redistributed on their own, so
 swap them for your own artwork before using this anywhere real, or hold a
 Freepik licence that covers it.

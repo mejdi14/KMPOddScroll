@@ -7,44 +7,65 @@ import androidx.compose.ui.Modifier
 import io.github.mejdi14.oddscroll.infinitemenu.InfiniteMenuItem
 import io.github.mejdi14.oddscroll.infinitemenu.InfiniteMenuScroll
 import kmpoddscroll.shared.generated.resources.Res
-import kmpoddscroll.shared.generated.resources.grid_basalt
-import kmpoddscroll.shared.generated.resources.grid_falls
-import kmpoddscroll.shared.generated.resources.grid_forest
-import kmpoddscroll.shared.generated.resources.grid_peaks
-import kmpoddscroll.shared.generated.resources.grid_sounds
-import kmpoddscroll.shared.generated.resources.grid_towers
+import kmpoddscroll.shared.generated.resources.animal_bear
+import kmpoddscroll.shared.generated.resources.animal_bird
+import kmpoddscroll.shared.generated.resources.animal_bison
+import kmpoddscroll.shared.generated.resources.animal_bunny
+import kmpoddscroll.shared.generated.resources.animal_deer
+import kmpoddscroll.shared.generated.resources.animal_elephant
+import kmpoddscroll.shared.generated.resources.animal_ferret
+import kmpoddscroll.shared.generated.resources.animal_giraffe
+import kmpoddscroll.shared.generated.resources.animal_hare
+import kmpoddscroll.shared.generated.resources.animal_lion
+import kmpoddscroll.shared.generated.resources.animal_lion_cub
+import kmpoddscroll.shared.generated.resources.animal_penguin
+import kmpoddscroll.shared.generated.resources.animal_pig
+import kmpoddscroll.shared.generated.resources.animal_rabbit
+import kmpoddscroll.shared.generated.resources.animal_raccoon
+import kmpoddscroll.shared.generated.resources.animal_rhino
+import kmpoddscroll.shared.generated.resources.animal_stag
+import kmpoddscroll.shared.generated.resources.animal_zebra
+import kmpoddscroll.shared.generated.resources.animal_zebra_run
 import org.jetbrains.compose.resources.imageResource
 
 /**
- * The Unsplash set, repeated around the sphere. Tiles are square patches of the
- * surface, so the portrait cut is the one to hand them — a landscape frame
- * would lose most of its width to the crop. Credits are in the README.
+ * Nineteen flat-drawn animals, one to a tile.
+ *
+ * They were cut out of three collection sheets the same way the card sphere's
+ * flowers were, except framed square rather than 4:5, since a tile is a square
+ * patch of the sphere. Each is framed to fill its own square, so a tall giraffe
+ * and a wide rhino sit the same size — without that the giraffes would read as
+ * slivers. Two of the three giraffes were left out all the same: at better than
+ * three to one they were thin enough to disappear. Credits are in the README.
  */
 @Composable
 fun InfiniteMenuDemoScreen() {
-    val sounds = imageResource(Res.drawable.grid_sounds)
-    val falls = imageResource(Res.drawable.grid_falls)
-    val peaks = imageResource(Res.drawable.grid_peaks)
-    val forest = imageResource(Res.drawable.grid_forest)
-    val basalt = imageResource(Res.drawable.grid_basalt)
-    val towers = imageResource(Res.drawable.grid_towers)
-
-    val items = remember(sounds, falls, peaks, forest, basalt, towers) {
-        listOf(
-            InfiniteMenuItem(sounds, "Marlborough Sounds", "Aerial, forested hills"),
-            InfiniteMenuItem(falls, "Golden Falls", "Mist at low sun"),
-            InfiniteMenuItem(peaks, "Above the Clouds", "Peaks over a low layer"),
-            InfiniteMenuItem(forest, "Forest Path", "Autumn woodland"),
-            InfiniteMenuItem(basalt, "Basalt Columns", "Hexagonal rock, water pools"),
-            InfiniteMenuItem(towers, "City Towers", "Silhouettes, orange sky"),
-        )
-    }
+    val tiles = listOf(
+        InfiniteMenuItem(imageResource(Res.drawable.animal_elephant), "Elephant"),
+        InfiniteMenuItem(imageResource(Res.drawable.animal_lion), "Lion"),
+        InfiniteMenuItem(imageResource(Res.drawable.animal_zebra), "Zebra"),
+        InfiniteMenuItem(imageResource(Res.drawable.animal_giraffe), "Giraffe"),
+        InfiniteMenuItem(imageResource(Res.drawable.animal_bear), "Bear"),
+        InfiniteMenuItem(imageResource(Res.drawable.animal_penguin), "Penguin"),
+        InfiniteMenuItem(imageResource(Res.drawable.animal_rhino), "Rhinoceros"),
+        InfiniteMenuItem(imageResource(Res.drawable.animal_stag), "Stag"),
+        InfiniteMenuItem(imageResource(Res.drawable.animal_raccoon), "Raccoon"),
+        InfiniteMenuItem(imageResource(Res.drawable.animal_bison), "Bison"),
+        InfiniteMenuItem(imageResource(Res.drawable.animal_pig), "Pig"),
+        InfiniteMenuItem(imageResource(Res.drawable.animal_deer), "Deer"),
+        InfiniteMenuItem(imageResource(Res.drawable.animal_bunny), "Bunny"),
+        InfiniteMenuItem(imageResource(Res.drawable.animal_ferret), "Ferret"),
+        InfiniteMenuItem(imageResource(Res.drawable.animal_zebra_run), "Zebra at a run"),
+        InfiniteMenuItem(imageResource(Res.drawable.animal_lion_cub), "Lion cub"),
+        InfiniteMenuItem(imageResource(Res.drawable.animal_bird), "Bird"),
+        InfiniteMenuItem(imageResource(Res.drawable.animal_hare), "Hare"),
+        InfiniteMenuItem(imageResource(Res.drawable.animal_rabbit), "Rabbit"),
+    )
+    val items = remember(tiles) { tiles }
 
     InfiniteMenuScroll(
         items = items,
         modifier = Modifier.fillMaxSize(),
-        // The sphere only turns when it is turned. Left to itself the reference
-        // steps on every few seconds, which fights whoever is reading a tile.
         autoplay = 0f,
     )
 }
