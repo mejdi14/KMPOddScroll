@@ -183,12 +183,12 @@ A field of flat graphic cards on a transparent sphere. Drag, flick or scroll to
 turn it; it coasts, then glides one of eight hero cards to the front. Double tap
 flips the page between white and `#111`.
 
-No photographs: every card is drawn — type, marks, swatches, dotted icons — in
-flat colour, so the cards are rendered live rather than baked, and text on the
-front card is rasterised at the size it is shown.
+Each card carries one watercolour flower, dealt by a stride so every flower gets
+an equal share of the field and no two neighbours draw the same one.
 
 ```kotlin
 CardSphereScroll(
+    flowers = listOf(image, /* ... */),
     modifier = Modifier.fillMaxSize(),
     theme = CardSphereTheme.Light,
     onSettle = { hero -> },
@@ -197,6 +197,7 @@ CardSphereScroll(
 
 | Parameter | Default | |
 | --- | --- | --- |
+| `flowers` | — | plates dealt round the field; the heroes take the first eight |
 | `theme` | `Light` | starting page colour |
 | `allowThemeToggle` | `true` | double tap flips the page |
 | `onSettle` | `null` | hero index, each time the field rests |
@@ -205,9 +206,12 @@ CardSphereScroll(
 The field itself is generated from a fixed seed, so the arrangement is the same
 every run. Like Infinite Menu it needs no shader anywhere.
 
-## Photo credits
+## Image credits
 
-Demo card art is from [Unsplash](https://unsplash.com), used under the
+### Photographs
+
+Helix, Edge Distortion, Flex Carousel and Infinite Menu use photographs from
+[Unsplash](https://unsplash.com), under the
 [Unsplash License](https://unsplash.com/license). Cut to 1200x600 and bundled as
 Compose resources.
 
@@ -222,3 +226,15 @@ Compose resources.
 
 The `grid_*.jpg` set is the same six photographs, cut 800x1000 for the portrait
 cards of the Edge Distortion gallery.
+
+### Illustrations
+
+The `flower_*.jpg` set used by Card Sphere was cut out of two watercolour flower
+collection sheets from [Freepik](https://www.freepik.com) — each flower found as
+its own run of ink on the paper, its neighbours painted back out, and the result
+framed to the card's 4:5.
+
+**These are not covered by the licences above.** Freepik's free licence wants
+attribution and does not allow the assets to be redistributed on their own, so
+swap them for your own artwork before using this anywhere real, or hold a
+Freepik licence that covers it.

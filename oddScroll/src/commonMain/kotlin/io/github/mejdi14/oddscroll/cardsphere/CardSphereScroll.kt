@@ -12,20 +12,28 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import io.github.mejdi14.oddscroll.internal.clamped
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
@@ -49,20 +57,17 @@ private const val TAP_SLOP = 6f
 private const val DOUBLE_TAP_MS = 280L
 
 @Composable
-fun rememberCardSphereScrollState(): CardSphereScrollState =
-    remember { CardSphereScrollState() }
+fun rememberCardSphereScrollState(flowerCount: Int): CardSphereScrollState =
+    remember(flowerCount) { CardSphereScrollState(flowerCount) }
 
 /**
  * A field of flat graphic cards on a transparent sphere, turned by dragging,
  * flicking or scrolling, which coasts and then glides one big card to the
  * front.
  *
- * There are no photographs in this one: every card is drawn — type, marks,
- * swatches, dotted icons — in flat colour, with nothing shaded and nothing
- * blurred. All of the depth comes from the projection, which is why the cards
- * can be drawn live rather than baked into pictures first: text on the card at
- * the front is rasterised at the size it is actually shown, not scaled up from
- * a smaller copy.
+ * Each card carries one botanical plate, dealt so that every plate gets an
+ * equal share of the field and no two neighbours draw the same one. Nothing is
+ * shaded and nothing is blurred — all of the depth is in the projection.
  *
  * Eight of the cards are heroes, carried at roughly four times the area of the
  * rest, and only they are candidates for the front. The field around them is
@@ -73,6 +78,8 @@ fun rememberCardSphereScrollState(): CardSphereScrollState =
  * hero is chosen, so the field lands on the card it was aimed at rather than
  * the one that happened to be passing.
  *
+ * @param flowers the plates to deal around the field; the eight heroes take
+ *   the first eight.
  * @param theme which page colour to start on.
  * @param allowThemeToggle let a double tap flip the page colour.
  * @param onSettle called with the hero index each time the field comes to rest.
@@ -80,15 +87,18 @@ fun rememberCardSphereScrollState(): CardSphereScrollState =
  */
 @Composable
 fun CardSphereScroll(
+    flowers: List<ImageBitmap>,
     modifier: Modifier = Modifier,
     theme: CardSphereTheme = CardSphereTheme.Light,
     allowThemeToggle: Boolean = true,
     onSettle: ((Int) -> Unit)? = null,
     onThemeChange: ((CardSphereTheme) -> Unit)? = null,
-    state: CardSphereScrollState = rememberCardSphereScrollState(),
+    state: CardSphereScrollState = rememberCardSphereScrollState(flowers.size),
 ) {
-    val measurer = rememberTextMeasurer()
-    val text = remember(measurer) { CardText(measurer) }
+    if (flowers.isEmpty()) {
+        Box(modifier)
+        return
+    }
     val density = LocalDensity.current.density
 
     LaunchedEffect(theme) {
@@ -191,7 +201,7 @@ fun CardSphereScroll(
         ) {
             state.tick // read, so the field repaints every frame while it turns
             drawRect(if (state.dark) Color(0xFF111111) else Color.White)
-            drawField(state, text, density)
+            drawField(state, flowers, density)
         }
     }
 }
@@ -202,7 +212,7 @@ enum class CardSphereTheme { Light, Dark }
 
 private fun DrawScope.drawField(
     state: CardSphereScrollState,
-    text: CardText,
+    flowers: List<ImageBitmap>,
     density: Float,
 ) {
     // Everything below is in density-independent units. The cards are authored
@@ -285,10 +295,10 @@ private fun DrawScope.drawField(
         matrix[3, 0] = origin.x
         matrix[3, 1] = origin.y
 
-        val drawn = if (card.morph) morphed(card, state) else card
+        val plate = flowers[card.flower % flowers.size]
 
         if (p.alpha > 0.995f) {
-            withTransform({ transform(matrix) }) { drawCard(drawn, text) }
+            withTransform({ transform(matrix) }) { drawPlate(card, plate) }
         } else {
             // Only the cards on the far side need a layer to fade through, and
             // they are a handful, so it is cheaper than threading an alpha
@@ -298,7 +308,7 @@ private fun DrawScope.drawField(
                     Rect(0f, 0f, size.width, size.height),
                     Paint().apply { alpha = p.alpha },
                 )
-                withTransform({ transform(matrix) }) { drawCard(drawn, text) }
+                withTransform({ transform(matrix) }) { drawPlate(card, plate) }
                 canvas.restore()
             }
         }
@@ -355,25 +365,38 @@ private fun corner(p: Placed, px: Float, py: Float, density: Float): Offset? {
     return Offset(x * density, y * density)
 }
 
-/**
- * The morphing hero. It opens from a search mark to a cross and then to the
- * flower as it comes round, and once it has flowered it stays that way until it
- * has turned well away again.
- */
-private fun morphed(card: SphereCard, state: CardSphereScrollState): SphereCard {
-    val z = state.rotation.rotatedZ(card.x, card.y, card.z)
-    val next = when {
-        z > 0.97f -> "flower"
-        z > 0.6f -> if (state.morphIcon == "flower") "flower" else "x"
-        else -> "search"
-    }
-    if (state.morphIcon != next) state.morphIcon = next
-    return if (next == card.icon) card else SphereCard(
-        kind = card.kind, w = card.w, h = card.h, rz = card.rz,
-        x = card.x, y = card.y, z = card.z, hero = card.hero,
-        icon = next, morph = true, dotColor = card.dotColor, seed = card.seed,
-        background = card.background, foreground = card.foreground,
-        shape = card.shape, swatch = card.swatch,
-    )
-}
 
+/**
+ * One plate, cover-fitted into its card and clipped to the card's corners.
+ *
+ * The cards are cut to the plates' own proportions, so in practice the fit
+ * takes nothing off — the crop is here for a set that does not match rather
+ * than because this one needs it.
+ */
+private fun DrawScope.drawPlate(card: SphereCard, plate: ImageBitmap) {
+    val radius = max(4f, card.w * 0.03f)
+    val rounded = Path().apply {
+        addRoundRect(RoundRect(Rect(0f, 0f, card.w, card.h), CornerRadius(radius, radius)))
+    }
+    clipPath(rounded) {
+        val cardAspect = card.w / card.h
+        val plateAspect = plate.width.toFloat() / max(plate.height, 1)
+        val srcW: Int
+        val srcH: Int
+        if (plateAspect > cardAspect) {
+            srcH = plate.height
+            srcW = (plate.height * cardAspect).roundToInt().coerceIn(1, plate.width)
+        } else {
+            srcW = plate.width
+            srcH = (plate.width / cardAspect).roundToInt().coerceIn(1, plate.height)
+        }
+        drawImage(
+            image = plate,
+            srcOffset = IntOffset((plate.width - srcW) / 2, (plate.height - srcH) / 2),
+            srcSize = IntSize(srcW, srcH),
+            dstOffset = IntOffset.Zero,
+            dstSize = IntSize(card.w.roundToInt(), card.h.roundToInt()),
+            filterQuality = FilterQuality.Medium,
+        )
+    }
+}

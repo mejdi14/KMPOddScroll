@@ -38,8 +38,8 @@ private const val SNAP_IDLE_MS = 60f
  * whatever direction that arrives from. Angles would lock at the poles and
  * would split one gesture into two.
  */
-class CardSphereScrollState internal constructor() {
-    internal val cards: List<SphereCard> = buildField()
+class CardSphereScrollState internal constructor(flowerCount: Int) {
+    internal val cards: List<SphereCard> = buildField(flowerCount)
 
     internal val rotation = Quat()
 
@@ -68,9 +68,6 @@ class CardSphereScrollState internal constructor() {
     internal var stretchX = 1f
     internal var stretchY = 1f
     internal var unit = 1f
-
-    /** The morphing hero's icon, which is sticky once it opens. */
-    internal var morphIcon = "search"
 
     /** Where the cards landed last frame, for hit testing. */
     internal val visible = ArrayList<VisibleCard>()

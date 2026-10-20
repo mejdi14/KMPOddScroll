@@ -147,7 +147,7 @@ private fun DrawScope.infiniteMenu() {
 
 /**
  * The field in miniature: one big card at the front with small ones scattered
- * round it, the lime of the hero standing in for the whole palette.
+ * round it, on the paper the flowers are painted on.
  */
 private fun DrawScope.cardSphere() {
     val golden = 3.1415927f * (3f - kotlin.math.sqrt(5f))
@@ -171,7 +171,7 @@ private fun DrawScope.cardSphere() {
 
     val hero = size.minDimension * 0.3f
     drawRect(
-        color = Color(0xFFD5FE4F),
+        color = Color(0xFFF4F1E8),
         topLeft = Offset(cx - hero / 2f, cy - hero * 0.62f),
         size = Size(hero, hero * 1.25f),
     )
