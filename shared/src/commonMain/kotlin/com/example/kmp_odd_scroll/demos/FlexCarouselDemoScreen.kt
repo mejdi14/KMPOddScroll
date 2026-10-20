@@ -48,12 +48,42 @@ fun FlexCarouselDemoScreen() {
     // sit next to the green pasture, and the deep blue falls between them.
     val items = remember(wheatfield, farmhouse, night, cowherd, village, cypresses) {
         listOf(
-            FlexCarouselItem(wheatfield, "Green Wheat Fields"),
-            FlexCarouselItem(farmhouse, "Farmhouse in Provence"),
-            FlexCarouselItem(night, "Night with her Train of Stars"),
-            FlexCarouselItem(cowherd, "The Cowherd"),
-            FlexCarouselItem(village, "Harbour Village"),
-            FlexCarouselItem(cypresses, "Wheat Field with Cypresses"),
+            FlexCarouselItem(
+                wheatfield,
+                "Green Wheat Fields",
+                "Vincent van Gogh. Young wheat laid down in curved strokes, " +
+                    "under a sky worked in the same hand.",
+            ),
+            FlexCarouselItem(
+                farmhouse,
+                "Farmhouse in Provence",
+                "Vincent van Gogh. A low wall, a gate, and standing wheat " +
+                    "against a turquoise sky.",
+            ),
+            FlexCarouselItem(
+                night,
+                "Night with her Train of Stars",
+                "Edward Robert Hughes. Night passes overhead with a finger to " +
+                    "her lips, trailing sleeping children and a scatter of birds.",
+            ),
+            FlexCarouselItem(
+                cowherd,
+                "The Cowherd",
+                "A woman and her cow on a pale road, below a hillside terraced " +
+                    "into the light.",
+            ),
+            FlexCarouselItem(
+                village,
+                "Harbour Village",
+                "Houses stacked up the cliff, cattle in a blue field, and fish " +
+                    "in the water running below them.",
+            ),
+            FlexCarouselItem(
+                cypresses,
+                "Wheat Field with Cypresses",
+                "Vincent van Gogh. Cypresses stand against rolling cloud over " +
+                    "a field of ripe wheat.",
+            ),
         )
     }
 

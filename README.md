@@ -142,9 +142,15 @@ FlexCarouselScroll(
 | `fit` | `Natural` | or `Portrait`, `Square`, `Landscape` |
 | `squeeze` | `0.2` | how far cards narrow at full speed |
 | `focusOnClick` | `true` | tap the centred card to open it |
+| `focus` | `Auto` | where an opened card goes — `Beside`, `Centred`, or `Auto` |
 | `autoplay` / `interval` | `false` / `4f` | step along on a timer |
 | `captions` | `true` | title and counter |
 | `intro` | `true` | the row rises into place |
+
+Opening a card on a landscape frame slides it into the left half and gives the
+right half to its title and description; `FlexFocus.Centred` keeps the old
+behaviour of filling the frame with it. On a portrait frame `Auto` stays centred,
+since there is no room to put text next to a card worth looking at.
 
 Every size is a share of the bounds the row is given, including the lens, so
 handing it a band rather than the whole screen is the way to make its cards

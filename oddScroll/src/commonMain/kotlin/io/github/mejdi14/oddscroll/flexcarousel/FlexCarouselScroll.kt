@@ -5,7 +5,9 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
@@ -18,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -29,6 +32,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -52,6 +56,8 @@ data class FlexCarouselItem(
     val image: ImageBitmap,
     /** Shown while this card is at the front. */
     val title: String = "",
+    /** Shown beside the card once it is opened. See [FlexFocus]. */
+    val description: String = "",
 )
 
 /** How the row rolls past the glass. */
@@ -59,6 +65,19 @@ enum class FlexCurl { Twist, Rise, Fall }
 
 /** How a card is proportioned, whatever its picture's own shape. */
 enum class FlexFit { Natural, Portrait, Square, Landscape }
+
+/** Where an opened card goes, and whether its text comes with it. */
+enum class FlexFocus {
+    /** It stays in the middle of the frame and fills what it can of it. */
+    Centred,
+
+    /** It slides to one side and its title and description take the other. */
+    Beside,
+
+    /** Beside on a frame wider than it is tall, centred otherwise. A tall frame
+        has no room to put text next to a card worth looking at. */
+    Auto,
+}
 
 /**
  * Shape and behaviour of the invisible glass the row runs through. The named
@@ -113,6 +132,9 @@ private const val PARALLAX_SPAN = 0.75f
 
 private const val INTRO_SECONDS = 2.1f
 
+/** Share of the frame the opened card keeps when its text sits beside it. */
+private const val FOCUS_SPLIT = 0.5f
+
 @Composable
 fun rememberFlexCarouselScrollState(count: Int): FlexCarouselScrollState =
     remember(count) { FlexCarouselScrollState(count.coerceAtLeast(1)) }
@@ -150,6 +172,8 @@ fun rememberFlexCarouselScrollState(count: Int): FlexCarouselScrollState =
  *   picture's own shape and gives the row its uneven run of widths.
  * @param squeeze how far cards narrow at full speed, 0 to 1.
  * @param focusOnClick tapping the centred card opens it; tapping again closes.
+ * @param focus where an opened card goes. [FlexFocus.Beside] slides it to the
+ *   left and gives the room it leaves to its title and description.
  * @param autoplay step along on a timer while untouched.
  * @param interval seconds between autoplay steps.
  * @param captions draw the title and counter.
@@ -169,6 +193,7 @@ fun FlexCarouselScroll(
     fit: FlexFit = FlexFit.Natural,
     squeeze: Float = 0.2f,
     focusOnClick: Boolean = true,
+    focus: FlexFocus = FlexFocus.Auto,
     autoplay: Boolean = false,
     interval: Float = 4f,
     captions: Boolean = true,
@@ -226,7 +251,13 @@ fun FlexCarouselScroll(
 
     // Read here, not in the draw: the lens is a modifier, and it should be
     // rebuilt when the focus opens or closes and at no other time.
-    val strength = 1f - inOutCubic(state.focusAmount.clamped(0f, 1f))
+    val opened = state.focusAmount.clamped(0f, 1f)
+    val strength = 1f - inOutCubic(opened)
+    val beside = when (focus) {
+        FlexFocus.Beside -> true
+        FlexFocus.Centred -> false
+        FlexFocus.Auto -> viewport.width > viewport.height
+    }
 
     Box(modifier) {
         Canvas(
@@ -295,7 +326,7 @@ fun FlexCarouselScroll(
         ) {
             state.tick // read, so the row redraws every frame while it settles
             drawRect(background)
-            drawRow(items, state, squeeze, radiusPx, intro)
+            drawRow(items, state, squeeze, radiusPx, intro, beside)
         }
 
         if (captions) {
@@ -304,6 +335,18 @@ fun FlexCarouselScroll(
                 index = state.active.coerceIn(items.indices),
                 count = items.size,
                 contentColor = contentColor,
+                // The panel says all of this and more, so the caption gives way
+                // to it rather than repeating it along the bottom.
+                alpha = if (beside) 1f - inOutCubic(opened) else 1f,
+            )
+        }
+        if (beside && opened > 0.004f) {
+            val shown = state.focusIndex.coerceIn(items.indices)
+            FocusPanel(
+                title = items[shown].title,
+                description = items[shown].description,
+                contentColor = contentColor,
+                reveal = inOutCubic(opened),
             )
         }
     }
@@ -324,6 +367,7 @@ private fun DrawScope.drawRow(
     squeeze: Float,
     radiusPx: Float,
     intro: Boolean,
+    beside: Boolean,
 ) {
     val m = state.metrics ?: return
     val width = size.width
@@ -340,11 +384,14 @@ private fun DrawScope.drawRow(
         if (it in m.widths.indices) m.widths[it] else m.cardH
     }
     // Opened as far as the frame allows and no further, so a wide card and a
-    // narrow one both land inside it.
+    // narrow one both land inside it. With text beside it the card is measured
+    // against its own half of the frame, not the whole of it.
+    val lane = if (beside) width * FOCUS_SPLIT else width
     val focusScale = min(
         min(1.3f, height * 0.84f / m.cardH),
-        width * 0.92f / focusWidth,
+        lane * 0.92f / focusWidth,
     ).coerceAtLeast(1f)
+    val focusHome = if (beside) width * FOCUS_SPLIT / 2f else homeX
 
     val arrival = if (!intro) 1f else (state.introAge / INTRO_SECONDS).clamped(0f, 1f)
 
@@ -377,6 +424,9 @@ private fun DrawScope.drawRow(
             if (focus > 0f) {
                 if (i == state.focusIndex && abs(rel) < m.widths[i]) {
                     scale *= 1f + (focusScale - 1f) * focusEase
+                    // Slides out of the middle and into its half, leaving the
+                    // other one for the text.
+                    x += (focusHome - homeX) * focusEase
                 } else {
                     // Everything else is swept out of the way, the near cards
                     // leaving first so the opening reads as an order.
@@ -472,13 +522,16 @@ private fun BoxScope.Caption(
     index: Int,
     count: Int,
     contentColor: Color,
+    alpha: Float,
 ) {
+    if (alpha <= 0.004f) return
     if (title.isNotEmpty()) {
         BasicText(
             text = title,
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(horizontal = 24.dp, vertical = 28.dp),
+                .padding(horizontal = 24.dp, vertical = 28.dp)
+                .alpha(alpha),
             style = TextStyle(
                 color = contentColor,
                 fontSize = 22.sp,
@@ -490,9 +543,61 @@ private fun BoxScope.Caption(
         text = "${pad2(index + 1)} / ${pad2(count)}",
         modifier = Modifier
             .align(Alignment.BottomEnd)
-            .padding(horizontal = 24.dp, vertical = 28.dp),
+            .padding(horizontal = 24.dp, vertical = 28.dp)
+            .alpha(alpha),
         style = TextStyle(color = contentColor.copy(alpha = 0.55f), fontSize = 13.sp),
     )
+}
+
+/**
+ * The half of the frame the opened card left behind.
+ *
+ * It comes in a little later than the card moves and from slightly further
+ * right, so the two read as one gesture — the card clearing the space and the
+ * text arriving into it — rather than as two things happening at once.
+ */
+@Composable
+private fun BoxScope.FocusPanel(
+    title: String,
+    description: String,
+    contentColor: Color,
+    reveal: Float,
+) {
+    val settled = ((reveal - 0.35f) / 0.65f).clamped(0f, 1f)
+    if (settled <= 0.004f) return
+    Column(
+        modifier = Modifier
+            .align(Alignment.CenterEnd)
+            .fillMaxWidth(1f - FOCUS_SPLIT)
+            .padding(horizontal = 32.dp, vertical = 28.dp)
+            .graphicsLayer {
+                this.alpha = settled
+                translationX = (1f - settled) * 28.dp.toPx()
+            },
+    ) {
+        if (title.isNotEmpty()) {
+            BasicText(
+                text = title,
+                style = TextStyle(
+                    color = contentColor,
+                    fontSize = 26.sp,
+                    lineHeight = 31.sp,
+                    fontWeight = FontWeight.Medium,
+                ),
+            )
+        }
+        if (description.isNotEmpty()) {
+            BasicText(
+                text = description,
+                modifier = Modifier.padding(top = 14.dp),
+                style = TextStyle(
+                    color = contentColor.copy(alpha = 0.62f),
+                    fontSize = 14.sp,
+                    lineHeight = 21.sp,
+                ),
+            )
+        }
+    }
 }
 
 private fun pad2(value: Int): String = if (value < 10) "0$value" else value.toString()
