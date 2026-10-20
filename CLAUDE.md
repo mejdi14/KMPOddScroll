@@ -91,6 +91,10 @@ House techniques for the common part:
   `dstOffset` would step.
 - Animation runs off a `withFrameNanos` loop, so easing constants are converted
   from per-frame to per-second: `1 - (1 - k).pow(dt / 16.67)`.
+- **Per-frame values are read inside `graphicsLayer { }`**, not in composition.
+  The block re-runs on the layer without recomposing the node, which is what
+  makes a staggered reveal over dozens of pieces (`internal/SplitText.kt`)
+  affordable.
 
 ## Notes
 

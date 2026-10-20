@@ -45,6 +45,8 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.mejdi14.oddscroll.internal.clamped
+import io.github.mejdi14.oddscroll.internal.SplitBy
+import io.github.mejdi14.oddscroll.internal.SplitText
 import io.github.mejdi14.oddscroll.internal.inOutCubic
 import kotlin.math.abs
 import kotlin.math.max
@@ -564,10 +566,13 @@ private fun BoxScope.Caption(
 /**
  * The half of the frame the opened card left behind.
  *
- * It waits until the card is most of the way over and then comes in from a
- * little further right, so the two read as one gesture — the card clearing the
- * space and the text arriving into it — rather than as two things happening at
- * once.
+ * Nothing is composed here until the card is most of the way over, and the text
+ * then lets itself in a piece at a time, so the two read as one gesture — the
+ * card clearing the space and the text arriving into it.
+ *
+ * The title comes in by the letter and the description by the word. By the
+ * letter is the finer effect and it is what a title is short enough for; across
+ * a paragraph it reads as a machine typing rather than as text arriving.
  */
 @Composable
 private fun BoxScope.FocusPanel(
@@ -576,38 +581,38 @@ private fun BoxScope.FocusPanel(
     contentColor: Color,
     reveal: Float,
 ) {
-    val settled = ((reveal - 0.55f) / 0.45f).clamped(0f, 1f)
-    if (settled <= 0.004f) return
+    if (reveal <= 0.55f) return
     Column(
         modifier = Modifier
             .align(Alignment.CenterEnd)
             .fillMaxWidth(1f - FOCUS_SPLIT)
-            .padding(horizontal = 32.dp, vertical = 28.dp)
-            .graphicsLayer {
-                this.alpha = settled
-                translationX = (1f - settled) * 28.dp.toPx()
-            },
+            .padding(horizontal = 32.dp, vertical = 28.dp),
     ) {
-        if (title.isNotEmpty()) {
-            BasicText(
-                text = title,
-                style = TextStyle(
-                    color = contentColor,
-                    fontSize = 26.sp,
-                    lineHeight = 31.sp,
-                    fontWeight = FontWeight.Medium,
-                ),
-            )
-        }
+        SplitText(
+            text = title,
+            style = TextStyle(
+                color = contentColor,
+                fontSize = 26.sp,
+                lineHeight = 34.sp,
+                fontWeight = FontWeight.Medium,
+            ),
+            splitBy = SplitBy.Chars,
+            rise = 26.dp,
+        )
         if (description.isNotEmpty()) {
-            BasicText(
+            SplitText(
                 text = description,
                 modifier = Modifier.padding(top = 14.dp),
                 style = TextStyle(
                     color = contentColor.copy(alpha = 0.62f),
                     fontSize = 14.sp,
-                    lineHeight = 21.sp,
+                    lineHeight = 22.sp,
                 ),
+                splitBy = SplitBy.Words,
+                rise = 18.dp,
+                // Held back until the title is on its way, so the panel fills
+                // from the top down rather than all at once.
+                startDelay = 260,
             )
         }
     }
