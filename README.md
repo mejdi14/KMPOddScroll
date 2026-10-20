@@ -222,7 +222,7 @@ every run. Like Infinite Menu it needs no shader anywhere.
 
 ### Photographs
 
-Infinite Spiral, Edge Distortion and Flex Carousel use photographs from
+Infinite Spiral and Edge Distortion use photographs from
 [Unsplash](https://unsplash.com), under the
 [Unsplash License](https://unsplash.com/license). Cut to 1200x600 and bundled as
 Compose resources.
@@ -238,6 +238,18 @@ Compose resources.
 
 The `grid_*.jpg` set is the same six photographs, cut 800x1000 for the portrait
 cards of the Edge Distortion gallery.
+
+Flex Carousel uses museum scans of paintings, also from Unsplash and under the
+same licence, cut 800x600 for its 4:3 cards.
+
+| File | Scanned by |
+| --- | --- |
+| `art_wheatfield.jpg` | [National Gallery of Art](https://unsplash.com/@ngadc) |
+| `art_farmhouse.jpg` | [National Gallery of Art](https://unsplash.com/@ngadc) |
+| `art_night.jpg` | [Birmingham Museums Trust](https://unsplash.com/@birminghammuseumstrust) |
+| `art_cowherd.jpg` | [The Metropolitan Museum of Art](https://unsplash.com/@themet) |
+| `art_village.jpg` | [Birmingham Museums Trust](https://unsplash.com/@birminghammuseumstrust) |
+| `art_cypresses.jpg` | [Tofan Teodor](https://unsplash.com/@tofanteodor) |
 
 ### Illustrations
 

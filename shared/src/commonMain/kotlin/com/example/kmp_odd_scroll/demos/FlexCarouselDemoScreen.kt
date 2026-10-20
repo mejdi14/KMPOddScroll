@@ -14,12 +14,12 @@ import io.github.mejdi14.oddscroll.flexcarousel.FlexCarouselItem
 import io.github.mejdi14.oddscroll.flexcarousel.FlexCarouselScroll
 import io.github.mejdi14.oddscroll.flexcarousel.FlexFit
 import kmpoddscroll.shared.generated.resources.Res
-import kmpoddscroll.shared.generated.resources.wide_basalt
-import kmpoddscroll.shared.generated.resources.wide_falls
-import kmpoddscroll.shared.generated.resources.wide_forest
-import kmpoddscroll.shared.generated.resources.wide_peaks
-import kmpoddscroll.shared.generated.resources.wide_sounds
-import kmpoddscroll.shared.generated.resources.wide_towers
+import kmpoddscroll.shared.generated.resources.art_cowherd
+import kmpoddscroll.shared.generated.resources.art_cypresses
+import kmpoddscroll.shared.generated.resources.art_farmhouse
+import kmpoddscroll.shared.generated.resources.art_night
+import kmpoddscroll.shared.generated.resources.art_village
+import kmpoddscroll.shared.generated.resources.art_wheatfield
 import org.jetbrains.compose.resources.imageResource
 
 /** The carousel's own page colour, so the band it sits in leaves no seam. */
@@ -29,30 +29,31 @@ private val Page = Color(0xFF060607)
 private const val PORTRAIT_BAND = 0.62f
 
 /**
- * Landscape cards, all one size.
+ * Landscape cards, all one size, carrying museum scans of paintings.
  *
  * [FlexFit.Landscape] holds every card to 4:3 whatever its picture measures,
- * and the pictures handed to it are the 2:1 cuts — so the fit takes a third off
- * the sides of a landscape photograph rather than most of the height off a
- * portrait one. Credits are in the README.
+ * and the scans are cut to that already, so the fit takes nothing off. Credits
+ * are in the README.
  */
 @Composable
 fun FlexCarouselDemoScreen() {
-    val sounds = imageResource(Res.drawable.wide_sounds)
-    val falls = imageResource(Res.drawable.wide_falls)
-    val peaks = imageResource(Res.drawable.wide_peaks)
-    val forest = imageResource(Res.drawable.wide_forest)
-    val basalt = imageResource(Res.drawable.wide_basalt)
-    val towers = imageResource(Res.drawable.wide_towers)
+    val wheatfield = imageResource(Res.drawable.art_wheatfield)
+    val farmhouse = imageResource(Res.drawable.art_farmhouse)
+    val night = imageResource(Res.drawable.art_night)
+    val cowherd = imageResource(Res.drawable.art_cowherd)
+    val village = imageResource(Res.drawable.art_village)
+    val cypresses = imageResource(Res.drawable.art_cypresses)
 
-    val items = remember(sounds, falls, peaks, forest, basalt, towers) {
+    // Ordered so no two neighbours share a palette — the green wheat does not
+    // sit next to the green pasture, and the deep blue falls between them.
+    val items = remember(wheatfield, farmhouse, night, cowherd, village, cypresses) {
         listOf(
-            FlexCarouselItem(sounds, "Marlborough Sounds"),
-            FlexCarouselItem(falls, "Golden Falls"),
-            FlexCarouselItem(peaks, "Above the Clouds"),
-            FlexCarouselItem(forest, "Forest Path"),
-            FlexCarouselItem(basalt, "Basalt Columns"),
-            FlexCarouselItem(towers, "City Towers"),
+            FlexCarouselItem(wheatfield, "Green Wheat Fields"),
+            FlexCarouselItem(farmhouse, "Farmhouse in Provence"),
+            FlexCarouselItem(night, "Night with her Train of Stars"),
+            FlexCarouselItem(cowherd, "The Cowherd"),
+            FlexCarouselItem(village, "Harbour Village"),
+            FlexCarouselItem(cypresses, "Wheat Field with Cypresses"),
         )
     }
 
