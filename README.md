@@ -323,8 +323,9 @@ with a painting in the middle; tap a painting to bring it to the middle. The
 room opens with a walk in from the doorway. Two seconds after it stops, an
 Inspect button walks you up to the painting in the
 middle — two seconds of a visitor's approach, steps and all — and a tap steps
-back. Nearly there, the paintings either side slide away down the walls and
-out of the frame. On Android 13 and up the painting also comes out of its
+back. As the walk starts the painting comes off the wall's curve and hangs
+flat, square on; nearly there, the paintings either side slide away down the
+walls and out of the frame. On Android 13 and up the painting also comes out of its
 frame and loses its label on the way, showing the edges of the liquid glass
 over it, and a drag slides the glass about so its edges bend the painting
 under them.

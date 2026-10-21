@@ -224,12 +224,18 @@ private const val BARE_TO = 0.85f
 
 /**
  * Nearly there, the paintings either side slide away along the walls, this
- * many card heights, between these two points of the eased walk — round the
+ * many card heights, between these two points of the walk in time — round the
  * corners and down the side walls, out of the frame.
  */
 private const val PART = 2.5f
-private const val PART_FROM = 0.6f
-private const val PART_TO = 0.95f
+private const val PART_FROM = 0.35f
+private const val PART_TO = 0.9f
+
+/**
+ * The painting walked up to comes off the wall's curve and hangs flat, square
+ * to the eye, over this first stretch of the walk in time.
+ */
+private const val FLATTEN_TO = 0.25f
 
 /** [walkIn] starts the eye back in the doorway, and walks it into the room. */
 @Composable
@@ -518,6 +524,9 @@ private class Room {
     /** How far the paintings either side of it have slid away, in card heights. */
     var part = 0f
 
+    /** How far it has come off the wall's curve, 0 to 1. */
+    var flat = 0f
+
     /** Screen pixels to a card height on the back wall, from where the eye is now. */
     var nearPx = 1f
 
@@ -550,8 +559,10 @@ private class Room {
         glare = 1f - eased
         val off = ((eased - BARE_FROM) / (BARE_TO - BARE_FROM)).coerceIn(0f, 1f)
         bare = off * off * (3f - 2f * off)
-        val away = ((eased - PART_FROM) / (PART_TO - PART_FROM)).coerceIn(0f, 1f)
+        val away = ((walk - PART_FROM) / (PART_TO - PART_FROM)).coerceIn(0f, 1f)
         part = PART * away * away * (3f - 2f * away)
+        val straight = (walk / FLATTEN_TO).coerceIn(0f, 1f)
+        flat = straight * straight * (3f - 2f * straight)
         val z = (DEPTH - stand) * eased - ENTER_FROM * (1f - WALK_EASE.transform(entry))
         // The two walks never overlap, so their steps simply add.
         eyeX = 0f
@@ -675,6 +686,28 @@ private fun wallNormal(s: Float, out: FloatArray) {
     out[1] = z
 }
 
+/**
+ * How far the sheets being drawn are taken off the wall's curve and laid flat
+ * across the back wall's plane, square to the eye.
+ */
+private var flat = 0f
+
+/** [wallPoint], [flat] of the way to the back wall's plane. */
+private fun sheetPoint(s: Float, out: FloatArray, inset: Float = 0f) {
+    wallPoint(s, out, inset)
+    if (flat <= 0f) return
+    out[0] += (s - out[0]) * flat
+    out[1] += (DEPTH - inset - out[1]) * flat
+}
+
+/** [wallNormal], [flat] of the way to the back wall's. */
+private fun sheetNormal(s: Float, out: FloatArray) {
+    wallNormal(s, out)
+    if (flat <= 0f) return
+    out[0] -= out[0] * flat
+    out[1] += (-1f - out[1]) * flat
+}
+
 // --- drawing -----------------------------------------------------------------
 
 /**
@@ -709,7 +742,9 @@ private fun DrawScope.drawWall(
             // Only the painting walked up to comes out of its frame.
             val bare = if (subject && room.bare > 0f) card.bare else null
             if (subject) {
+                flat = room.flat
                 drawCard(card, left, room, wall, bare, if (bare != null) room.bare else 0f, slideX, slideY)
+                flat = 0f
             } else {
                 drawCard(card, left, room, wall)
             }
@@ -864,8 +899,8 @@ private class Glaze {
         glow = 0f
         if (room.glare <= 0f) return this
         val mid = left + card.face.width / px / 2f
-        wallPoint(mid, p0, card.depth)
-        wallNormal(mid, n0)
+        sheetPoint(mid, p0, card.depth)
+        sheetNormal(mid, n0)
         val nx = n0[0]
         val nz = n0[1]
         val eye = (room.eyeX - p0[0]) * nx + (room.eyeZ - p0[1]) * nz
@@ -917,8 +952,8 @@ private fun DrawScope.drawGlass(
     x1: Float,
     z1: Float,
 ) {
-    wallNormal(s0, n0)
-    wallNormal(s1, n1)
+    sheetNormal(s0, n0)
+    sheetNormal(s1, n1)
     val near = reflectance(n0[0], n0[1], x0, z0)
     val far = reflectance(n1[0], n1[1], x1, z1)
     val middle = reflectance(n0[0] + n1[0], n0[1] + n1[1], (x0 + x1) / 2f, (z0 + z1) / 2f)
@@ -1020,7 +1055,7 @@ private fun DrawScope.drawSheet(
     while (a < to) {
         var b = to
         for (k in bends) if (k > a + 1e-5f && k < b) b = k
-        val curved = abs((a + b) / 2f) in FLAT..(FLAT + ARC)
+        val curved = flat < 1f && abs((a + b) / 2f) in FLAT..(FLAT + ARC)
         val pieces = if (curved) max(1, ceil((b - a) / (ARC / ARC_CHORDS)).toInt()) else 1
         for (n in 0 until pieces) {
             drawPiece(
@@ -1056,8 +1091,8 @@ private fun DrawScope.drawPiece(
     val c0 = ((a - left) * pxPerUnit).roundToInt().coerceIn(sx0, sx1)
     val c1 = ((b - left) * pxPerUnit).roundToInt().coerceIn(sx0, sx1)
     if (c1 <= c0) return
-    wallPoint(left + c0 / pxPerUnit, p0, inset)
-    wallPoint(left + c1 / pxPerUnit, p1, inset)
+    sheetPoint(left + c0 / pxPerUnit, p0, inset)
+    sheetPoint(left + c1 / pxPerUnit, p1, inset)
     // The overlap runs on along the same flat stretch, back towards the last piece.
     val start = max(c0 - OVERLAP, sx0)
     val back = (c0 - start).toFloat() / (c1 - c0)
@@ -1115,13 +1150,13 @@ private fun DrawScope.drawEdges(card: CardArt, edges: ImageBitmap, left: Float, 
     for (side in 0..1) {
         val s = if (side == 0) left else left + card.face.width / card.pxPerUnit
         if (abs(s) > room.reach) continue
-        wallPoint(s, p0)
+        sheetPoint(s, p0)
         // Outwards from the painting, along the wall.
-        wallPoint(if (side == 0) s - PROBE else s + PROBE, p1)
+        sheetPoint(if (side == 0) s - PROBE else s + PROBE, p1)
         val ox = p1[0] - p0[0]
         val oz = p1[1] - p0[1]
         if ((room.eyeX - p0[0]) * ox + (room.eyeZ - p0[1]) * oz <= 0f) continue
-        wallPoint(s, p1, card.depth)
+        sheetPoint(s, p1, card.depth)
         val xw = p0[0] - room.eyeX
         val zw = p0[1] - room.eyeZ
         val xf = p1[0] - room.eyeX
