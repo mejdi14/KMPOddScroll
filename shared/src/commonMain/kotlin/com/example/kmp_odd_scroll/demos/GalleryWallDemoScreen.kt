@@ -32,7 +32,7 @@ import org.jetbrains.compose.resources.imageResource
  * Fourteen bright museum paintings, every one cut 3:2 so they hang at the same
  * height and a width of one and a half of it, ordered so that no painting sits
  * beside one of its own colours — yellow, blue, orange, green, pink, teal, gold
- * and so on round the room, each in a gilt frame. Credits are in the README.
+ * and so on round the room, each in a walnut frame. Credits are in the README.
  *
  * Back steps away from a painting that has been walked up to before it leaves
  * the room.

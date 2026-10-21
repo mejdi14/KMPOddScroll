@@ -359,7 +359,7 @@ GalleryWallScroll(
 | `items` | — | paintings in order; the hang repeats, so it has no end |
 | `background` | `#FFFFFF` | the wall |
 | `contentColor` | `#1A1A1A` | the labels; all but the title are set in it at 45% |
-| `frame` | `null` | `GalleryWallFrame()` hangs each painting in a gilt frame that stands 2cm off the wall (against a metre-tall painting): the edge shows as the wall turns away, and a soft shadow falls behind; `null` hangs them flat and bare |
+| `frame` | `null` | `GalleryWallFrame()` hangs each painting in a walnut frame — four mitred sticks, the grain running along each — that stands 2cm off the wall (against a metre-tall painting): the edge shows as the wall turns away, and a soft shadow falls behind; `null` hangs them flat and bare |
 | `inspectLabel` | `"Inspect"` | the button that walks up to a painting; `null` for none |
 | `state` | — | `rememberGalleryWallScrollState()`; `walkIn = false` skips the walk in from the doorway |
 

@@ -33,6 +33,9 @@ import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
@@ -63,6 +66,7 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
+import kotlin.random.Random
 
 /** One painting on the wall. */
 data class GalleryWallItem(
@@ -81,21 +85,26 @@ data class GalleryWallItem(
 )
 
 /**
- * A gilt frame round every painting, and the painting made a thing that
+ * A wooden frame round every painting, and the painting made a thing that
  * hangs off the wall rather than a print pasted to it: the framed face stands
  * [depth] out, its edges show as the wall turns away from the eye, and it
  * throws a soft shadow down and to the right onto the wall behind. The moulding
- * is lit from the upper left. Sizes are in heights of the tallest painting —
- * call that a metre, and the default stands two centimetres deep. The frame
- * hangs outside the canvas, so a framed painting stands that much bigger.
+ * is four mitred sticks, each with its own grain running along it, under a
+ * satin finish lit from the upper left. Sizes are in heights of the tallest
+ * painting — call that a metre, and the default stands two centimetres deep.
+ * The frame hangs outside the canvas, so a framed painting stands that much
+ * bigger.
  */
 data class GalleryWallFrame(
     val width: Float = 0.06f,
-    val color: Color = Color(0xFFC29B47),
+    /** The wood, before the grain and the light; walnut by default. */
+    val color: Color = Color(0xFF7B4F2C),
     /** How far the face stands off the wall; 0 hangs it flat. */
     val depth: Float = 0.02f,
     /** How far the shadow falls; 0 for none. */
     val shadow: Float = 0.03f,
+    /** How strongly the grain shows; 0 for a smooth painted or gilt finish. */
+    val grain: Float = 1f,
 )
 
 /*
@@ -807,7 +816,7 @@ private class WallArt(
         val px = pxPerUnit.roundToInt().coerceAtLeast(8)
         if (px == builtFor) return
         builtFor = px
-        cards = items.map { build(it, px.toFloat()) }
+        cards = items.mapIndexed { n, item -> build(item, px.toFloat(), n) }
     }
 
     /**
@@ -821,10 +830,11 @@ private class WallArt(
         if (cached != null && index == closeIndex && px == closeFor) return cached
         closeIndex = index
         closeFor = px
-        return build(item, px.toFloat()).also { closeCard = it }
+        return build(item, px.toFloat(), index).also { closeCard = it }
     }
 
-    private fun build(item: GalleryWallItem, unit: Float): CardArt {
+    /** [seed] picks the painting's wood, the same at every size. */
+    private fun build(item: GalleryWallItem, unit: Float, seed: Int): CardArt {
         val density = Density(1f)
         val title = TextStyle(
             color = ink,
@@ -874,13 +884,13 @@ private class WallArt(
         if (frame == null) return CardArt(paint(bw, bh) { canvas(); label() }, pxPerUnit, top)
         val face = paint(outerW, outerH) {
             canvas()
-            drawFrame(frame, outerW.toFloat(), outerH.toFloat(), border.toFloat(), unit)
+            drawFrame(frame, outerW.toFloat(), outerH.toFloat(), border.toFloat(), unit, seed)
         }
         val wall = paint(bw, bh) {
             drawShadow(outerW.toFloat(), outerH.toFloat(), shadow.toFloat())
             label()
         }
-        val edges = if (depth > 0) paint(2 * depth, outerH) { drawFrameSides(frame, depth.toFloat(), outerH.toFloat()) } else null
+        val edges = if (depth > 0) paint(2 * depth, outerH) { drawFrameSides(frame, depth.toFloat(), outerH.toFloat(), unit, seed) } else null
         return CardArt(face, pxPerUnit, top, wall, edges, if (edges != null) depth / pxPerUnit else 0f)
     }
 }
@@ -888,40 +898,119 @@ private class WallArt(
 // --- the frame ---------------------------------------------------------------
 
 /*
- * The moulding's profile, outer edge to inner, as a share of the base gold:
- * a dark outer lip, a broad lit round, a shadowed cove and a bright bead by
- * the canvas.
+ * The moulding's profile, outer edge to inner, as light over the wood: a
+ * rounded outer edge falling away, a satin crown catching the light, a flat
+ * face, a stepped groove, and a small bevel down to the canvas.
  */
 private val PROFILE = listOf(
-    0.00f to -0.55f,
-    0.07f to -0.20f,
-    0.24f to 0.45f,
-    0.42f to 0.05f,
-    0.62f to -0.40f,
-    0.80f to -0.05f,
-    0.89f to 0.40f,
+    0.00f to -0.50f,
+    0.05f to -0.20f,
+    0.14f to 0.22f,
+    0.22f to 0.12f,
+    0.45f to 0.00f,
+    0.68f to -0.06f,
+    0.72f to -0.42f,
+    0.75f to -0.10f,
+    0.79f to 0.16f,
+    0.94f to -0.08f,
     1.00f to -0.45f,
 )
 
-/** The moulding's outside, from the wall out to the face: dark where it meets the wall, a bright arris at the front. */
+/** The moulding's outside, from the wall out to the face: dark where it meets the wall, a lit arris at the front. */
 private val SIDE_PROFILE = listOf(
-    0.00f to -0.60f,
-    0.65f to -0.20f,
-    0.88f to 0.30f,
-    1.00f to -0.35f,
+    0.00f to -0.55f,
+    0.65f to -0.15f,
+    0.88f to 0.25f,
+    1.00f to -0.30f,
 )
 
 /** Black over each side of the moulding — top, right, bottom, left — for a light from the upper left. */
 private val SIDE_SHADE = floatArrayOf(0f, 0.22f, 0.32f, 0.08f)
 
+/** The warm light a satin finish throws back, and the two colours of the grain. */
+private val SHEEN = Color(0xFFFFE6C4)
+private val LATEWOOD = Color(0xFF241207)
+private val EARLYWOOD = Color(0xFFF0CFA0)
+
+/** Grain lines across a stick's face, and across its narrow outside. */
+private const val FACE_GRAIN = 30
+private const val SIDE_GRAIN = 12
+private const val FIGURE_BANDS = 5
+private const val PORES = 160
+
+private const val TAU = 2f * PI.toFloat()
+
 private fun shade(color: Color, by: Float): Color =
     if (by >= 0f) lerp(color, Color.White, by) else lerp(color, Color.Black, -by)
 
+private fun light(by: Float): Color =
+    if (by >= 0f) SHEEN.copy(alpha = by) else Color.Black.copy(alpha = -by)
+
+private fun Random.between(from: Float, to: Float): Float = from + nextFloat() * (to - from)
+
+/**
+ * One stick of wood, [length] along by [across] wide, with x running along it
+ * and y across. Every size is a share of [across] or a multiple of [unit], and
+ * [random] is drawn on the same number of times at any size, so the painting
+ * walked up to wears the same piece of wood it had from across the room.
+ */
+private fun DrawScope.drawWood(base: Color, grain: Float, length: Float, across: Float, unit: Float, lines: Int, random: Random) {
+    drawRect(shade(base, random.between(-0.06f, 0.06f)), size = Size(length, across))
+    if (grain <= 0f) return
+    val step = max(2f, 0.01f * unit)
+    val points = ceil(length / step).toInt() + 1
+    val hairline = max(0.5f, 0.0012f * unit)
+    // One flow the whole stick follows, each line wandering a little off it.
+    val flowAmp = across * random.between(0.05f, 0.18f)
+    val flowWave = unit * random.between(0.5f, 1.4f)
+    val flowPhase = random.nextFloat() * TAU
+    fun flow(x: Float) = flowAmp * sin(x / flowWave * TAU + flowPhase)
+    fun tint(color: Color, alpha: Float) = color.copy(alpha = (alpha * grain).coerceIn(0f, 1f))
+    fun line(color: Color, width: Float, y0: Float, amp: Float) {
+        val wave = unit * random.between(0.15f, 0.8f)
+        val phase = random.nextFloat() * TAU
+        val path = Path()
+        for (i in 0 until points) {
+            val x = min(i * step, length)
+            val y = y0 + flow(x) + amp * sin(x / wave * TAU + phase)
+            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        }
+        drawPath(path, color, style = Stroke(width))
+    }
+
+    // The figure: broad soft bands of darker and paler wood.
+    repeat(FIGURE_BANDS) {
+        val dark = random.nextBoolean()
+        val color = if (dark) tint(LATEWOOD, random.between(0.06f, 0.14f)) else tint(EARLYWOOD, random.between(0.05f, 0.10f))
+        line(color, across * random.between(0.12f, 0.35f), random.nextFloat() * across, across * random.between(0.05f, 0.2f))
+    }
+    // The grain itself: fine lines, mostly dark latewood, a few pale.
+    repeat(lines) {
+        val dark = random.nextFloat() < 0.8f
+        val color = if (dark) tint(LATEWOOD, random.between(0.12f, 0.40f)) else tint(EARLYWOOD, random.between(0.08f, 0.20f))
+        val width = max(0.5f, unit * random.between(0.0008f, 0.0024f))
+        line(color, width, across * random.between(-0.1f, 1.1f), across * random.between(0.01f, 0.06f))
+    }
+    // Open pores, short dashes along the grain.
+    repeat(PORES) {
+        val x = random.nextFloat() * length
+        val y = random.nextFloat() * across + flow(x)
+        val dash = unit * random.between(0.004f, 0.015f)
+        drawLine(tint(LATEWOOD, random.between(0.15f, 0.35f)), Offset(x, y), Offset(x + dash, y), hairline)
+    }
+}
+
 /** The frame's left and right outsides, side by side, each [d] across and [h] tall. */
-private fun DrawScope.drawFrameSides(frame: GalleryWallFrame, d: Float, h: Float) {
-    val stops = SIDE_PROFILE.map { (at, by) -> at to shade(frame.color, by) }.toTypedArray()
+private fun DrawScope.drawFrameSides(frame: GalleryWallFrame, d: Float, h: Float, unit: Float, seed: Int) {
+    val stops = SIDE_PROFILE.map { (at, by) -> at to light(by) }.toTypedArray()
     for (side in 0..1) {
         val x = side * d
+        // The grain runs up the stick, so draw it lying down and stand it up.
+        clipRect(x, 0f, x + d, h) {
+            withTransform({ translate(x + d, 0f); rotate(90f, Offset.Zero) }) {
+                drawWood(frame.color, frame.grain, h, d, unit, SIDE_GRAIN, Random(seed * 8 + 4 + side))
+            }
+        }
         drawRect(Brush.horizontalGradient(*stops, startX = x, endX = x + d), topLeft = Offset(x, 0f), size = Size(d, h))
     }
     // The left one turns towards the light, the right one away; both darken downwards.
@@ -944,11 +1033,14 @@ private fun DrawScope.drawShadow(w: Float, h: Float, reach: Float) {
     }
 }
 
-/** The frame on a [w] by [h] bitmap, [border] deep all round, at [unit] pixels to a card height. */
-private fun DrawScope.drawFrame(frame: GalleryWallFrame, w: Float, h: Float, border: Float, unit: Float) {
+/**
+ * The frame on a [w] by [h] bitmap, [border] deep all round, at [unit] pixels
+ * to a card height: four sticks mitred at the corners, each its own cut of
+ * wood with the grain running along it, so the grain turns at every joint.
+ */
+private fun DrawScope.drawFrame(frame: GalleryWallFrame, w: Float, h: Float, border: Float, unit: Float, seed: Int) {
     val mould = min(frame.width * unit, border)
-    val stops = PROFILE.map { (at, by) -> at to shade(frame.color, by) }.toTypedArray()
-    // Each side a mitred trapezoid, lit across its width from outer edge to inner.
+    val stops = PROFILE.map { (at, by) -> at to light(by) }.toTypedArray()
     for (side in 0..3) {
         val path = Path()
         val (outerA, outerB, innerB, innerA) = when (side) {
@@ -962,21 +1054,31 @@ private fun DrawScope.drawFrame(frame: GalleryWallFrame, w: Float, h: Float, bor
         path.lineTo(innerB.x, innerB.y)
         path.lineTo(innerA.x, innerA.y)
         path.close()
-        val start = when (side) {
-            0 -> Offset(0f, 0f)
-            1 -> Offset(w, 0f)
-            2 -> Offset(0f, h)
-            else -> Offset(0f, 0f)
+        val length = if (side % 2 == 0) w else h
+        clipPath(path) {
+            // Into the stick's own frame: x along it clockwise, y in from the outer edge.
+            withTransform({
+                when (side) {
+                    1 -> { translate(w, 0f); rotate(90f, Offset.Zero) }
+                    2 -> { translate(w, h); rotate(180f, Offset.Zero) }
+                    3 -> { translate(0f, h); rotate(270f, Offset.Zero) }
+                }
+            }) {
+                drawWood(frame.color, frame.grain, length, mould, unit, FACE_GRAIN, Random(seed * 8 + side))
+                drawRect(Brush.verticalGradient(*stops, startY = 0f, endY = mould), size = Size(length, mould))
+            }
         }
-        val end = when (side) {
-            0 -> Offset(0f, mould)
-            1 -> Offset(w - mould, 0f)
-            2 -> Offset(0f, h - mould)
-            else -> Offset(mould, 0f)
-        }
-        drawPath(path, Brush.linearGradient(*stops, start = start, end = end))
         if (SIDE_SHADE[side] > 0f) drawPath(path, Color.Black.copy(alpha = SIDE_SHADE[side]))
     }
+
+    // The mitre joints, and the sight edge where the wood meets the canvas.
+    val seam = max(0.6f, 0.0016f * unit)
+    val joint = Color.Black.copy(alpha = 0.45f)
+    drawLine(joint, Offset(0f, 0f), Offset(mould, mould), seam)
+    drawLine(joint, Offset(w, 0f), Offset(w - mould, mould), seam)
+    drawLine(joint, Offset(w, h), Offset(w - mould, h - mould), seam)
+    drawLine(joint, Offset(0f, h), Offset(mould, h - mould), seam)
+    drawRect(joint, topLeft = Offset(mould, mould), size = Size(w - 2f * mould, h - 2f * mould), style = Stroke(seam))
 
     // The inner lip throws a little shadow onto the canvas itself.
     val lip = max(1f, 0.012f * unit)
