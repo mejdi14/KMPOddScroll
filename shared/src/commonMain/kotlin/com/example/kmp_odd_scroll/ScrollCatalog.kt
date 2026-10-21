@@ -7,6 +7,7 @@ import com.example.kmp_odd_scroll.demos.FlexCarouselDemoScreen
 import com.example.kmp_odd_scroll.demos.InfiniteMenuDemoScreen
 import com.example.kmp_odd_scroll.demos.InfiniteSpiralDemoScreen
 import com.example.kmp_odd_scroll.demos.LiftStackDemoScreen
+import com.example.kmp_odd_scroll.demos.TapeRackDemoScreen
 
 /**
  * One entry per scroll style. Drives both the home gallery and the navigation
@@ -65,5 +66,12 @@ val scrollDemos: List<ScrollDemo> = listOf(
         title = "Lift Stack",
         subtitle = "A deck of pictures that runs up through itself and stands up the one it stops past",
         screen = { LiftStackDemoScreen() },
+    ),
+    ScrollDemo(
+        route = "tape_rack",
+        category = "Oblique",
+        title = "Tape Rack",
+        subtitle = "A row of cassettes on edge that slides along itself and raises the one in the slot",
+        screen = { TapeRackDemoScreen() },
     ),
 )

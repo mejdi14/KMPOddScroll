@@ -9,6 +9,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -33,6 +35,7 @@ fun ScrollArtwork(route: String, modifier: Modifier = Modifier) {
             "infinite_menu" -> infiniteMenu()
             "card_sphere" -> cardSphere()
             "lift_stack" -> liftStack()
+            "tape_rack" -> tapeRack()
             else -> infiniteSpiral()
         }
     }
@@ -220,4 +223,43 @@ private fun DrawScope.liftStack() {
         close()
     }
     drawPath(path, Color(0xFFF4F1E8))
+}
+
+/**
+ * The rack in miniature: a row of tape faces stepping up to the right, each
+ * covering the one behind, and the one in the middle standing proud of it.
+ */
+private fun DrawScope.tapeRack() {
+    val tape = size.minDimension * 0.42f
+    val faceH = tape * 0.719f
+    val slope = tape * 0.177f
+    val stepX = tape * 0.322f * 0.889f
+    val stepY = -tape * 0.322f * 0.458f
+    val originX = size.width / 2f - tape / 2f
+    val originY = size.height / 2f - faceH / 2f + tape * 0.17f
+
+    for (i in 4 downTo -4) {
+        val proud = (1f - abs(i).coerceAtMost(1)) * tape * 0.342f
+        val x = originX + i * stepX
+        val y = originY + i * stepY - proud
+        val path = Path().apply {
+            moveTo(x, y)
+            lineTo(x + tape * 0.984f, y + slope)
+            lineTo(x + tape * 0.984f, y + slope + faceH)
+            lineTo(x, y + faceH)
+            close()
+        }
+        drawPath(path, Color(0xFF1C1C20))
+        val lit = if (i == 0) 0.95f else 0.3f + (4 - abs(i)) * 0.08f
+        drawPath(path, Color(0xFFBFBFB6).copy(alpha = lit), style = Stroke(1.5f))
+        // The label, a lighter band across the upper face.
+        val label = Path().apply {
+            moveTo(x + tape * 0.07f, y + slope * 0.07f + faceH * 0.08f)
+            lineTo(x + tape * 0.91f, y + slope * 0.91f + faceH * 0.08f)
+            lineTo(x + tape * 0.91f, y + slope * 0.91f + faceH * 0.74f)
+            lineTo(x + tape * 0.07f, y + slope * 0.07f + faceH * 0.74f)
+            close()
+        }
+        drawPath(label, Color(0xFFBFBFB6).copy(alpha = lit * 0.45f))
+    }
 }

@@ -265,6 +265,53 @@ Every card is one `drawImage` through its own exact projection — Compose's
 `Matrix` carries the perspective terms on every target — so it needs no shader
 and no strips anywhere.
 
+### Tape Rack
+
+A row of cassettes standing on edge, seen from above and to the left, running
+up and to the right across the frame. It slides along its own length, and the
+tape that comes to the slot in the middle rises out of the row, with its title
+let in top left. Drag along the row (or across it — only the part along it
+counts), flick to throw it, scroll to step it a tape, or tap any tape to bring
+it to the slot.
+
+Measured off a recording of the reference rather than eyeballed. The top-left
+corner of every tape, pooled over 270 frames, falls on one line with one pitch
+and one number per frame to 1.1 px, so the rack is a single scalar:
+
+- the row runs at 27.3°, a tape every 0.322 tape widths, with no perspective
+  to speak of (0.05% a tape), so every tape is the same shape on screen;
+- the slotted tape stands 0.342 widths proud, straight up, as a fixed function
+  of its distance from the slot — flat within 0.08 tapes, gone by 1.0, a
+  smoothstep between (1.9 px residual on a 50 px lift; a timed per-tape lift
+  fits no better than 7 px);
+- nothing turns (top edges agree to 0.6°), grows or fades; each tape sits a
+  fixed 0.018 widths off the line, the same every time it comes round, and a
+  light over the slot lifts its shell 18%;
+- a throw leaves at the finger's speed on `cubic-bezier(0.283, 0.501, 0.698,
+  0.955)`, a run from rest is `cubic-bezier(0.280, 0.027, 0.248, 0.935)` for
+  0.664 s × √tapes — each within 0.6 px of the reference's own runs.
+
+```kotlin
+TapeRackScroll(
+    items = listOf(TapeRackItem(image, "Funky Drummer", "James Brown"), /* ... */),
+    modifier = Modifier.fillMaxSize(),
+)
+```
+
+| Parameter | Default | |
+| --- | --- | --- |
+| `items` | — | tapes in order; the rack repeats, so it has no end |
+| `background` | `#050506` | page colour |
+| `shellColor` | `#1B1B1E` | the tapes' plastic |
+| `contentColor` | `#EDEDE8` | caption text |
+| `captions` | `true` | title and artist of the tape in the slot |
+| `state` | intro of `4` | `rememberTapeRackScrollState(intro)` — tapes slid on first show; `0` opens at rest |
+
+`TapeRackScrollState.scrollTo(index)` and `step(by)` drive it from a host's own
+controls, and `slotted` is the tape in the slot. Each tape is drawn once, as the
+camera sees it, into a bitmap that is then only moved — one `drawImage` a tape
+a frame and one gradient for the light, so it needs no shader anywhere.
+
 ## Image credits
 
 ### Photographs
@@ -288,7 +335,7 @@ cards of the Edge Distortion gallery.
 
 Flex Carousel uses museum scans of paintings, also from Unsplash and under the
 same licence, cut 800x600 for its 4:3 cards. Lift Stack uses the same six, cut
-square.
+square. Tape Rack prints both the scans and the wide photographs on its labels.
 
 | File | Scanned by |
 | --- | --- |
