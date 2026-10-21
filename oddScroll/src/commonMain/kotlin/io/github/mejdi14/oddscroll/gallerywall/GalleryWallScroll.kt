@@ -775,6 +775,12 @@ private const val LIQUID_BEVEL = 0.05f
 /** At most this much of the moulding's width, so the bevel stays under it. */
 private const val LIQUID_UNDER = 0.85f
 
+/**
+ * The bevel once out of the frame, in card heights. Nothing hides it then, so
+ * it widens as the frame fades, in over the painting's edge, and bends more.
+ */
+private const val LIQUID_WIDE = 0.14f
+
 /** The lit rim along the liquid glass's edge, in card heights, and at least this many pixels. */
 private const val LIQUID_RIM = 0.0025f
 private const val LIQUID_RIM_MIN = 1.5f
@@ -832,12 +838,13 @@ private class Glaze {
         width = card.face.width.toFloat()
         height = card.face.height.toFloat()
         unit = px
-        val bevel = min(LIQUID_BEVEL * px, opening * LIQUID_UNDER)
+        val hidden = min(LIQUID_BEVEL * px, opening * LIQUID_UNDER)
+        val bevel = hidden + max(LIQUID_WIDE * px - hidden, 0f) * edges
         cx = width / 2f + slideX * px
         cy = height / 2f + slideY * px
-        hw = width / 2f - opening + bevel
-        hh = height / 2f - opening + bevel
-        radius = max(bevel / 1.4f, 1f)
+        hw = width / 2f - opening + hidden
+        hh = height / 2f - opening + hidden
+        radius = max(min(bevel / 1.4f, min(hw, hh)), 1f)
         this.edges = edges
         rim = max(LIQUID_RIM * px, LIQUID_RIM_MIN)
         glow = 0f
