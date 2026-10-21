@@ -10,9 +10,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.lerp
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.pow
 import kotlin.math.sin
 
 /**
@@ -38,6 +40,7 @@ fun ScrollArtwork(route: String, modifier: Modifier = Modifier) {
             "lift_stack" -> liftStack()
             "tape_rack" -> tapeRack()
             "gallery_wall" -> galleryWall()
+            "terrace" -> terrace()
             else -> infiniteSpiral()
         }
     }
@@ -315,5 +318,31 @@ private fun DrawScope.galleryWall() {
         drawPath(path, Color(0xFFBFBFB6).copy(alpha = 0.25f + near * 0.5f))
         s += w + 0.564f
         i++
+    }
+}
+
+/**
+ * The stack in miniature, by the same rule as the real one: each level back a
+ * fifth smaller and a fifth of a width further out, so only its edge shows
+ * past the one in front.
+ */
+private fun DrawScope.terrace() {
+    val card = size.minDimension * 0.34f
+    val cx = size.width / 2f
+    val cy = size.height / 2f
+    for (level in 3 downTo 0) {
+        val scale = 0.801f.pow(level)
+        val w = card * scale
+        val h = w * 1.384f
+        val lit = 1f - level / 4f
+        for (side in if (level == 0) listOf(0) else listOf(-1, 1)) {
+            val y = cy + side * level * 0.207f * card
+            drawRect(
+                // Opaque, so a band does not show through the one in front.
+                color = lerp(Color(0xFF14151A), Color(0xFFBFBFB6), 0.2f + lit * 0.6f),
+                topLeft = Offset(cx - w / 2f, y - h / 2f),
+                size = Size(w, h),
+            )
+        }
     }
 }

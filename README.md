@@ -364,6 +364,58 @@ once, label and all, into a bitmap and then through its own exact projection —
 one `drawImage` for each flat stretch of wall it is on and a dozen chords to a
 corner — so it needs no shader.
 
+### Terrace
+
+A deck stacked in depth both ways from the card at the front: the cards before
+it step back above, the ones after it below, each smaller than the one in
+front, so all that shows of them is a band along the edge — a terrace either
+side of the front card, with its index to the left and its title to the right.
+Run it on and the front card shrinks back into the bands above while the first
+band below grows out to take its place; the two pass in front of each other
+halfway. Drag up or down, flick to throw it, scroll a card a notch, or tap a
+band to bring that card to the front.
+
+Measured off a recording of the reference rather than eyeballed. The width of
+every card and the outer edge of every band, pooled over 175 frames, collapse
+onto one number per frame and five constants to 0.20 px (max 0.99 px over
+2,409 edges), so the stack is a single scalar. In card widths, a card `d`
+levels from the front:
+
+- is scaled by 0.801^|d| (± 0.0005) and centred 0.207·d below the middle; the
+  card is 1.384 tall. Interpolating between fixed slots instead fits only to
+  0.51 px with six more numbers, and its slots come out at 0.8, 0.8² and 0.8³;
+- holds its x-centre to 0.06 px, turns by no more than 0.18°, keeps its size to
+  0.13% at the front, and has square corners (any radius is under 0.01);
+- is never dimmed — a band reads darker one level back only because the card in
+  front throws a shadow onto it: a gaussian 0.070 soft, dropped 0.065 and 20%
+  dark, to 2/255 of the page;
+- settles on a first-order approach to the nearest card, 5.47 a second (5.03
+  to 5.97 over five settles, 0.3 px each). It is not a spring: a free spring
+  fit comes back critically damped with no swing, and one from rest would have
+  to start eight frames before anything moves.
+
+```kotlin
+TerraceScroll(
+    items = listOf(TerraceItem(image, "Sounds", "Marlborough Sounds"), /* ... */),
+    modifier = Modifier.fillMaxSize(),
+)
+```
+
+| Parameter | Default | |
+| --- | --- | --- |
+| `items` | — | cards in order; the stack repeats, so it has no end |
+| `background` | `#FFFFFF` | page colour |
+| `contentColor` | `#141414` | captions; the index and subtitle are set in it at reduced strength |
+| `shadowColor` | `#000000` | the shadow each card throws onto those behind it |
+| `captions` | `true` | index to the left of the front card, title and subtitle to its right |
+| `depth` | `3` | levels shown either side of the front card |
+| `state` | — | `rememberTerraceScrollState()` |
+
+`TerraceScrollState.scrollTo(index)` and `step(by)` drive it from a host's own
+controls, and `front` is the card at the front. A card and one shared, baked
+shadow are each a single `drawImage` placed by a transform, so the stack is
+fourteen draws a frame and needs no shader.
+
 ## Image credits
 
 ### Photographs
@@ -383,7 +435,7 @@ Compose resources.
 | `wide_towers.jpg` | [Heye Jensen](https://unsplash.com/photos/1790313157313-cbc2c66a61ab) |
 
 The `grid_*.jpg` set is the same six photographs, cut 800x1000 for the portrait
-cards of the Edge Distortion gallery.
+cards of the Edge Distortion gallery; Terrace stacks the same cuts.
 
 Flex Carousel uses museum scans of paintings, also from Unsplash and under the
 same licence, cut 800x600 for its 4:3 cards. Lift Stack uses the same six, cut

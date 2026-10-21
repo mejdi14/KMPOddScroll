@@ -9,6 +9,7 @@ import com.example.kmp_odd_scroll.demos.InfiniteMenuDemoScreen
 import com.example.kmp_odd_scroll.demos.InfiniteSpiralDemoScreen
 import com.example.kmp_odd_scroll.demos.LiftStackDemoScreen
 import com.example.kmp_odd_scroll.demos.TapeRackDemoScreen
+import com.example.kmp_odd_scroll.demos.TerraceDemoScreen
 
 /**
  * One entry per scroll style. Drives both the home gallery and the navigation
@@ -81,5 +82,12 @@ val scrollDemos: List<ScrollDemo> = listOf(
         title = "Gallery Wall",
         subtitle = "Paintings hung round the inside of a room, sliding along its walls past you",
         screen = { GalleryWallDemoScreen() },
+    ),
+    ScrollDemo(
+        route = "terrace",
+        category = "Stepped",
+        title = "Terrace",
+        subtitle = "A deck stacked back both ways from the front card, its neighbours stepping out as narrowing bands",
+        screen = { TerraceDemoScreen() },
     ),
 )
