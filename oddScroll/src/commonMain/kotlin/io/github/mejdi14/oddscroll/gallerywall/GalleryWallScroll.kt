@@ -705,6 +705,10 @@ private class Glaze {
     var opening = 0f
     var width = 0f
 
+    /** Pixels to a card height, and which painting, for its own marks on the glass. */
+    var unit = 1f
+    var seed = 0
+
     /** The doorway's glow: its middle, half-sizes and strength — 0 when it is not on this pane. */
     var gx = 0f
     var gy = 0f
@@ -722,6 +726,8 @@ private class Glaze {
         this.wall = wall
         opening = card.opening.toFloat()
         width = card.face.width.toFloat()
+        unit = px
+        seed = card.seed
         glow = 0f
         if (room.glare <= 0f) return this
         val mid = left + card.face.width / px / 2f
@@ -748,6 +754,9 @@ private class Glaze {
 }
 
 private val pane = Glaze()
+
+/** The platform's own glass, where it has one. */
+private val shadedGlass: GlassShader? by lazy { glassShader() }
 
 /** How much of the room glass throws back, met at the wall normal [nx], [nz] by a ray along [x], [z]. */
 private fun reflectance(nx: Float, nz: Float, x: Float, z: Float): Float {
@@ -784,6 +793,32 @@ private fun DrawScope.drawGlass(
     val near = reflectance(n0[0], n0[1], x0, z0)
     val far = reflectance(n1[0], n1[1], x1, z1)
     val middle = reflectance(n0[0] + n1[0], n0[1] + n1[1], (x0 + x1) / 2f, (z0 + z1) / 2f)
+
+    val shader = shadedGlass
+    if (shader != null) {
+        val u = glaze.unit
+        val brush = shader.brush(
+            originX = glaze.opening - start,
+            originY = glaze.opening,
+            paneWidth = (glaze.width - 2f * glaze.opening) / u,
+            paneHeight = (h - 2f * glaze.opening) / u,
+            unit = u,
+            span = w.toFloat(),
+            near = near,
+            middle = middle,
+            far = far,
+            wall = glaze.wall,
+            doorX = (glaze.gx - glaze.opening) / u,
+            doorY = (glaze.gy - glaze.opening) / u,
+            doorWidth = glaze.rx / u,
+            doorHeight = glaze.ry / u,
+            glow = glaze.glow,
+            seed = glaze.seed,
+        )
+        drawRect(brush, topLeft = Offset(l, t), size = Size(r - l, b - t))
+        return
+    }
+
     drawRect(
         Brush.horizontalGradient(
             0f to glaze.wall.copy(alpha = near),
@@ -1006,6 +1041,8 @@ private class CardArt(
     val glass: Boolean = false,
     /** The face's opening, in from each side, in its pixels. */
     val opening: Int = 0,
+    /** Which painting, for what is particular to it. */
+    val seed: Int = 0,
 ) {
     /** How far along the wall it runs, label and shadow included. */
     val wallWidth: Float get() = max(face.width, wall?.width ?: 0) / pxPerUnit
@@ -1122,6 +1159,7 @@ private class WallArt(
             recess = recess / pxPerUnit,
             glass = frame.glass,
             opening = border,
+            seed = seed,
         )
     }
 }
