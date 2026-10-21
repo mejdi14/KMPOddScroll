@@ -103,6 +103,12 @@ House techniques for the common part:
   animation is supposed to land is a dropped frame. Compose them when the
   gesture starts and hold the clock with `snapshotFlow(gate).first { it }`.
 
+## Testing
+
+Don't run tests, and don't try the app on a simulator, emulator or any device.
+Compiling to check a change builds is fine; looking at it running is the
+owner's job.
+
 ## Notes
 
 - Build with the Android Studio JDK:
