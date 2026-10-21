@@ -23,17 +23,23 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Canvas as BitmapCanvas
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Matrix
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextMeasurer
@@ -76,6 +82,25 @@ data class GalleryWallItem(
      */
     val scale: Float = 1f,
 )
+
+/**
+ * A gilt frame round every painting: a moulding lit from the upper left, a
+ * linen liner inside it with a gold slip at the canvas, and a soft shadow
+ * thrown down and to the right onto the wall. Sizes are in heights of the
+ * tallest painting; the frame hangs outside the canvas, so a framed painting
+ * stands that much bigger on the wall.
+ */
+data class GalleryWallFrame(
+    val width: Float = 0.07f,
+    val color: Color = Color(0xFFC29B47),
+    val linerWidth: Float = 0.028f,
+    /** [Color.Transparent] for none, which leaves the moulding against the canvas. */
+    val liner: Color = Color(0xFFEDE5D3),
+    /** How far the shadow falls; 0 for none. */
+    val shadow: Float = 0.022f,
+) {
+    internal val border: Float get() = width + if (liner.alpha > 0f) linerWidth else 0f
+}
 
 /*
  * The room, in heights of the tallest painting, as measured off the reference.
@@ -202,6 +227,7 @@ fun rememberGalleryWallScrollState(walkIn: Boolean = true): GalleryWallScrollSta
  * @param items paintings, in order; the hang repeats, so it has no end.
  * @param background the wall.
  * @param contentColor the labels.
+ * @param frame the frame round each painting, or null to hang them bare.
  * @param inspectLabel the button that walks up to a painting, or null for
  * none — a host can show its own off [GalleryWallScrollState.canInspect].
  * @param state also lets a host's own controls move it.
@@ -212,6 +238,7 @@ fun GalleryWallScroll(
     modifier: Modifier = Modifier,
     background: Color = Color(0xFFFFFFFF),
     contentColor: Color = Color(0xFF1A1A1A),
+    frame: GalleryWallFrame? = null,
     inspectLabel: String? = "Inspect",
     state: GalleryWallScrollState = rememberGalleryWallScrollState(),
 ) {
@@ -221,8 +248,8 @@ fun GalleryWallScroll(
     }
 
     val measurer = rememberTextMeasurer()
-    val hang = remember(items) { Hang(items) }
-    val art = remember(items, contentColor, measurer) { WallArt(items, contentColor, measurer) }
+    val hang = remember(items, frame) { Hang(items, frame) }
+    val art = remember(items, contentColor, frame, measurer) { WallArt(items, contentColor, frame, measurer) }
     val room = remember { Room() }
     SideEffect { state.hang = hang }
 
@@ -347,13 +374,14 @@ private fun InspectButton(
 
 // --- the hang ----------------------------------------------------------------
 
-/** Where each painting hangs along the wall, in card heights, with the hang at rest. */
-internal class Hang(items: List<GalleryWallItem>) {
+/** Where each painting hangs along the wall, in card heights, with the hang at rest; frames included. */
+internal class Hang(items: List<GalleryWallItem>, frame: GalleryWallFrame? = null) {
     val count = items.size
-    val heights = FloatArray(count) { i -> items[i].scale }
+    private val border = 2f * (frame?.border ?: 0f)
+    val heights = FloatArray(count) { i -> items[i].scale + border }
     val widths = FloatArray(count) { i ->
         val image = items[i].image
-        items[i].scale * image.width / max(image.height, 1).toFloat()
+        items[i].scale * image.width / max(image.height, 1).toFloat() + border
     }
 
     /** Left edge of each painting; the first is centred. */
@@ -691,6 +719,7 @@ private class CardArt(
 private class WallArt(
     private val items: List<GalleryWallItem>,
     private val ink: Color,
+    private val frame: GalleryWallFrame?,
     private val measurer: TextMeasurer,
 ) {
     var cards: List<CardArt> = emptyList()
@@ -735,14 +764,18 @@ private class WallArt(
         val rest = title.copy(color = ink.copy(alpha = ink.alpha * LABEL_GREY), fontStyle = FontStyle.Normal)
         val paintH = (item.scale * unit).roundToInt().coerceAtLeast(1)
         val paintW = (paintH * item.image.width / max(item.image.height, 1).toFloat()).roundToInt().coerceAtLeast(1)
+        val border = frame?.let { (it.border * unit).roundToInt() } ?: 0
+        val shadow = frame?.let { (it.shadow * unit).roundToInt() } ?: 0
+        val outerW = paintW + 2 * border
+        val outerH = paintH + 2 * border
         val lines = listOf(item.title to title, item.artist to rest, item.date to rest, item.medium to rest)
             .filter { it.first.isNotEmpty() }
             .map { (text, style) -> measurer.measure(text, style, density = density) }
         val labelW = lines.maxOfOrNull { it.size.width } ?: 0
-        val labelTop = paintH + LABEL_GAP * unit
+        val labelTop = outerH + LABEL_GAP * unit
         val labelH = if (lines.isEmpty()) 0f else LABEL_GAP * unit + lines.size * LABEL_LINE * unit
-        val bw = max(paintW, labelW + 1)
-        val bh = ceil(paintH + labelH).toInt()
+        val bw = max(outerW + 2 * shadow, labelW + 1)
+        val bh = ceil(max(outerH + 2f * shadow, outerH + labelH)).toInt()
 
         val bitmap = ImageBitmap(bw, bh)
         CanvasDrawScope().draw(
@@ -751,20 +784,145 @@ private class WallArt(
             BitmapCanvas(bitmap),
             Size(bw.toFloat(), bh.toFloat()),
         ) {
+            if (frame != null) drawShadow(outerW.toFloat(), outerH.toFloat(), shadow.toFloat())
             drawImage(
                 image = item.image,
                 srcOffset = IntOffset.Zero,
                 srcSize = IntSize(item.image.width, item.image.height),
-                dstOffset = IntOffset.Zero,
+                dstOffset = IntOffset(border, border),
                 dstSize = IntSize(paintW, paintH),
                 filterQuality = FilterQuality.High,
             )
+            if (frame != null) drawFrame(frame, outerW.toFloat(), outerH.toFloat(), border.toFloat(), unit)
             lines.forEachIndexed { n, layout ->
                 drawText(layout, topLeft = Offset(0f, labelTop + n * LABEL_LINE * unit))
             }
         }
         // Painting widths along the wall come from its own pixels, so the
         // hang and the bitmap agree to the column.
-        return CardArt(bitmap, paintH / item.scale, top = -item.scale / 2f)
+        val pxPerUnit = paintH / item.scale
+        return CardArt(bitmap, pxPerUnit, top = -outerH / 2f / pxPerUnit)
     }
+}
+
+// --- the frame ---------------------------------------------------------------
+
+/*
+ * The moulding's profile, outer edge to inner, as a share of the base gold:
+ * a dark outer lip, a broad lit round, a shadowed cove and a bright bead by
+ * the liner.
+ */
+private val PROFILE = listOf(
+    0.00f to -0.55f,
+    0.07f to -0.20f,
+    0.24f to 0.45f,
+    0.42f to 0.05f,
+    0.62f to -0.40f,
+    0.80f to -0.05f,
+    0.89f to 0.40f,
+    1.00f to -0.45f,
+)
+
+/** Black over each side of the moulding — top, right, bottom, left — for a light from the upper left. */
+private val SIDE_SHADE = floatArrayOf(0f, 0.22f, 0.32f, 0.08f)
+
+private fun shade(color: Color, by: Float): Color =
+    if (by >= 0f) lerp(color, Color.White, by) else lerp(color, Color.Black, -by)
+
+/** A soft shadow for a [w] by [h] frame, thrown [reach] down and to the right. */
+private fun DrawScope.drawShadow(w: Float, h: Float, reach: Float) {
+    if (reach < 1f) return
+    val layers = 10
+    // Stacked, growing, translucent: darkest under the frame, fading outwards.
+    for (k in 1..layers) {
+        val spread = reach * k / layers
+        drawRect(
+            color = Color.Black.copy(alpha = 0.32f / layers),
+            topLeft = Offset(reach - spread, reach - spread),
+            size = Size(w + 2f * spread, h + 2f * spread),
+        )
+    }
+}
+
+/** The frame on a [w] by [h] bitmap, [border] deep all round, at [unit] pixels to a card height. */
+private fun DrawScope.drawFrame(frame: GalleryWallFrame, w: Float, h: Float, border: Float, unit: Float) {
+    val mould = min(frame.width * unit, border)
+    val stops = PROFILE.map { (at, by) -> at to shade(frame.color, by) }.toTypedArray()
+    // Each side a mitred trapezoid, lit across its width from outer edge to inner.
+    for (side in 0..3) {
+        val path = Path()
+        val (outerA, outerB, innerB, innerA) = when (side) {
+            0 -> listOf(Offset(0f, 0f), Offset(w, 0f), Offset(w - mould, mould), Offset(mould, mould))
+            1 -> listOf(Offset(w, 0f), Offset(w, h), Offset(w - mould, h - mould), Offset(w - mould, mould))
+            2 -> listOf(Offset(w, h), Offset(0f, h), Offset(mould, h - mould), Offset(w - mould, h - mould))
+            else -> listOf(Offset(0f, h), Offset(0f, 0f), Offset(mould, mould), Offset(mould, h - mould))
+        }
+        path.moveTo(outerA.x, outerA.y)
+        path.lineTo(outerB.x, outerB.y)
+        path.lineTo(innerB.x, innerB.y)
+        path.lineTo(innerA.x, innerA.y)
+        path.close()
+        val start = when (side) {
+            0 -> Offset(0f, 0f)
+            1 -> Offset(w, 0f)
+            2 -> Offset(0f, h)
+            else -> Offset(0f, 0f)
+        }
+        val end = when (side) {
+            0 -> Offset(0f, mould)
+            1 -> Offset(w - mould, 0f)
+            2 -> Offset(0f, h - mould)
+            else -> Offset(mould, 0f)
+        }
+        drawPath(path, Brush.linearGradient(*stops, start = start, end = end))
+        if (SIDE_SHADE[side] > 0f) drawPath(path, Color.Black.copy(alpha = SIDE_SHADE[side]))
+    }
+
+    val liner = border - mould
+    if (liner >= 1f && frame.liner.alpha > 0f) {
+        val inW = w - 2f * mould
+        val inH = h - 2f * mould
+        val canvasW = w - 2f * border
+        val canvasH = h - 2f * border
+        // The linen, as a ring, so the canvas inside it is left alone.
+        val ring = Path().apply {
+            fillType = PathFillType.EvenOdd
+            addRect(Rect(mould, mould, mould + inW, mould + inH))
+            addRect(Rect(border, border, border + canvasW, border + canvasH))
+        }
+        drawPath(ring, frame.liner)
+        // Shadowed under the moulding's top and left.
+        val fall = liner * 0.6f
+        drawRect(
+            Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.22f), Color.Transparent), mould, mould + fall),
+            topLeft = Offset(mould, mould),
+            size = Size(inW, fall),
+        )
+        drawRect(
+            Brush.horizontalGradient(listOf(Color.Black.copy(alpha = 0.14f), Color.Transparent), mould, mould + fall),
+            topLeft = Offset(mould, mould),
+            size = Size(fall, inH),
+        )
+        // The gold slip at the canvas edge.
+        val slip = max(1f, 0.004f * unit)
+        drawRect(
+            color = shade(frame.color, 0.1f),
+            topLeft = Offset(border - slip / 2f, border - slip / 2f),
+            size = Size(canvasW + slip, canvasH + slip),
+            style = Stroke(slip),
+        )
+    }
+
+    // The inner lip throws a little shadow onto the canvas itself.
+    val lip = max(1f, 0.012f * unit)
+    drawRect(
+        Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.28f), Color.Transparent), border, border + lip),
+        topLeft = Offset(border, border),
+        size = Size(w - 2f * border, lip),
+    )
+    drawRect(
+        Brush.horizontalGradient(listOf(Color.Black.copy(alpha = 0.18f), Color.Transparent), border, border + lip),
+        topLeft = Offset(border, border),
+        size = Size(lip, h - 2f * border),
+    )
 }
