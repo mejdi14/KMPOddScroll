@@ -160,6 +160,13 @@ private val WALK_EASE = CubicBezierEasing(0.45f, 0f, 0.15f, 1f)
 /** Footfalls on the way. */
 private const val STEPS = 4
 
+/**
+ * The room is first seen from this far back, in card heights, and walked into
+ * the same way, over a few more steps.
+ */
+private const val ENTER_FROM = 3.5f
+private const val ENTRY_STEPS = 5
+
 /** The head's rise each step, and its sway to either side each stride, in card heights. */
 private const val BOB = 0.03f
 private const val SWAY = 0.02f
@@ -167,9 +174,10 @@ private const val SWAY = 0.02f
 /** The head's roll with the sway, in degrees. */
 private const val ROLL = 0.35f
 
+/** [walkIn] starts the eye back in the doorway, and walks it into the room. */
 @Composable
-fun rememberGalleryWallScrollState(): GalleryWallScrollState =
-    remember { GalleryWallScrollState() }
+fun rememberGalleryWallScrollState(walkIn: Boolean = true): GalleryWallScrollState =
+    remember { GalleryWallScrollState(walkIn) }
 
 /**
  * Paintings hung round the inside of a room — a back wall facing you, side
@@ -187,8 +195,9 @@ fun rememberGalleryWallScrollState(): GalleryWallScrollState =
  *
  * Drag along it, or scroll, and the hang springs after, coming to rest with
  * a painting in the middle; tap a painting to bring it to the middle. Once
- * the hang has stood still for a second, [inspectLabel] offers to walk up to
- * the painting in the middle; a tap anywhere steps back.
+ * the hang has stood still for two seconds, [inspectLabel] offers to walk up to
+ * the painting in the middle; a tap anywhere steps back. The room opens with
+ * a walk in from the doorway, unless the state was made without one.
  *
  * @param items paintings, in order; the hang repeats, so it has no end.
  * @param background the wall.
@@ -281,7 +290,7 @@ fun GalleryWallScroll(
             room.fit(size.width, size.height)
             art.ensure(room.backPx * BITMAP_SCALE)
             val subject = state.subject
-            room.stroll(state.walk, hang, subject)
+            room.stroll(state.entry, state.walk, hang, subject)
             // The painting up close is drawn again at the size it will end at,
             // as soon as it can be walked up to, so the walk does not start
             // on a dropped frame.
@@ -433,11 +442,11 @@ private class Room {
         // Where the side walls leave the frame, with a margin past it.
         val leaves = focal * HALF_WIDTH / max(w / 2f, 1f) * 0.9f
         sideFrom = max(leaves, NEAR)
-        eyeZ = -1f
+        eyeZ = Float.NaN
     }
 
-    /** Puts the eye [walk] of the way up to painting [index]. */
-    fun stroll(walk: Float, hang: Hang, index: Int) {
+    /** Puts the eye [entry] of the way into the room and [walk] of the way up to painting [index]. */
+    fun stroll(entry: Float, walk: Float, hang: Hang, index: Int) {
         val i = hang.wrap(index)
         // Near enough that the painting fills the frame one way or the other.
         val stand = max(
@@ -445,18 +454,29 @@ private class Room {
             focal * hang.heights[i] / (FILL_HEIGHT * height),
         ).coerceAtMost(DEPTH)
         closePx = focal / stand * 1.05f
-        val z = (DEPTH - stand) * WALK_EASE.transform(walk)
-        val envelope = sin(PI.toFloat() * walk)
-        val stride = PI.toFloat() * STEPS * walk
-        eyeX = SWAY * envelope * sin(stride)
-        eyeY = -BOB * envelope * sin(stride) * sin(stride)
-        roll = ROLL * envelope * sin(stride)
+        val z = (DEPTH - stand) * WALK_EASE.transform(walk) - ENTER_FROM * (1f - WALK_EASE.transform(entry))
+        // The two walks never overlap, so their steps simply add.
+        eyeX = 0f
+        eyeY = 0f
+        roll = 0f
+        step(walk, STEPS)
+        step(entry, ENTRY_STEPS)
         if (z == eyeZ) return
         eyeZ = z
         zoom = DEPTH / (DEPTH - z)
         // The side walls leave the frame as far ahead of the eye as ever, so
         // further down the room; walked far enough, they are out of it.
         reach = FLAT + ARC + max(0f, DEPTH - CORNER - (sideFrom + z))
+    }
+
+    /** Adds the head's bob, sway and roll at [p] of a walk of [steps] footfalls. */
+    private fun step(p: Float, steps: Int) {
+        val envelope = sin(PI.toFloat() * p)
+        if (envelope <= 0f) return
+        val stride = PI.toFloat() * steps * p
+        eyeX += SWAY * envelope * sin(stride)
+        eyeY -= BOB * envelope * sin(stride) * sin(stride)
+        roll += ROLL * envelope * sin(stride)
     }
 
     /** The painting under a tap, unwrapped, or null. */

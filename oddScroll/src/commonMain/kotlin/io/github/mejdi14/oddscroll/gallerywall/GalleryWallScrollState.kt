@@ -46,7 +46,7 @@ private const val SETTLE_MS = 150f
 private const val FLICK = 0.2f
 
 /** Still this long, with a painting in the middle, before it can be walked up to. */
-private const val INSPECT_AFTER_MS = 1000f
+private const val INSPECT_AFTER_MS = 2000f
 
 /** Close enough to the middle to call it there, in card heights — under a pixel. */
 private const val CENTRED = 0.01f
@@ -54,6 +54,9 @@ private const val CENTRED = 0.01f
 /** Walking up to a painting, and back. */
 private const val WALK_IN_MS = 2000f
 private const val WALK_OUT_MS = 1400f
+
+/** Walking into the room when it is first shown. */
+private const val ENTRY_MS = 2400f
 
 /**
  * Where the hang has slid to along the wall, in card heights.
@@ -64,7 +67,7 @@ private const val WALK_OUT_MS = 1400f
  * When the input stops, where it is going is rounded to a painting, so the
  * hang always comes to rest with one in the middle.
  */
-class GalleryWallScrollState internal constructor() {
+class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
 
     /** Unbounded; the hang repeats, so it is only wrapped when drawn. */
     internal var position = 0f
@@ -82,8 +85,8 @@ class GalleryWallScrollState internal constructor() {
         private set
 
     /**
-     * The hang has stood still for a second with a painting in the middle,
-     * so [inspect] will walk up to it.
+     * The hang has stood still for two seconds with a painting in the
+     * middle, so [inspect] will walk up to it.
      */
     var canInspect by mutableStateOf(false)
         private set
@@ -111,6 +114,10 @@ class GalleryWallScrollState internal constructor() {
 
     /** The walk up to it, 0 at the hang and 1 in front of it, linear in time. */
     internal var walk = 0f
+        private set
+
+    /** The walk into the room, 0 in the doorway and 1 where the hang is seen from, linear in time. */
+    internal var entry = if (walkIn) 0f else 1f
         private set
 
     /** The painting the walk is towards, or would be: the one in the middle until it starts. */
@@ -157,7 +164,7 @@ class GalleryWallScrollState internal constructor() {
 
     /** Input is about to move the target; false while away from the hang. */
     private fun input(): Boolean {
-        if (inspecting || walk > 0f) return false
+        if (inspecting || walk > 0f || entry < 1f) return false
         if (settled) {
             anchor = target
             settled = false
@@ -182,6 +189,13 @@ class GalleryWallScrollState internal constructor() {
         if (!held && !settled && idleMs >= SETTLE_MS) settle()
 
         var moved = spring(deltaMs)
+
+        if (entry < 1f) {
+            entry = min(1f, entry + deltaMs / ENTRY_MS)
+            // The wait for the button starts once in.
+            idleMs = 0f
+            moved = true
+        }
 
         val goal = if (inspecting) 1f else 0f
         if (walk != goal) {
