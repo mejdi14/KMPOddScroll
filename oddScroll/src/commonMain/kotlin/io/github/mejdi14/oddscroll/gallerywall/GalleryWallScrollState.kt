@@ -58,6 +58,9 @@ private const val WALK_OUT_MS = 1400f
 /** Walking into the room when it is first shown. */
 private const val ENTRY_MS = 2400f
 
+/** How fast the glass goes back over the painting once stepped away from, a second. */
+private const val GLASS_HOME = 8f
+
 /**
  * Where the hang has slid to along the wall, in card heights.
  *
@@ -116,6 +119,12 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
     internal var walk = 0f
         private set
 
+    /** Where the glass over the painting walked up to has been slid, in card heights from the painting's middle. */
+    internal var glassX = 0f
+        private set
+    internal var glassY = 0f
+        private set
+
     /** The walk into the room, 0 in the doorway and 1 where the hang is seen from, linear in time. */
     internal var entry = if (walkIn) 0f else 1f
         private set
@@ -141,6 +150,20 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
     /** Steps back from the painting to the hang. */
     fun leave() {
         inspecting = false
+    }
+
+    /**
+     * Slides the glass over the painting walked up to, [dx] and [dy] in card
+     * heights, once there; it goes back over the painting when stepped away from.
+     */
+    internal fun slideGlass(dx: Float, dy: Float) {
+        val hang = hang ?: return
+        if (!inspecting || walk < 1f) return
+        val i = hang.wrap(inspected)
+        // Its middle stays over the painting.
+        glassX = (glassX + dx).coerceIn(-hang.widths[i] / 2f, hang.widths[i] / 2f)
+        glassY = (glassY + dy).coerceIn(-hang.heights[i] / 2f, hang.heights[i] / 2f)
+        tick++
     }
 
     /** [by] is in card heights, along the wall. */
@@ -200,6 +223,17 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
         val goal = if (inspecting) 1f else 0f
         if (walk != goal) {
             walk = if (inspecting) min(1f, walk + deltaMs / WALK_IN_MS) else max(0f, walk - deltaMs / WALK_OUT_MS)
+            moved = true
+        }
+
+        if (!inspecting && (glassX != 0f || glassY != 0f)) {
+            val k = exp(-GLASS_HOME * deltaMs / 1000f)
+            glassX *= k
+            glassY *= k
+            if (abs(glassX) < REST && abs(glassY) < REST) {
+                glassX = 0f
+                glassY = 0f
+            }
             moved = true
         }
 

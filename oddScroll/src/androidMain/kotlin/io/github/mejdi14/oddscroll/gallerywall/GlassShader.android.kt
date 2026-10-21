@@ -1,107 +1,94 @@
 package io.github.mejdi14.oddscroll.gallerywall
 
+import android.graphics.BitmapShader
 import android.graphics.RuntimeShader
+import android.graphics.Shader
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.ShaderBrush
+import androidx.compose.ui.graphics.asAndroidBitmap
 
 /**
- * The glass, a pixel at a time. Everything here is in card heights across the
- * pane, so it reads the same from across the room as up close.
+ * Liquid glass, a pixel at a time, in the painting's own pixels.
  *
- * - The room it throws back runs between the three amounts worked out for the
- *   piece, a touch more of it towards the top, where the ceiling is lit, and
- *   less towards the floor.
- * - The doorway is a soft-cornered opening rather than a blob, brighter at its
- *   head where the daylight comes in, with a faint bloom round it.
- * - On the glass itself: soft smudges, the arcs a cloth leaves, and dust. They
- *   only show where light catches them — in the doorway, and where the glass
- *   is turned away and throwing back most of the room — which is what makes
- *   them read as on the surface rather than in the painting.
- * - Along the sight edge the moulding shows in the glass as a darker band, and
- *   the pane's own edge as a hairline of bottle green.
+ * - Across the pane it throws back the room, running between the three amounts
+ *   worked out for the piece.
+ * - Its rounded edge is a bevel that bends what lies under it: the painting is
+ *   pulled out towards the edge, most at the very edge and with a ripple and a
+ *   swirl along it, and split a little into red, green and blue. Where the bend
+ *   reaches past the painting it finds the bare wall.
+ * - Along the edge, a lit rim facing the light from the upper left, a glow
+ *   inside it, and a little shade where the edge turns side on.
  *
- * Dust and the cloth's arcs are finer than a pixel from across the room, so
- * they fade in with the pixels a card height gets rather than sparkle.
+ * The bevel is 1.4 corner radii deep and bends by up to 0.65 of one.
  */
 private const val SOURCE = """
-uniform float2 origin;
-uniform float2 pane;
-uniform float unit;
-uniform float span;
+uniform shader image;
+uniform float2 span;
 uniform float3 fresnel;
-uniform float4 wall;
-uniform float4 door;
-uniform float glow;
-uniform float seed;
+uniform float3 wall;
+uniform float4 pane;
+uniform float radius;
+uniform float edges;
+uniform float rim;
 
-float hash(float2 p) {
-    float3 p3 = fract(float3(p.xyx + seed * float3(17.31, 9.73, 13.19)) * 0.1031);
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.x + p3.y) * p3.z);
+float sdRoundedRect(float2 p, float2 halfSize, float r) {
+    float2 q = abs(p) - (halfSize - float2(r));
+    return length(max(q, 0.0)) - r + min(max(q.x, q.y), 0.0);
 }
 
-float noise(float2 p) {
-    float2 i = floor(p);
-    float2 f = fract(p);
-    float2 u = f * f * (3.0 - 2.0 * f);
-    return mix(
-        mix(hash(i), hash(i + float2(1.0, 0.0)), u.x),
-        mix(hash(i + float2(0.0, 1.0)), hash(i + float2(1.0, 1.0)), u.x),
-        u.y
-    );
-}
-
-float fbm(float2 p) {
-    return 0.5 * noise(p) + 0.3 * noise(p * 2.03 + 5.1) + 0.2 * noise(p * 4.01 + 1.7);
+float2 gradSdRoundedRect(float2 p, float2 halfSize, float r) {
+    float2 q = abs(p) - (halfSize - float2(r));
+    if (q.x >= 0.0 || q.y >= 0.0) {
+        return sign(p) * normalize(max(q, 0.0) + 1e-5);
+    }
+    float gx = step(q.y, q.x);
+    return sign(p) * float2(gx, 1.0 - gx);
 }
 
 half4 main(float2 xy) {
-    float2 g = (xy - origin) / unit;
-    float edge = min(min(g.x, pane.x - g.x), min(g.y, pane.y - g.y));
+    float2 p = xy - pane.xy;
+    float sd = sdRoundedRect(p, pane.zw, radius);
+    float cover = clamp(0.5 - sd, 0.0, 1.0);
+    if (cover <= 0.0) return half4(0.0);
+    float d = max(-sd, 0.0);
 
-    float t = clamp(xy.x / span, 0.0, 1.0);
+    float t = clamp((xy.x - span.x) / max(span.y - span.x, 1.0), 0.0, 1.0);
     float room = t < 0.5 ? mix(fresnel.x, fresnel.y, t * 2.0) : mix(fresnel.y, fresnel.z, t * 2.0 - 1.0);
-    room *= 1.15 - 0.3 * clamp(g.y / pane.y, 0.0, 1.0);
+    float4 color = float4(wall * room, room);
+    if (edges <= 0.0) return half4(color * cover);
 
-    float lit = 0.0;
-    if (glow > 0.0) {
-        float2 d = abs(g - door.xy) - door.zw;
-        float sd = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
-        float inside = 1.0 - smoothstep(-0.03, 0.03, sd);
-        float head = clamp((g.y - (door.y - door.w)) / (2.0 * door.w), 0.0, 1.0);
-        lit = glow * (inside * mix(1.0, 0.5, head) + 0.3 * exp(-max(sd, 0.0) / 0.08));
+    float2 n = gradSdRoundedRect(p, pane.zw, min(radius * 1.5, min(pane.z, pane.w)));
+
+    float bevel = radius * 1.4;
+    if (d < bevel) {
+        float k = d / bevel;
+        float amount = radius * 0.65 * pow(1.0 - k, 1.3) * (1.0 + 0.45 * sin(k * 13.0));
+        float2 base = (-n + float2(-n.y, n.x) * 0.4 * sin(k * 9.0 + 1.2)) * amount;
+        float disp = 0.3 * (1.0 - k);
+        float4 r = float4(image.eval(xy + base * (1.0 + disp)));
+        float4 g = float4(image.eval(xy + base));
+        float4 b = float4(image.eval(xy + base * (1.0 - disp)));
+        float3 bent = float3(r.r, g.g, b.b) + wall * (1.0 - g.a);
+        float weight = pow(1.0 - k, 0.55) * edges;
+        color = float4(bent * weight, weight) + color * (1.0 - weight);
     }
 
-    float catchLight = room * 2.5 + lit * 3.0;
-    float fine = smoothstep(250.0, 700.0, unit);
-    float smudge = smoothstep(0.55, 0.85, fbm(g * 5.0)) * 0.06;
-    float2 hub = float2(hash(float2(1.0, 2.0)), hash(float2(3.0, 4.0))) * pane;
-    float swirl = pow(abs(sin(length(g - hub) * 120.0 + fbm(g * 3.0) * 6.0)), 12.0)
-        * smoothstep(0.45, 0.75, fbm(g * 2.2 + 11.0)) * 0.05 * fine;
-    float2 cell = floor(g * 160.0);
-    float2 at = float2(hash(cell + 7.1), hash(cell + 3.3)) * 0.6 + 0.2;
-    float speck = step(0.992, hash(cell))
-        * (1.0 - smoothstep(0.08, 0.08 + 160.0 / unit, length(fract(g * 160.0) - at)))
-        * 0.4 * fine;
-    float marks = (smudge + swirl + speck) * catchLight;
+    float band = radius * 0.8;
+    if (d < band) {
+        float fres = pow(1.0 - d / band, 3.0);
+        float facing = dot(n, normalize(float2(-0.55, -0.85)));
+        float lip = (1.0 - smoothstep(0.0, rim, d)) * smoothstep(0.0, 0.6, d);
+        float strength = 0.3 + 0.7 * max(facing, 0.0) + 0.45 * max(-facing, 0.0);
+        float light = clamp(lip * strength + fres * (0.22 + 0.3 * max(facing, 0.0)), 0.0, 1.0) * edges;
+        float a = clamp(light + fres * 0.26 * (1.0 - abs(facing)) * edges, 0.0, 1.0);
+        color = float4(float3(light), a) + color * (1.0 - a);
+    }
 
-    float rim = (1.0 - smoothstep(0.0, 0.014, edge)) * 0.22;
-    float green = (1.0 - smoothstep(0.0, 0.0025 + 1.0 / unit, edge)) * 0.35;
-
-    // Built up back to front, premultiplied.
-    float a = clamp(room, 0.0, 1.0);
-    float3 color = wall.rgb * a;
-    float l = clamp(lit + marks, 0.0, 1.0);
-    color = color * (1.0 - l) + float3(1.0, 0.985, 0.95) * l;
-    a += l * (1.0 - a);
-    color *= 1.0 - rim;
-    a += rim * (1.0 - a);
-    color = color * (1.0 - green) + float3(0.16, 0.26, 0.22) * green;
-    a += green * (1.0 - a);
-    return half4(color, a);
+    return half4(color * cover);
 }
 """
 
@@ -114,6 +101,9 @@ internal actual fun glassShader(): GlassShader? {
     return runCatching { AgslGlass() }.getOrNull()
 }
 
+/** Painting bitmaps as shaders the glass can read, kept while they are in use. */
+private const val IMAGES_KEPT = 16
+
 /**
  * One shader for every pane. Setting a uniform drops the shader's native
  * instance, so each draw takes its own snapshot and the pieces drawn before it
@@ -123,34 +113,40 @@ internal actual fun glassShader(): GlassShader? {
 private class AgslGlass : GlassShader {
     private val shader = RuntimeShader(SOURCE)
     private val brush = ShaderBrush(shader)
+    private val images = HashMap<ImageBitmap, BitmapShader>()
 
     override fun brush(
-        originX: Float,
-        originY: Float,
-        paneWidth: Float,
-        paneHeight: Float,
-        unit: Float,
-        span: Float,
+        image: ImageBitmap,
+        from: Float,
+        to: Float,
         near: Float,
         middle: Float,
         far: Float,
         wall: Color,
-        doorX: Float,
-        doorY: Float,
-        doorWidth: Float,
-        doorHeight: Float,
-        glow: Float,
-        seed: Int,
+        centreX: Float,
+        centreY: Float,
+        halfWidth: Float,
+        halfHeight: Float,
+        radius: Float,
+        edges: Float,
+        rim: Float,
     ): Brush {
-        shader.setFloatUniform("origin", originX, originY)
-        shader.setFloatUniform("pane", paneWidth, paneHeight)
-        shader.setFloatUniform("unit", unit)
-        shader.setFloatUniform("span", span)
+        shader.setInputShader("image", imageShader(image))
+        shader.setFloatUniform("span", from, to)
         shader.setFloatUniform("fresnel", near, middle, far)
-        shader.setFloatUniform("wall", wall.red, wall.green, wall.blue, 1f)
-        shader.setFloatUniform("door", doorX, doorY, doorWidth, doorHeight)
-        shader.setFloatUniform("glow", glow)
-        shader.setFloatUniform("seed", seed.toFloat())
+        shader.setFloatUniform("wall", wall.red, wall.green, wall.blue)
+        shader.setFloatUniform("pane", centreX, centreY, halfWidth, halfHeight)
+        shader.setFloatUniform("radius", radius)
+        shader.setFloatUniform("edges", edges)
+        shader.setFloatUniform("rim", rim)
         return brush
+    }
+
+    /** Clear past the bitmap's edges, so the bend finds nothing there rather than its last row smeared. */
+    private fun imageShader(image: ImageBitmap): BitmapShader = images.getOrPut(image) {
+        if (images.size >= IMAGES_KEPT) images.clear()
+        BitmapShader(image.asAndroidBitmap(), Shader.TileMode.DECAL, Shader.TileMode.DECAL).apply {
+            filterMode = BitmapShader.FILTER_MODE_LINEAR
+        }
     }
 }

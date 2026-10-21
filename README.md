@@ -323,7 +323,9 @@ with a painting in the middle; tap a painting to bring it to the middle. The
 room opens with a walk in from the doorway. Two seconds after it stops, an
 Inspect button walks you up to the painting in the
 middle — two seconds of a visitor's approach, steps and all — and a tap steps
-back.
+back. On Android 13 and up the painting comes out of its frame on the way,
+showing the rounded edges of the liquid glass over it, and a drag slides the
+glass about so its edges bend the painting under them.
 
 Measured off a recording of the reference rather than eyeballed. How tall a
 painting stands at each column of the screen is one fixed curve for every
@@ -359,7 +361,7 @@ GalleryWallScroll(
 | `items` | — | paintings in order; the hang repeats, so it has no end |
 | `background` | `#FFFFFF` | the wall |
 | `contentColor` | `#1A1A1A` | the labels; all but the title are set in it at 45% |
-| `frame` | `null` | `GalleryWallFrame()` hangs each painting in a walnut frame — four mitred sticks, the grain running along each — that stands 4.5cm off the wall (against a metre-tall painting): the edge shows as the wall turns away, and a soft shadow falls behind. The painting sits 1.5cm back inside it, so the inside of the moulding shows round it at an angle, behind glass that throws back more of the wall the further the wall turns away (Fresnel), with the doorway behind you as a soft glow that stays put as the paintings slide under it; `glass = false` leaves it open. On Android 13 and up the glass is an AGSL shader drawn in the pane's own coordinates: the doorway takes its shape, smudges, a cloth's arcs and dust sit on the surface and show only where light catches them, the moulding shows along the edges and the pane's edge is a hairline of green. `null` hangs them flat and bare |
+| `frame` | `null` | `GalleryWallFrame()` hangs each painting in a walnut frame — four mitred sticks, the grain running along each — that stands 4.5cm off the wall (against a metre-tall painting): the edge shows as the wall turns away, and a soft shadow falls behind. The painting sits 1.5cm back inside it, so the inside of the moulding shows round it at an angle, behind glass that throws back more of the wall the further the wall turns away (Fresnel), with the doorway behind you as a soft glow that stays put as the paintings slide under it; `glass = false` leaves it open. On Android 13 and up the glass is liquid glass, an AGSL shader drawn in the painting's own coordinates: its rounded edges run under the moulding, where they bend the painting under them — pulled out towards the edge with a ripple, split a little into red, green and blue, and lit along the rim — and show once the painting comes out of its frame up close. `null` hangs them flat and bare |
 | `inspectLabel` | `"Inspect"` | the button that walks up to a painting; `null` for none |
 | `state` | — | `rememberGalleryWallScrollState()`; `walkIn = false` skips the walk in from the doorway |
 
