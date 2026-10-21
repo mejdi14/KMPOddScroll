@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import com.example.kmp_odd_scroll.demos.CardSphereDemoScreen
 import com.example.kmp_odd_scroll.demos.EdgeDistortionDemoScreen
 import com.example.kmp_odd_scroll.demos.FlexCarouselDemoScreen
+import com.example.kmp_odd_scroll.demos.GalleryWallDemoScreen
 import com.example.kmp_odd_scroll.demos.InfiniteMenuDemoScreen
 import com.example.kmp_odd_scroll.demos.InfiniteSpiralDemoScreen
 import com.example.kmp_odd_scroll.demos.LiftStackDemoScreen
@@ -73,5 +74,12 @@ val scrollDemos: List<ScrollDemo> = listOf(
         title = "Tape Rack",
         subtitle = "A row of cassettes on edge that slides along itself and raises the one in the slot",
         screen = { TapeRackDemoScreen() },
+    ),
+    ScrollDemo(
+        route = "gallery_wall",
+        category = "Architectural",
+        title = "Gallery Wall",
+        subtitle = "Paintings hung round the inside of a room, sliding along its walls past you",
+        screen = { GalleryWallDemoScreen() },
     ),
 )

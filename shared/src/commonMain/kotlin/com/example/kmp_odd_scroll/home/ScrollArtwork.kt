@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
@@ -36,6 +37,7 @@ fun ScrollArtwork(route: String, modifier: Modifier = Modifier) {
             "card_sphere" -> cardSphere()
             "lift_stack" -> liftStack()
             "tape_rack" -> tapeRack()
+            "gallery_wall" -> galleryWall()
             else -> infiniteSpiral()
         }
     }
@@ -261,5 +263,57 @@ private fun DrawScope.tapeRack() {
             close()
         }
         drawPath(label, Color(0xFFBFBFB6).copy(alpha = lit * 0.45f))
+    }
+}
+
+/**
+ * The room in miniature, with the reference's own proportions: paintings along
+ * a back wall, round the corners and down the side walls towards the eye, each
+ * outline traced along the wall so the ones on a corner bend with it.
+ */
+private fun DrawScope.galleryWall() {
+    val depth = 6.954f
+    val half = 1.101f
+    val corner = 0.644f
+    val flat = half - corner
+    val arc = corner * PI.toFloat() / 2f
+    val focal = size.width * 1.4f
+    val cx = size.width / 2f
+    val cy = size.height * 0.48f
+
+    fun project(s: Float, y: Float): Offset {
+        val a = abs(s)
+        val (x, z) = when {
+            a <= flat -> a to depth
+            a <= flat + arc -> {
+                val turn = (a - flat) / corner
+                (flat + corner * sin(turn)) to (depth - corner + corner * cos(turn))
+            }
+            else -> half to (depth - corner - (a - flat - arc))
+        }
+        return Offset(cx + focal * (if (s < 0f) -x else x) / z, cy + focal * y / z)
+    }
+
+    val shapes = listOf(1.3f to 0.9f, 0.8f to 1f, 1.6f to 0.8f, 0.85f to 0.95f, 1.1f to 0.85f)
+    var s = -0.65f
+    while (s > -6f) s -= 1.45f
+    var i = 0
+    while (s < 6f) {
+        val (w, h) = shapes[i % shapes.size]
+        val path = Path()
+        val steps = 6
+        for (k in 0..steps) {
+            val p = project(s + w * k / steps, -h / 2f)
+            if (k == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y)
+        }
+        for (k in steps downTo 0) {
+            val p = project(s + w * k / steps, h / 2f)
+            path.lineTo(p.x, p.y)
+        }
+        path.close()
+        val near = 1f - (abs(s + w / 2f) / 5f).coerceAtMost(1f)
+        drawPath(path, Color(0xFFBFBFB6).copy(alpha = 0.25f + near * 0.5f))
+        s += w + 0.564f
+        i++
     }
 }

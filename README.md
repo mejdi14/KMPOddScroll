@@ -312,6 +312,58 @@ controls, and `slotted` is the tape in the slot. Each tape is drawn once, as the
 camera sees it, into a bitmap that is then only moved — one `drawImage` a tape
 a frame and one gradient for the light, so it needs no shader anywhere.
 
+### Gallery Wall
+
+Paintings hung round the inside of a room — a back wall facing you, side walls
+running towards you, rounded corners between — that slide along the walls past
+you, each with its label on the wall underneath. A painting comes in down the
+right-hand wall, bends round the corner, crosses the back and goes out down the
+left. Drag along it or scroll, and the hang springs after; tap a painting to
+bring it to the middle.
+
+Measured off a recording of the reference rather than eyeballed. How tall a
+painting stands at each column of the screen is one fixed curve for every
+painting in every frame, bar its own height — 475,000 columns over 640 frames
+to 0.44 px — so the wall stays put and the whole hang is a single scalar
+(every painting placed to 1.8 px). In heights of the tallest painting:
+
+- the eye is 6.95 from the back wall, level with the paintings' middles, with a
+  focal length of 1.40 frame widths;
+- the side walls stand 1.10 either side of the middle, joined to the back wall
+  by corners of radius 0.64 (the wall's profile to 0.37 px; the focal length is
+  pinned by the paintings holding their shape round the corner, to 1%);
+- paintings hang 0.56 apart edge to edge, the same on every stretch of wall to
+  2.6%, at heights from 0.72 to 1;
+- nothing turns, grows, fades or dims on the way round — size holds to 0.1%,
+  brightness to 1.4% — and the corners are square;
+- after a swipe the hang settles on a critically damped spring, ωn = 6.74 a
+  second (`spring(dampingRatio = 1f, stiffness = 45.5f)`), to 1.3 px over seven
+  let-gos, and coasts no further than a spring trailing the input would.
+
+```kotlin
+GalleryWallScroll(
+    items = listOf(
+        GalleryWallItem(image, "Wheat Field with Cypresses", "Vincent van Gogh", "1889", "Oil on canvas"),
+        /* ... */
+    ),
+    modifier = Modifier.fillMaxSize(),
+)
+```
+
+| Parameter | Default | |
+| --- | --- | --- |
+| `items` | — | paintings in order; the hang repeats, so it has no end |
+| `background` | `#FFFFFF` | the wall |
+| `contentColor` | `#1A1A1A` | the labels; all but the title are set in it at 45% |
+| `state` | — | `rememberGalleryWallScrollState()` |
+
+`GalleryWallItem.scale` is a painting's height against the tallest (1).
+`GalleryWallScrollState.scrollTo(index)` brings a painting to the middle from a
+host's own controls, and `centred` is the one there. Each painting is drawn
+once, label and all, into a bitmap and then through its own exact projection —
+one `drawImage` for each flat stretch of wall it is on and a dozen chords to a
+corner — so it needs no shader.
+
 ## Image credits
 
 ### Photographs
@@ -335,7 +387,8 @@ cards of the Edge Distortion gallery.
 
 Flex Carousel uses museum scans of paintings, also from Unsplash and under the
 same licence, cut 800x600 for its 4:3 cards. Lift Stack uses the same six, cut
-square. Tape Rack prints both the scans and the wide photographs on its labels.
+square. Tape Rack prints both the scans and the wide photographs on its labels,
+and Gallery Wall hangs the scans between the photographs.
 
 | File | Scanned by |
 | --- | --- |
