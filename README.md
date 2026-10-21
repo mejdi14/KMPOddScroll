@@ -353,9 +353,9 @@ collection sheets from [Freepik](https://www.freepik.com) — each flower found 
 its own run of ink on the paper, its neighbours painted back out, and the result
 framed to the card's 4:5.
 
-The `movie_*.jpg` set used by Infinite Menu is thirty film posters taken from
-each film's English Wikipedia infobox, cut square from the top for the sphere's
-tiles. Posters are copyrighted by their studios and shown here only to
+The `movie_*.jpg` set used by Infinite Menu is thirty silent-era film posters,
+high-resolution scans from Wikipedia/Wikimedia, cut square from the top and
+scaled to 640x640 for the sphere's tiles. Posters are copyrighted by their studios and shown here only to
 illustrate the demo, so swap them for your own artwork before using this
 anywhere real.
 

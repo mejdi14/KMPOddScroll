@@ -7,40 +7,40 @@ import androidx.compose.ui.Modifier
 import io.github.mejdi14.oddscroll.infinitemenu.InfiniteMenuItem
 import io.github.mejdi14.oddscroll.infinitemenu.InfiniteMenuScroll
 import kmpoddscroll.shared.generated.resources.Res
-import kmpoddscroll.shared.generated.resources.movie_2001_a_space_odyssey
-import kmpoddscroll.shared.generated.resources.movie_a_clockwork_orange
-import kmpoddscroll.shared.generated.resources.movie_akira
-import kmpoddscroll.shared.generated.resources.movie_alien
-import kmpoddscroll.shared.generated.resources.movie_amelie
-import kmpoddscroll.shared.generated.resources.movie_black_swan
-import kmpoddscroll.shared.generated.resources.movie_blade_runner
-import kmpoddscroll.shared.generated.resources.movie_drive
-import kmpoddscroll.shared.generated.resources.movie_dune
-import kmpoddscroll.shared.generated.resources.movie_everything_everywhere_all_at_once
-import kmpoddscroll.shared.generated.resources.movie_her
-import kmpoddscroll.shared.generated.resources.movie_in_the_mood_for_love
-import kmpoddscroll.shared.generated.resources.movie_jaws
-import kmpoddscroll.shared.generated.resources.movie_la_la_land
-import kmpoddscroll.shared.generated.resources.movie_moonlight
-import kmpoddscroll.shared.generated.resources.movie_parasite
-import kmpoddscroll.shared.generated.resources.movie_portrait_of_a_lady_on_fire
-import kmpoddscroll.shared.generated.resources.movie_pulp_fiction
-import kmpoddscroll.shared.generated.resources.movie_spirited_away
-import kmpoddscroll.shared.generated.resources.movie_star_wars
-import kmpoddscroll.shared.generated.resources.movie_the_batman
-import kmpoddscroll.shared.generated.resources.movie_the_french_dispatch
-import kmpoddscroll.shared.generated.resources.movie_the_godfather
-import kmpoddscroll.shared.generated.resources.movie_the_grand_budapest_hotel
-import kmpoddscroll.shared.generated.resources.movie_the_handmaiden
-import kmpoddscroll.shared.generated.resources.movie_the_lobster
-import kmpoddscroll.shared.generated.resources.movie_the_shape_of_water
-import kmpoddscroll.shared.generated.resources.movie_the_shining
-import kmpoddscroll.shared.generated.resources.movie_the_silence_of_the_lambs
-import kmpoddscroll.shared.generated.resources.movie_vertigo
+import kmpoddscroll.shared.generated.resources.movie_battleship_potemkin
+import kmpoddscroll.shared.generated.resources.movie_faust
+import kmpoddscroll.shared.generated.resources.movie_greed
+import kmpoddscroll.shared.generated.resources.movie_intolerance
+import kmpoddscroll.shared.generated.resources.movie_metropolis
+import kmpoddscroll.shared.generated.resources.movie_sherlock_jr
+import kmpoddscroll.shared.generated.resources.movie_spies
+import kmpoddscroll.shared.generated.resources.movie_sunrise_a_song_of_two_humans
+import kmpoddscroll.shared.generated.resources.movie_the_beloved_rogue
+import kmpoddscroll.shared.generated.resources.movie_the_big_parade
+import kmpoddscroll.shared.generated.resources.movie_the_black_pirate
+import kmpoddscroll.shared.generated.resources.movie_the_blue_angel
+import kmpoddscroll.shared.generated.resources.movie_the_broadway_melody
+import kmpoddscroll.shared.generated.resources.movie_the_cameraman
+import kmpoddscroll.shared.generated.resources.movie_the_cat_and_the_canary
+import kmpoddscroll.shared.generated.resources.movie_the_circus
+import kmpoddscroll.shared.generated.resources.movie_the_freshman
+import kmpoddscroll.shared.generated.resources.movie_the_gold_rush
+import kmpoddscroll.shared.generated.resources.movie_the_jazz_singer
+import kmpoddscroll.shared.generated.resources.movie_the_kid
+import kmpoddscroll.shared.generated.resources.movie_the_last_command
+import kmpoddscroll.shared.generated.resources.movie_the_last_laugh
+import kmpoddscroll.shared.generated.resources.movie_the_love_parade
+import kmpoddscroll.shared.generated.resources.movie_the_navigator
+import kmpoddscroll.shared.generated.resources.movie_the_passion_of_joan_of_arc
+import kmpoddscroll.shared.generated.resources.movie_the_sheik
+import kmpoddscroll.shared.generated.resources.movie_the_ten_commandments
+import kmpoddscroll.shared.generated.resources.movie_the_thief_of_bagdad
+import kmpoddscroll.shared.generated.resources.movie_the_wedding_march
+import kmpoddscroll.shared.generated.resources.movie_wings
 import org.jetbrains.compose.resources.imageResource
 
 /**
- * Thirty film posters, one to a tile.
+ * Thirty silent-era film posters, one to a tile.
  *
  * A tile is a square patch of the sphere, so each portrait poster is cut to a
  * square from its top, keeping the artwork and clipping the credit block below.
@@ -49,36 +49,36 @@ import org.jetbrains.compose.resources.imageResource
 @Composable
 fun InfiniteMenuDemoScreen() {
     val tiles = listOf(
-        InfiniteMenuItem(imageResource(Res.drawable.movie_2001_a_space_odyssey), "2001: A Space Odyssey"),
-        InfiniteMenuItem(imageResource(Res.drawable.movie_vertigo), "Vertigo"),
-        InfiniteMenuItem(imageResource(Res.drawable.movie_the_grand_budapest_hotel), "The Grand Budapest Hotel"),
-        InfiniteMenuItem(imageResource(Res.drawable.movie_in_the_mood_for_love), "In the Mood for Love"),
-        InfiniteMenuItem(imageResource(Res.drawable.movie_blade_runner), "Blade Runner"),
-        InfiniteMenuItem(imageResource(Res.drawable.movie_pulp_fiction), "Pulp Fiction"),
-        InfiniteMenuItem(imageResource(Res.drawable.movie_the_godfather), "The Godfather"),
-        InfiniteMenuItem(imageResource(Res.drawable.movie_alien), "Alien"),
-        InfiniteMenuItem(imageResource(Res.drawable.movie_jaws), "Jaws"),
-        InfiniteMenuItem(imageResource(Res.drawable.movie_star_wars), "Star Wars"),
-        InfiniteMenuItem(imageResource(Res.drawable.movie_the_silence_of_the_lambs), "The Silence of the Lambs"),
-        InfiniteMenuItem(imageResource(Res.drawable.movie_black_swan), "Black Swan"),
-        InfiniteMenuItem(imageResource(Res.drawable.movie_moonlight), "Moonlight"),
-        InfiniteMenuItem(imageResource(Res.drawable.movie_la_la_land), "La La Land"),
-        InfiniteMenuItem(imageResource(Res.drawable.movie_the_shape_of_water), "The Shape of Water"),
-        InfiniteMenuItem(imageResource(Res.drawable.movie_the_french_dispatch), "The French Dispatch"),
-        InfiniteMenuItem(imageResource(Res.drawable.movie_parasite), "Parasite"),
-        InfiniteMenuItem(imageResource(Res.drawable.movie_spirited_away), "Spirited Away"),
-        InfiniteMenuItem(imageResource(Res.drawable.movie_akira), "Akira"),
-        InfiniteMenuItem(imageResource(Res.drawable.movie_the_shining), "The Shining"),
-        InfiniteMenuItem(imageResource(Res.drawable.movie_a_clockwork_orange), "A Clockwork Orange"),
-        InfiniteMenuItem(imageResource(Res.drawable.movie_drive), "Drive"),
-        InfiniteMenuItem(imageResource(Res.drawable.movie_her), "Her"),
-        InfiniteMenuItem(imageResource(Res.drawable.movie_the_lobster), "The Lobster"),
-        InfiniteMenuItem(imageResource(Res.drawable.movie_amelie), "Amélie"),
-        InfiniteMenuItem(imageResource(Res.drawable.movie_the_handmaiden), "The Handmaiden"),
-        InfiniteMenuItem(imageResource(Res.drawable.movie_portrait_of_a_lady_on_fire), "Portrait of a Lady on Fire"),
-        InfiniteMenuItem(imageResource(Res.drawable.movie_everything_everywhere_all_at_once), "Everything Everywhere All at Once"),
-        InfiniteMenuItem(imageResource(Res.drawable.movie_dune), "Dune"),
-        InfiniteMenuItem(imageResource(Res.drawable.movie_the_batman), "The Batman"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_the_last_laugh), "The Last Laugh"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_metropolis), "Metropolis"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_wings), "Wings"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_the_broadway_melody), "The Broadway Melody"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_sunrise_a_song_of_two_humans), "Sunrise: A Song of Two Humans"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_the_jazz_singer), "The Jazz Singer"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_the_big_parade), "The Big Parade"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_the_gold_rush), "The Gold Rush"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_greed), "Greed"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_sherlock_jr), "Sherlock Jr."),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_the_thief_of_bagdad), "The Thief of Bagdad"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_the_love_parade), "The Love Parade"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_battleship_potemkin), "Battleship Potemkin"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_the_black_pirate), "The Black Pirate"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_the_circus), "The Circus"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_intolerance), "Intolerance"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_the_last_command), "The Last Command"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_the_passion_of_joan_of_arc), "The Passion of Joan of Arc"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_the_wedding_march), "The Wedding March"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_the_beloved_rogue), "The Beloved Rogue"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_the_sheik), "The Sheik"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_faust), "Faust"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_the_kid), "The Kid"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_the_blue_angel), "The Blue Angel"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_the_ten_commandments), "The Ten Commandments"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_the_freshman), "The Freshman"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_the_navigator), "The Navigator"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_the_cat_and_the_canary), "The Cat and the Canary"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_spies), "Spies"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_the_cameraman), "The Cameraman"),
     )
     val items = remember(tiles) { tiles }
 
