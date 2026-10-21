@@ -1,16 +1,26 @@
 package io.github.mejdi14.oddscroll.gallerywall
 
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -21,7 +31,9 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextMeasurer
@@ -34,6 +46,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.mejdi14.oddscroll.internal.clamped
 import kotlin.math.PI
@@ -130,6 +143,30 @@ private const val WHEEL_STEP = 0.6f
 
 private const val TAP_SLOP = 8f
 
+/*
+ * Walking up to a painting. The eye goes straight in along the middle of the
+ * room until the painting fills most of the frame, at a visitor's unhurried
+ * pace: a slow first step, a glide, and a long ease to a stop. The steps
+ * themselves show as a bob and a sway of the head, and a little roll with
+ * each, fading in as the walk gets going and out as it arrives.
+ */
+
+/** How much of the frame the painting fills, across and down, once there. */
+private const val FILL_WIDTH = 0.86f
+private const val FILL_HEIGHT = 0.7f
+
+private val WALK_EASE = CubicBezierEasing(0.45f, 0f, 0.15f, 1f)
+
+/** Footfalls on the way. */
+private const val STEPS = 4
+
+/** The head's rise each step, and its sway to either side each stride, in card heights. */
+private const val BOB = 0.03f
+private const val SWAY = 0.02f
+
+/** The head's roll with the sway, in degrees. */
+private const val ROLL = 0.35f
+
 @Composable
 fun rememberGalleryWallScrollState(): GalleryWallScrollState =
     remember { GalleryWallScrollState() }
@@ -148,12 +185,16 @@ fun rememberGalleryWallScrollState(): GalleryWallScrollState =
  * `drawImage` for each flat stretch of wall it is on, and a dozen chords to a
  * corner.
  *
- * Drag along it, or scroll, and the hang springs after; tap a painting to
- * bring it to the middle.
+ * Drag along it, or scroll, and the hang springs after, coming to rest with
+ * a painting in the middle; tap a painting to bring it to the middle. Once
+ * the hang has stood still for a second, [inspectLabel] offers to walk up to
+ * the painting in the middle; a tap anywhere steps back.
  *
  * @param items paintings, in order; the hang repeats, so it has no end.
  * @param background the wall.
  * @param contentColor the labels.
+ * @param inspectLabel the button that walks up to a painting, or null for
+ * none — a host can show its own off [GalleryWallScrollState.canInspect].
  * @param state also lets a host's own controls move it.
  */
 @Composable
@@ -162,6 +203,7 @@ fun GalleryWallScroll(
     modifier: Modifier = Modifier,
     background: Color = Color(0xFFFFFFFF),
     contentColor: Color = Color(0xFF1A1A1A),
+    inspectLabel: String? = "Inspect",
     state: GalleryWallScrollState = rememberGalleryWallScrollState(),
 ) {
     if (items.isEmpty()) {
@@ -186,56 +228,112 @@ fun GalleryWallScroll(
         }
     }
 
-    Canvas(
-        modifier
-            .background(background)
-            .fillMaxSize()
-            .pointerInput(state) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    var last = down.position
-                    var travel = 0f
-                    var dragging = false
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        if (event.type == PointerEventType.Release) break
-                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                        if (!change.pressed) break
-                        val dx = change.position.x - last.x
-                        travel += abs(dx) + abs(change.position.y - last.y)
-                        last = change.position
-                        if (travel > TAP_SLOP) dragging = true
-                        if (dragging) {
-                            // The back wall follows the finger, pixel for pixel.
-                            state.nudge(-dx / room.backPx)
-                            change.consume()
+    Box(modifier.background(background).fillMaxSize()) {
+        Canvas(
+            Modifier
+                .fillMaxSize()
+                .pointerInput(state) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        state.press()
+                        var last = down.position
+                        var travel = 0f
+                        var dragging = false
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            if (event.type == PointerEventType.Release) break
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) break
+                            val dx = change.position.x - last.x
+                            travel += abs(dx) + abs(change.position.y - last.y)
+                            last = change.position
+                            if (travel > TAP_SLOP) dragging = true
+                            if (dragging) {
+                                // The back wall follows the finger, pixel for pixel.
+                                state.nudge(-dx / room.backPx)
+                                change.consume()
+                            }
+                        }
+                        state.release(dragging)
+                        if (state.inspecting) {
+                            state.leave()
+                        } else if (!dragging) {
+                            val hit = room.hit(down.position.x, down.position.y, state.position, hang)
+                            if (hit != null) state.scrollTo(hit)
                         }
                     }
-                    if (!dragging) {
-                        val hit = room.hit(down.position.x, down.position.y, state.position, hang)
-                        if (hit != null) state.scrollTo(hit)
+                }
+                .pointerInput(state) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            if (event.type != PointerEventType.Scroll) continue
+                            val scroll = event.changes.firstOrNull()?.scrollDelta ?: continue
+                            val by = scroll.x + scroll.y
+                            if (by == 0f) continue
+                            state.nudge(by * WHEEL_STEP)
+                            event.changes.forEach { it.consume() }
+                        }
                     }
                 }
+        ) {
+            state.tick // read, so the wall repaints as the hang moves
+            room.fit(size.width, size.height)
+            art.ensure(room.backPx * BITMAP_SCALE)
+            val subject = state.subject
+            room.stroll(state.walk, hang, subject)
+            // The painting up close is drawn again at the size it will end at,
+            // as soon as it can be walked up to, so the walk does not start
+            // on a dropped frame.
+            val close = if (state.canInspect || state.walk > 0f) art.close(hang.wrap(subject), room.closePx) else null
+            rotate(room.roll, Offset(room.cx, room.cy)) {
+                drawWall(art, hang, room, state.position, close.takeIf { room.zoom > BITMAP_SCALE }, subject)
             }
-            .pointerInput(state) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        if (event.type != PointerEventType.Scroll) continue
-                        val scroll = event.changes.firstOrNull()?.scrollDelta ?: continue
-                        val by = scroll.x + scroll.y
-                        if (by == 0f) continue
-                        state.nudge(by * WHEEL_STEP)
-                        event.changes.forEach { it.consume() }
-                    }
-                }
-            }
-    ) {
-        state.tick // read, so the wall repaints as the hang moves
-        room.fit(size.width, size.height)
-        art.ensure(room.backPx * BITMAP_SCALE)
-        drawWall(art, hang, room, state.position)
+        }
+
+        if (inspectLabel != null) {
+            InspectButton(
+                label = inspectLabel,
+                state = state,
+                background = background,
+                contentColor = contentColor,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 48.dp),
+            )
+        }
     }
+}
+
+@Composable
+private fun InspectButton(
+    label: String,
+    state: GalleryWallScrollState,
+    background: Color,
+    contentColor: Color,
+    modifier: Modifier,
+) {
+    val shown = state.canInspect
+    val reveal by animateFloatAsState(if (shown) 1f else 0f, tween(if (shown) 450 else 200))
+    val shape = RoundedCornerShape(50)
+    BasicText(
+        text = label,
+        style = TextStyle(
+            color = contentColor,
+            fontSize = 15.sp,
+            fontFamily = FontFamily.Serif,
+            fontStyle = FontStyle.Italic,
+            letterSpacing = 0.6.sp,
+        ),
+        modifier = modifier
+            .graphicsLayer {
+                alpha = reveal
+                translationY = (1f - reveal) * 10.dp.toPx()
+            }
+            // Only while it shows, or it would take taps meant for the wall.
+            .then(if (shown) Modifier.pointerInput(state) { detectTapGestures { state.inspect() } } else Modifier)
+            .background(background.copy(alpha = 0.9f), shape)
+            .border(1.dp, contentColor.copy(alpha = 0.5f), shape)
+            .padding(horizontal = 26.dp, vertical = 11.dp),
+    )
 }
 
 // --- the hang ----------------------------------------------------------------
@@ -305,6 +403,23 @@ private class Room {
     /** How far along the wall either way anything can be seen. */
     var reach = 0f
 
+    /** Where the side walls are first seen from, ahead of the eye. */
+    private var sideFrom = 0f
+
+    /** The eye, walked forward from where the room is seen from: across, up and in. */
+    var eyeX = 0f
+    var eyeY = 0f
+    var eyeZ = 0f
+
+    /** Its roll, in degrees. */
+    var roll = 0f
+
+    /** How much bigger the back wall looks than from where the walk began. */
+    var zoom = 1f
+
+    /** Bitmap pixels to a card height that the painting walked up to wants. */
+    var closePx = 1f
+
     private val point = FloatArray(2)
 
     fun fit(w: Float, h: Float) {
@@ -317,7 +432,31 @@ private class Room {
         backPx = focal / DEPTH
         // Where the side walls leave the frame, with a margin past it.
         val leaves = focal * HALF_WIDTH / max(w / 2f, 1f) * 0.9f
-        reach = FLAT + ARC + (DEPTH - CORNER - max(leaves, NEAR))
+        sideFrom = max(leaves, NEAR)
+        eyeZ = -1f
+    }
+
+    /** Puts the eye [walk] of the way up to painting [index]. */
+    fun stroll(walk: Float, hang: Hang, index: Int) {
+        val i = hang.wrap(index)
+        // Near enough that the painting fills the frame one way or the other.
+        val stand = max(
+            focal * hang.widths[i] / (FILL_WIDTH * width),
+            focal * hang.heights[i] / (FILL_HEIGHT * height),
+        ).coerceAtMost(DEPTH)
+        closePx = focal / stand * 1.05f
+        val z = (DEPTH - stand) * WALK_EASE.transform(walk)
+        val envelope = sin(PI.toFloat() * walk)
+        val stride = PI.toFloat() * STEPS * walk
+        eyeX = SWAY * envelope * sin(stride)
+        eyeY = -BOB * envelope * sin(stride) * sin(stride)
+        roll = ROLL * envelope * sin(stride)
+        if (z == eyeZ) return
+        eyeZ = z
+        zoom = DEPTH / (DEPTH - z)
+        // The side walls leave the frame as far ahead of the eye as ever, so
+        // further down the room; walked far enough, they are out of it.
+        reach = FLAT + ARC + max(0f, DEPTH - CORNER - (sideFrom + z))
     }
 
     /** The painting under a tap, unwrapped, or null. */
@@ -391,7 +530,8 @@ private fun wallPoint(s: Float, out: FloatArray) {
 
 // --- drawing -----------------------------------------------------------------
 
-private fun DrawScope.drawWall(art: WallArt, hang: Hang, room: Room, position: Float) {
+/** [close], when there is one, stands in for painting [closeIndex] (unwrapped). */
+private fun DrawScope.drawWall(art: WallArt, hang: Hang, room: Room, position: Float, close: CardArt?, closeIndex: Int) {
     if (size.width <= 0f || size.height <= 0f) return
     val reach = room.reach
     val laps = floor((position - reach - hang.starts[0]) / hang.lap).toInt()
@@ -401,7 +541,7 @@ private fun DrawScope.drawWall(art: WallArt, hang: Hang, room: Room, position: F
     while (true) {
         val left = hang.start(i) - position
         if (left > reach) break
-        val card = art.cards[hang.wrap(i)]
+        val card = if (close != null && i == closeIndex) close else art.cards[hang.wrap(i)]
         if (left + card.wallWidth >= -reach) drawCard(card, left, room)
         i++
     }
@@ -450,15 +590,16 @@ private fun DrawScope.drawPiece(card: CardArt, left: Float, a: Float, b: Float, 
     // The overlap runs on along the same flat stretch, back towards the last piece.
     val start = max(c0 - OVERLAP, 0)
     val back = (c0 - start).toFloat() / (c1 - c0)
-    val x0 = p0[0] - (p1[0] - p0[0]) * back
-    val z0 = p0[1] - (p1[1] - p0[1]) * back
-    val x1 = p1[0]
-    val z1 = p1[1]
+    // From the eye, wherever the walk has taken it.
+    val x0 = p0[0] - (p1[0] - p0[0]) * back - room.eyeX
+    val z0 = p0[1] - (p1[1] - p0[1]) * back - room.eyeZ
+    val x1 = p1[0] - room.eyeX
+    val z1 = p1[1] - room.eyeZ
     if (z0 <= 0.05f || z1 <= 0.05f) return
 
     val f = room.focal
-    val top = card.top
-    val bottom = card.top + card.bitmap.height / card.pxPerUnit
+    val top = card.top - room.eyeY
+    val bottom = top + card.bitmap.height / card.pxPerUnit
     quad[0] = room.cx + f * x0 / z0; quad[1] = room.cy + f * top / z0
     quad[2] = room.cx + f * x1 / z1; quad[3] = room.cy + f * top / z1
     quad[4] = room.cx + f * x1 / z1; quad[5] = room.cy + f * bottom / z1
@@ -537,11 +678,32 @@ private class WallArt(
 
     private var builtFor = -1
 
+    private var closeCard: CardArt? = null
+    private var closeIndex = -1
+    private var closeFor = -1
+
     fun ensure(pxPerUnit: Float) {
         val px = pxPerUnit.roundToInt().coerceAtLeast(8)
         if (px == builtFor) return
         builtFor = px
-        val unit = px.toFloat()
+        cards = items.map { build(it, px.toFloat()) }
+    }
+
+    /**
+     * Painting [index] again at [pxPerUnit], for walking up to — no finer than
+     * its own image, which would only blur it twice.
+     */
+    fun close(index: Int, pxPerUnit: Float): CardArt {
+        val item = items[index]
+        val px = min(pxPerUnit, item.image.height / item.scale).roundToInt().coerceAtLeast(8)
+        val cached = closeCard
+        if (cached != null && index == closeIndex && px == closeFor) return cached
+        closeIndex = index
+        closeFor = px
+        return build(item, px.toFloat()).also { closeCard = it }
+    }
+
+    private fun build(item: GalleryWallItem, unit: Float): CardArt {
         val density = Density(1f)
         val title = TextStyle(
             color = ink,
@@ -551,41 +713,38 @@ private class WallArt(
             fontStyle = FontStyle.Italic,
         )
         val rest = title.copy(color = ink.copy(alpha = ink.alpha * LABEL_GREY), fontStyle = FontStyle.Normal)
+        val paintH = (item.scale * unit).roundToInt().coerceAtLeast(1)
+        val paintW = (paintH * item.image.width / max(item.image.height, 1).toFloat()).roundToInt().coerceAtLeast(1)
+        val lines = listOf(item.title to title, item.artist to rest, item.date to rest, item.medium to rest)
+            .filter { it.first.isNotEmpty() }
+            .map { (text, style) -> measurer.measure(text, style, density = density) }
+        val labelW = lines.maxOfOrNull { it.size.width } ?: 0
+        val labelTop = paintH + LABEL_GAP * unit
+        val labelH = if (lines.isEmpty()) 0f else LABEL_GAP * unit + lines.size * LABEL_LINE * unit
+        val bw = max(paintW, labelW + 1)
+        val bh = ceil(paintH + labelH).toInt()
 
-        cards = items.map { item ->
-            val paintH = (item.scale * unit).roundToInt().coerceAtLeast(1)
-            val paintW = (paintH * item.image.width / max(item.image.height, 1).toFloat()).roundToInt().coerceAtLeast(1)
-            val lines = listOf(item.title to title, item.artist to rest, item.date to rest, item.medium to rest)
-                .filter { it.first.isNotEmpty() }
-                .map { (text, style) -> measurer.measure(text, style, density = density) }
-            val labelW = lines.maxOfOrNull { it.size.width } ?: 0
-            val labelTop = paintH + LABEL_GAP * unit
-            val labelH = if (lines.isEmpty()) 0f else LABEL_GAP * unit + lines.size * LABEL_LINE * unit
-            val bw = max(paintW, labelW + 1)
-            val bh = ceil(paintH + labelH).toInt()
-
-            val bitmap = ImageBitmap(bw, bh)
-            CanvasDrawScope().draw(
-                density,
-                LayoutDirection.Ltr,
-                BitmapCanvas(bitmap),
-                Size(bw.toFloat(), bh.toFloat()),
-            ) {
-                drawImage(
-                    image = item.image,
-                    srcOffset = IntOffset.Zero,
-                    srcSize = IntSize(item.image.width, item.image.height),
-                    dstOffset = IntOffset.Zero,
-                    dstSize = IntSize(paintW, paintH),
-                    filterQuality = FilterQuality.High,
-                )
-                lines.forEachIndexed { n, layout ->
-                    drawText(layout, topLeft = Offset(0f, labelTop + n * LABEL_LINE * unit))
-                }
+        val bitmap = ImageBitmap(bw, bh)
+        CanvasDrawScope().draw(
+            density,
+            LayoutDirection.Ltr,
+            BitmapCanvas(bitmap),
+            Size(bw.toFloat(), bh.toFloat()),
+        ) {
+            drawImage(
+                image = item.image,
+                srcOffset = IntOffset.Zero,
+                srcSize = IntSize(item.image.width, item.image.height),
+                dstOffset = IntOffset.Zero,
+                dstSize = IntSize(paintW, paintH),
+                filterQuality = FilterQuality.High,
+            )
+            lines.forEachIndexed { n, layout ->
+                drawText(layout, topLeft = Offset(0f, labelTop + n * LABEL_LINE * unit))
             }
-            // Painting widths along the wall come from its own pixels, so the
-            // hang and the bitmap agree to the column.
-            CardArt(bitmap, paintH / item.scale, top = -item.scale / 2f)
         }
+        // Painting widths along the wall come from its own pixels, so the
+        // hang and the bitmap agree to the column.
+        return CardArt(bitmap, paintH / item.scale, top = -item.scale / 2f)
     }
 }

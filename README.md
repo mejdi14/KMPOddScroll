@@ -318,8 +318,11 @@ Paintings hung round the inside of a room — a back wall facing you, side walls
 running towards you, rounded corners between — that slide along the walls past
 you, each with its label on the wall underneath. A painting comes in down the
 right-hand wall, bends round the corner, crosses the back and goes out down the
-left. Drag along it or scroll, and the hang springs after; tap a painting to
-bring it to the middle.
+left. Drag along it or scroll, and the hang springs after and comes to rest
+with a painting in the middle; tap a painting to bring it to the middle. A
+second after it stops, an Inspect button walks you up to the painting in the
+middle — two seconds of a visitor's approach, steps and all — and a tap steps
+back.
 
 Measured off a recording of the reference rather than eyeballed. How tall a
 painting stands at each column of the screen is one fixed curve for every
@@ -355,11 +358,16 @@ GalleryWallScroll(
 | `items` | — | paintings in order; the hang repeats, so it has no end |
 | `background` | `#FFFFFF` | the wall |
 | `contentColor` | `#1A1A1A` | the labels; all but the title are set in it at 45% |
+| `inspectLabel` | `"Inspect"` | the button that walks up to a painting; `null` for none |
 | `state` | — | `rememberGalleryWallScrollState()` |
 
 `GalleryWallItem.scale` is a painting's height against the tallest (1).
 `GalleryWallScrollState.scrollTo(index)` brings a painting to the middle from a
-host's own controls, and `centred` is the one there. Each painting is drawn
+host's own controls, and `centred` is the one there. `canInspect` turns true a
+second after the hang comes to rest; `inspect()` walks up to the painting and
+`leave()` steps back, with `inspecting` true in between — a host can wire the
+system back to it with `BackHandler(enabled = state.inspecting) { state.leave() }`.
+Each painting is drawn
 once, label and all, into a bitmap and then through its own exact projection —
 one `drawImage` for each flat stretch of wall it is on and a dozen chords to a
 corner — so it needs no shader.

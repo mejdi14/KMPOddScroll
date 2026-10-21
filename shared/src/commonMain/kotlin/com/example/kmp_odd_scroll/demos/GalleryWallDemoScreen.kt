@@ -3,10 +3,13 @@ package com.example.kmp_odd_scroll.demos
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.backhandler.BackHandler
 import com.example.kmp_odd_scroll.LocalPalette
 import io.github.mejdi14.oddscroll.gallerywall.GalleryWallItem
 import io.github.mejdi14.oddscroll.gallerywall.GalleryWallScroll
+import io.github.mejdi14.oddscroll.gallerywall.rememberGalleryWallScrollState
 import kmpoddscroll.shared.generated.resources.Res
 import kmpoddscroll.shared.generated.resources.museum_almond
 import kmpoddscroll.shared.generated.resources.museum_armchair
@@ -29,10 +32,17 @@ import org.jetbrains.compose.resources.imageResource
  * height and a width of one and a half of it, ordered so that no painting sits
  * beside one of its own colours — yellow, blue, orange, green, pink, teal, gold
  * and so on round the room. Credits are in the README.
+ *
+ * Back steps away from a painting that has been walked up to before it leaves
+ * the room.
  */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun GalleryWallDemoScreen() {
     val palette = LocalPalette.current
+    val state = rememberGalleryWallScrollState()
+    BackHandler(enabled = state.inspecting) { state.leave() }
+
     val sunflowers = imageResource(Res.drawable.museum_sunflowers)
     val boating = imageResource(Res.drawable.museum_boating)
     val june = imageResource(Res.drawable.museum_june)
@@ -75,5 +85,6 @@ fun GalleryWallDemoScreen() {
         modifier = Modifier.fillMaxSize(),
         background = palette.page,
         contentColor = palette.ink,
+        state = state,
     )
 }
