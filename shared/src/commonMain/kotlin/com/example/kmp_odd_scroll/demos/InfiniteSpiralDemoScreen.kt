@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import com.example.kmp_odd_scroll.LocalPalette
 import io.github.mejdi14.oddscroll.infinitespiral.InfiniteSpiralItem
 import io.github.mejdi14.oddscroll.infinitespiral.InfiniteSpiralScroll
 import io.github.mejdi14.oddscroll.infinitespiral.SpiralMotion
@@ -29,6 +30,7 @@ import org.jetbrains.compose.resources.imageResource
  */
 @Composable
 fun InfiniteSpiralDemoScreen() {
+    val palette = LocalPalette.current
     val cards = listOf(
         InfiniteSpiralItem(imageResource(Res.drawable.grid_sounds), "Marlborough Sounds"),
         InfiniteSpiralItem(imageResource(Res.drawable.wide_falls), "Golden Falls"),
@@ -48,6 +50,7 @@ fun InfiniteSpiralDemoScreen() {
     InfiniteSpiralScroll(
         items = items,
         modifier = Modifier.fillMaxSize(),
+        background = palette.page,
         motion = SpiralMotion.Both,
     )
 }

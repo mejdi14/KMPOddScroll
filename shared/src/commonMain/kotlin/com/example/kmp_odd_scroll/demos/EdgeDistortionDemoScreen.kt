@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import com.example.kmp_odd_scroll.LocalPalette
 import io.github.mejdi14.oddscroll.edgedistortion.EdgeDistortionScroll
 import kmpoddscroll.shared.generated.resources.Res
 import kmpoddscroll.shared.generated.resources.grid_basalt
@@ -21,6 +22,7 @@ import org.jetbrains.compose.resources.imageResource
  */
 @Composable
 fun EdgeDistortionDemoScreen() {
+    val palette = LocalPalette.current
     val sounds = imageResource(Res.drawable.grid_sounds)
     val falls = imageResource(Res.drawable.grid_falls)
     val peaks = imageResource(Res.drawable.grid_peaks)
@@ -35,5 +37,6 @@ fun EdgeDistortionDemoScreen() {
     EdgeDistortionScroll(
         images = images,
         modifier = Modifier.fillMaxSize(),
+        background = palette.page,
     )
 }

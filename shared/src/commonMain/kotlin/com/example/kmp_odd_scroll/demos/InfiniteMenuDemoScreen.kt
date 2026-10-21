@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import com.example.kmp_odd_scroll.LocalPalette
 import io.github.mejdi14.oddscroll.infinitemenu.InfiniteMenuItem
 import io.github.mejdi14.oddscroll.infinitemenu.InfiniteMenuScroll
 import kmpoddscroll.shared.generated.resources.Res
@@ -48,6 +49,7 @@ import org.jetbrains.compose.resources.imageResource
  */
 @Composable
 fun InfiniteMenuDemoScreen() {
+    val palette = LocalPalette.current
     val tiles = listOf(
         InfiniteMenuItem(imageResource(Res.drawable.movie_the_last_laugh), "The Last Laugh"),
         InfiniteMenuItem(imageResource(Res.drawable.movie_metropolis), "Metropolis"),
@@ -85,6 +87,8 @@ fun InfiniteMenuDemoScreen() {
     InfiniteMenuScroll(
         items = items,
         modifier = Modifier.fillMaxSize(),
+        background = palette.page,
+        contentColor = palette.ink,
         autoplay = 0f,
     )
 }

@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import com.example.kmp_odd_scroll.LocalPalette
 import io.github.mejdi14.oddscroll.cardsphere.CardSphereScroll
 import io.github.mejdi14.oddscroll.cardsphere.CardSphereTheme
 import kmpoddscroll.shared.generated.resources.Res
@@ -38,11 +39,13 @@ import org.jetbrains.compose.resources.imageResource
  * framed to the card's 4:5 — so every card carries one flower and the paper it
  * was painted on. Credits are in the README.
  *
- * The dark page is the default here. These are cream sheets, and on white they
- * lose their edges; double tap still flips it.
+ * The page follows the app's theme, so the style's own double tap flip is off:
+ * it would only leave the page disagreeing with the rest of the app. These are
+ * cream sheets, and on the light page they lose some of their edges.
  */
 @Composable
 fun CardSphereDemoScreen() {
+    val palette = LocalPalette.current
     val flowers = listOf(
         imageResource(Res.drawable.flower_poppy),
         imageResource(Res.drawable.flower_pansy),
@@ -71,6 +74,7 @@ fun CardSphereDemoScreen() {
     CardSphereScroll(
         flowers = plates,
         modifier = Modifier.fillMaxSize(),
-        theme = CardSphereTheme.Dark,
+        theme = if (palette.dark) CardSphereTheme.Dark else CardSphereTheme.Light,
+        allowThemeToggle = false,
     )
 }

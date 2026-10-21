@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import com.example.kmp_odd_scroll.LocalPalette
 import io.github.mejdi14.oddscroll.taperack.TapeRackItem
 import io.github.mejdi14.oddscroll.taperack.TapeRackScroll
 import kmpoddscroll.shared.generated.resources.Res
@@ -23,12 +24,14 @@ import org.jetbrains.compose.resources.imageResource
 
 /**
  * Twelve tapes, the wide photographs and the museum scans dealt alternately so
- * no two neighbours look alike, on the near-black the reference is set on.
+ * no two neighbours look alike, on the app's page colour (near-black is the
+ * one the reference is set on).
  * Twelve is about what the row holds in view, so it only repeats off screen.
  * Credits are in the README.
  */
 @Composable
 fun TapeRackDemoScreen() {
+    val palette = LocalPalette.current
     val sounds = imageResource(Res.drawable.wide_sounds)
     val peaks = imageResource(Res.drawable.wide_peaks)
     val falls = imageResource(Res.drawable.wide_falls)
@@ -62,5 +65,7 @@ fun TapeRackDemoScreen() {
     TapeRackScroll(
         items = items,
         modifier = Modifier.fillMaxSize(),
+        background = palette.page,
+        contentColor = palette.ink,
     )
 }
