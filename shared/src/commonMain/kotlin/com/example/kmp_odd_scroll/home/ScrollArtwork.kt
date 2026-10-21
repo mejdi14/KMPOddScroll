@@ -7,6 +7,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import kotlin.math.cos
 import kotlin.math.sin
@@ -31,6 +32,7 @@ fun ScrollArtwork(route: String, modifier: Modifier = Modifier) {
             "flex_carousel" -> flexCarousel()
             "infinite_menu" -> infiniteMenu()
             "card_sphere" -> cardSphere()
+            "lift_stack" -> liftStack()
             else -> infiniteSpiral()
         }
     }
@@ -180,4 +182,42 @@ private fun DrawScope.cardSphere() {
         topLeft = Offset(cx - hero / 2f, cy - hero * 0.62f),
         size = Size(hero, hero * 1.25f),
     )
+}
+
+/**
+ * The deck in miniature: four flat layers seen from a quarter turn, and the
+ * card it stopped past standing up off the top one.
+ */
+private fun DrawScope.liftStack() {
+    val half = size.minDimension * 0.27f
+    val squash = 0.47f
+    val layer = half * 0.36f
+    val cx = size.width / 2f
+    val top = size.height * 0.5f
+
+    fun plate(cy: Float, color: Color) {
+        val path = Path().apply {
+            moveTo(cx - half, cy)
+            lineTo(cx, cy - half * squash)
+            lineTo(cx + half, cy)
+            lineTo(cx, cy + half * squash)
+            close()
+        }
+        drawPath(path, color)
+    }
+    for (i in 3 downTo 0) {
+        plate(top + i * layer, Color(0xFFBFBFB6).copy(alpha = 0.3f + (3 - i) * 0.17f))
+    }
+
+    // Upright on the line through the top plate's middle, raised clear of it.
+    val rise = half * 0.62f
+    val foot = top - rise + half * squash * 0.5f
+    val path = Path().apply {
+        moveTo(cx - half / 2f, foot + half * squash / 2f)
+        lineTo(cx + half / 2f, foot - half * squash / 2f)
+        lineTo(cx + half / 2f, foot - half * squash / 2f - half * 1.26f)
+        lineTo(cx - half / 2f, foot + half * squash / 2f - half * 1.26f)
+        close()
+    }
+    drawPath(path, Color(0xFFF4F1E8))
 }

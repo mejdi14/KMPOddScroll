@@ -6,6 +6,7 @@ import com.example.kmp_odd_scroll.demos.EdgeDistortionDemoScreen
 import com.example.kmp_odd_scroll.demos.FlexCarouselDemoScreen
 import com.example.kmp_odd_scroll.demos.InfiniteMenuDemoScreen
 import com.example.kmp_odd_scroll.demos.InfiniteSpiralDemoScreen
+import com.example.kmp_odd_scroll.demos.LiftStackDemoScreen
 
 /**
  * One entry per scroll style. Drives both the home gallery and the navigation
@@ -57,5 +58,12 @@ val scrollDemos: List<ScrollDemo> = listOf(
         title = "Card Sphere",
         subtitle = "A field of drawn cards that coasts and settles one at the front",
         screen = { CardSphereDemoScreen() },
+    ),
+    ScrollDemo(
+        route = "lift_stack",
+        category = "Isometric",
+        title = "Lift Stack",
+        subtitle = "A deck of pictures that runs up through itself and stands up the one it stops past",
+        screen = { LiftStackDemoScreen() },
     ),
 )

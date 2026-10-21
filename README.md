@@ -228,6 +228,41 @@ CardSphereScroll(
 The field itself is generated from a fixed seed, so the arrangement is the same
 every run. Like Infinite Menu it needs no shader anywhere.
 
+### Lift Stack
+
+A deck of pictures laid flat in a stack and seen from above at a quarter turn.
+It runs up through itself a card at a time — each one comes in at the bottom,
+rides up four layers and fades off the top — except the card it stops past,
+which is held in the top slot, lifts off it and turns upright to face you, with
+its title let in underneath. Drag it, flick it, or tap and scroll to step it on.
+
+The geometry and timing were measured off a recording of the reference rather
+than eyeballed: a pinhole camera fitted to the resting stack (yaw 45°, looking
+down 27°, fifteen card sides away), a layer gap of 0.274 card sides, a lift of
+0.73 sides, and the reference's own curves for the run, the settle, the rise
+and the turn.
+
+```kotlin
+LiftStackScroll(
+    items = listOf(LiftStackItem(image, "Green Wheat Fields", "Vincent van Gogh"), /* ... */),
+    modifier = Modifier.fillMaxSize(),
+)
+```
+
+| Parameter | Default | |
+| --- | --- | --- |
+| `items` | — | cards in order; the deck repeats, so it has no end |
+| `background` | `#F6F6F1` | page colour |
+| `contentColor` | `#141414` | caption text |
+| `markerColor` | `#D9443F` | the square that leads the caption |
+| `captions` | `true` | title and credit of the standing card |
+| `state` | intro of `7` | `rememberLiftStackScrollState(intro)` — cards run on first show; `0` opens at rest |
+
+`LiftStackScrollState.step(by)` runs the deck on from a host's own controls.
+Every card is one `drawImage` through its own exact projection — Compose's
+`Matrix` carries the perspective terms on every target — so it needs no shader
+and no strips anywhere.
+
 ## Image credits
 
 ### Photographs
@@ -250,7 +285,8 @@ The `grid_*.jpg` set is the same six photographs, cut 800x1000 for the portrait
 cards of the Edge Distortion gallery.
 
 Flex Carousel uses museum scans of paintings, also from Unsplash and under the
-same licence, cut 800x600 for its 4:3 cards.
+same licence, cut 800x600 for its 4:3 cards. Lift Stack uses the same six, cut
+square.
 
 | File | Scanned by |
 | --- | --- |
