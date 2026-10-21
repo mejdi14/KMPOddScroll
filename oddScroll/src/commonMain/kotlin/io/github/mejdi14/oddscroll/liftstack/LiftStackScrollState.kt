@@ -39,6 +39,12 @@ private const val STAND_SECONDS = 1.602f
 private val standEase = cubicBezierEase(0.483f, 0.018f, 0.130f, 1.034f)
 
 /**
+ * The lift and turn are played this much faster than the reference, both up
+ * and down. The curves keep their shape; only the clock runs quicker.
+ */
+private const val LIFT_PACE = 1.5f
+
+/**
  * Seconds of parting speed a throw is aimed on by. The settle curve starts at
  * 0.93 of its distance a second, so a throw this long leaves the deck moving
  * at the speed the finger let go of it.
@@ -222,10 +228,11 @@ class LiftStackScrollState internal constructor(intro: Int) {
 
         if (selected.index != NONE) {
             // Down is the same animation run backwards, at the same pace.
+            val step = dt * LIFT_PACE
             selected.seconds = if (selected.raising) {
-                (selected.seconds + dt).coerceAtMost(LIFT_SECONDS)
+                (selected.seconds + step).coerceAtMost(LIFT_SECONDS)
             } else {
-                (selected.seconds - dt).coerceAtLeast(0f)
+                (selected.seconds - step).coerceAtLeast(0f)
             }
             if (!selected.raising && selected.seconds <= 0f) selected.index = NONE
         }
