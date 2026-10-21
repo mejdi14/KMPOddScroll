@@ -450,13 +450,14 @@ square. Tape Rack prints both the scans and the wide photographs on its labels.
 | `art_village.jpg` | [Birmingham Museums Trust](https://unsplash.com/@birminghammuseumstrust) |
 | `art_cypresses.jpg` | [Tofan Teodor](https://unsplash.com/@tofanteodor) |
 
-Gallery Wall hangs fourteen `museum_*.jpg` masterworks instead, each cut 1200x800
-(3:2) from a 1,920 px scan on Wikipedia / Wikimedia Commons: *The Starry Night*,
-*Flaming June*, *A Sunday Afternoon on the Island of La Grande Jatte*, *The
-Scream*, *Whistler's Mother*, *The Kiss*, *Le Déjeuner sur l'herbe*, *The Great
-Wave off Kanagawa*, *The Night Watch*, *The Birth of Venus*, *The Calling of
-Saint Matthew*, *Composition VII*, *Wanderer above the Sea of Fog* and *Olympia*.
-The reuse terms of each scan are on its Commons page.
+Gallery Wall hangs fourteen `museum_*.jpg` paintings instead, each cut 1200x800
+(3:2, so every one hangs the same height and one and a half times as wide) from
+a 1,800 px or larger scan on Wikipedia / Wikimedia Commons: *Sunflowers*,
+*Boating*, *Flaming June*, *Water Lilies and Japanese Bridge*, *The Roses of
+Heliogabalus*, *Little Girl in a Blue Armchair*, *The Kiss*, *Almond Blossoms*,
+*Luncheon of the Boating Party*, *The Cliff Walk at Pourville*, *The Birth of
+Venus*, *Poppy Field*, *Lady with a Fan* and *Strolling along the Seashore*. The
+reuse terms of each scan are on its Commons page.
 
 ### Illustrations
 
