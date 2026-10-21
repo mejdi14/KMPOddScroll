@@ -16,14 +16,15 @@ import androidx.compose.ui.graphics.asAndroidBitmap
  *
  * - Across the pane it throws back the room, running between the three amounts
  *   worked out for the piece.
- * - Its rounded edge is a bevel that bends what lies under it: the painting is
+ * - Its square-cornered edge is a bevel that bends what lies under it: the painting is
  *   pulled out towards the edge, most at the very edge and with a ripple and a
  *   swirl along it, and split a little into red, green and blue. Where the bend
  *   reaches past the painting it finds the bare wall.
  * - Along the edge, a lit rim facing the light from the upper left, a glow
  *   inside it, and a little shade where the edge turns side on.
  *
- * The bevel is 1.4 corner radii deep and bends by up to 0.65 of one.
+ * The bevel bends by up to 0.46 of its own width, and lights the outer 0.57
+ * of it. Its normals meet on the diagonals, mitred like a frame's.
  */
 private const val SOURCE = """
 uniform shader image;
@@ -31,17 +32,17 @@ uniform float2 span;
 uniform float3 fresnel;
 uniform float3 wall;
 uniform float4 pane;
-uniform float radius;
+uniform float bevel;
 uniform float edges;
 uniform float rim;
 
-float sdRoundedRect(float2 p, float2 halfSize, float r) {
-    float2 q = abs(p) - (halfSize - float2(r));
-    return length(max(q, 0.0)) - r + min(max(q.x, q.y), 0.0);
+float sdBox(float2 p, float2 halfSize) {
+    float2 q = abs(p) - halfSize;
+    return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
 }
 
-float2 gradSdRoundedRect(float2 p, float2 halfSize, float r) {
-    float2 q = abs(p) - (halfSize - float2(r));
+float2 gradBox(float2 p, float2 halfSize) {
+    float2 q = abs(p) - halfSize;
     if (q.x >= 0.0 || q.y >= 0.0) {
         return sign(p) * normalize(max(q, 0.0) + 1e-5);
     }
@@ -51,7 +52,7 @@ float2 gradSdRoundedRect(float2 p, float2 halfSize, float r) {
 
 half4 main(float2 xy) {
     float2 p = xy - pane.xy;
-    float sd = sdRoundedRect(p, pane.zw, radius);
+    float sd = sdBox(p, pane.zw);
     float cover = clamp(0.5 - sd, 0.0, 1.0);
     if (cover <= 0.0) return half4(0.0);
     float d = max(-sd, 0.0);
@@ -61,12 +62,11 @@ half4 main(float2 xy) {
     float4 color = float4(wall * room, room);
     if (edges <= 0.0) return half4(color * cover);
 
-    float2 n = gradSdRoundedRect(p, pane.zw, min(radius * 1.5, min(pane.z, pane.w)));
+    float2 n = gradBox(p, pane.zw);
 
-    float bevel = radius * 1.4;
     if (d < bevel) {
         float k = d / bevel;
-        float amount = radius * 0.65 * pow(1.0 - k, 1.3) * (1.0 + 0.45 * sin(k * 13.0));
+        float amount = bevel * 0.464 * pow(1.0 - k, 1.3) * (1.0 + 0.45 * sin(k * 13.0));
         float2 base = (-n + float2(-n.y, n.x) * 0.4 * sin(k * 9.0 + 1.2)) * amount;
         float disp = 0.3 * (1.0 - k);
         float4 r = float4(image.eval(xy + base * (1.0 + disp)));
@@ -77,7 +77,7 @@ half4 main(float2 xy) {
         color = float4(bent * weight, weight) + color * (1.0 - weight);
     }
 
-    float band = radius * 0.8;
+    float band = bevel * 0.571;
     if (d < band) {
         float fres = pow(1.0 - d / band, 3.0);
         float facing = dot(n, normalize(float2(-0.55, -0.85)));
@@ -127,7 +127,7 @@ private class AgslGlass : GlassShader {
         centreY: Float,
         halfWidth: Float,
         halfHeight: Float,
-        radius: Float,
+        bevel: Float,
         edges: Float,
         rim: Float,
     ): Brush {
@@ -136,7 +136,7 @@ private class AgslGlass : GlassShader {
         shader.setFloatUniform("fresnel", near, middle, far)
         shader.setFloatUniform("wall", wall.red, wall.green, wall.blue)
         shader.setFloatUniform("pane", centreX, centreY, halfWidth, halfHeight)
-        shader.setFloatUniform("radius", radius)
+        shader.setFloatUniform("bevel", bevel)
         shader.setFloatUniform("edges", edges)
         shader.setFloatUniform("rim", rim)
         return brush
