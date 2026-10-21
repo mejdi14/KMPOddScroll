@@ -90,21 +90,32 @@ data class GalleryWallItem(
  * [depth] out, its edges show as the wall turns away from the eye, and it
  * throws a soft shadow down and to the right onto the wall behind. The moulding
  * is four mitred sticks, each with its own grain running along it, under a
- * satin finish lit from the upper left. Sizes are in heights of the tallest
- * painting — call that a metre, and the default stands two centimetres deep.
- * The frame hangs outside the canvas, so a framed painting stands that much
- * bigger.
+ * satin finish lit from the upper left. The painting sits [recess] back inside
+ * it, behind [glass], so the inside of the moulding shows round it as the wall
+ * turns away. Sizes are in heights of the tallest painting — call that a metre,
+ * and the default stands four and a half centimetres deep, room for the glass,
+ * a gap behind it, the canvas and its backing. The frame hangs outside the
+ * canvas, so a framed painting stands that much bigger.
  */
 data class GalleryWallFrame(
     val width: Float = 0.06f,
     /** The wood, before the grain and the light; walnut by default. */
     val color: Color = Color(0xFF7B4F2C),
     /** How far the face stands off the wall; 0 hangs it flat. */
-    val depth: Float = 0.02f,
+    val depth: Float = 0.045f,
     /** How far the shadow falls; 0 for none. */
-    val shadow: Float = 0.03f,
+    val shadow: Float = 0.04f,
     /** How strongly the grain shows; 0 for a smooth painted or gilt finish. */
     val grain: Float = 1f,
+    /** How far the painting sits back from the face, up to [depth]; 0 for flush. */
+    val recess: Float = 0.015f,
+    /**
+     * A pane over the painting, flush with the face. It throws back the wall a
+     * little square on and more and more as the wall turns away, and the lit
+     * doorway behind you shows in it as a soft glow that stays put while the
+     * paintings slide under it.
+     */
+    val glass: Boolean = true,
 )
 
 /*
@@ -328,7 +339,7 @@ fun GalleryWallScroll(
             // on a dropped frame.
             val close = if (state.canInspect || state.walk > 0f) art.close(hang.wrap(subject), room.closePx) else null
             rotate(room.roll, Offset(room.cx, room.cy)) {
-                drawWall(art, hang, room, state.position, close.takeIf { room.zoom > BITMAP_SCALE }, subject)
+                drawWall(art, hang, room, state.position, close.takeIf { room.zoom > BITMAP_SCALE }, subject, background)
             }
         }
 
@@ -462,6 +473,12 @@ private class Room {
     /** Bitmap pixels to a card height that the painting walked up to wants. */
     var closePx = 1f
 
+    /**
+     * How much of the doorway shows in the glass: all of it from across the
+     * room, none once walked up, where the visitor stands in its way.
+     */
+    var glare = 1f
+
     private val point = FloatArray(2)
 
     fun fit(w: Float, h: Float) {
@@ -487,7 +504,8 @@ private class Room {
             focal * hang.heights[i] / (FILL_HEIGHT * height),
         ).coerceAtMost(DEPTH)
         closePx = focal / stand * 1.05f
-        val z = (DEPTH - stand) * WALK_EASE.transform(walk) - ENTER_FROM * (1f - WALK_EASE.transform(entry))
+        glare = 1f - WALK_EASE.transform(walk)
+        val z =(DEPTH - stand) * WALK_EASE.transform(walk) - ENTER_FROM * (1f - WALK_EASE.transform(entry))
         // The two walks never overlap, so their steps simply add.
         eyeX = 0f
         eyeY = 0f
@@ -585,10 +603,42 @@ private fun wallPoint(s: Float, out: FloatArray, inset: Float = 0f) {
     out[1] = z
 }
 
+/** The wall's normal at [s] along it, pointing into the room: x and depth into [out]. */
+private fun wallNormal(s: Float, out: FloatArray) {
+    val a = abs(s)
+    val x: Float
+    val z: Float
+    when {
+        a <= FLAT -> {
+            x = 0f
+            z = -1f
+        }
+        a <= FLAT + ARC -> {
+            val turn = (a - FLAT) / CORNER
+            x = -sin(turn)
+            z = -cos(turn)
+        }
+        else -> {
+            x = -1f
+            z = 0f
+        }
+    }
+    out[0] = if (s < 0f) -x else x
+    out[1] = z
+}
+
 // --- drawing -----------------------------------------------------------------
 
-/** [close], when there is one, stands in for painting [closeIndex] (unwrapped). */
-private fun DrawScope.drawWall(art: WallArt, hang: Hang, room: Room, position: Float, close: CardArt?, closeIndex: Int) {
+/** [close], when there is one, stands in for painting [closeIndex] (unwrapped); [wall] is what the glass throws back. */
+private fun DrawScope.drawWall(
+    art: WallArt,
+    hang: Hang,
+    room: Room,
+    position: Float,
+    close: CardArt?,
+    closeIndex: Int,
+    wall: Color,
+) {
     if (size.width <= 0f || size.height <= 0f) return
     val reach = room.reach
     val laps = floor((position - reach - hang.starts[0]) / hang.lap).toInt()
@@ -599,7 +649,7 @@ private fun DrawScope.drawWall(art: WallArt, hang: Hang, room: Room, position: F
         val left = hang.start(i) - position
         if (left > reach) break
         val card = if (close != null && i == closeIndex) close else art.cards[hang.wrap(i)]
-        if (left + card.wallWidth >= -reach) drawCard(card, left, room)
+        if (left + card.wallWidth >= -reach) drawCard(card, left, room, wall)
         i++
     }
 }
@@ -608,23 +658,177 @@ private val matrix = Matrix()
 private val quad = FloatArray(8)
 private val p0 = FloatArray(2)
 private val p1 = FloatArray(2)
+private val n0 = FloatArray(2)
+private val n1 = FloatArray(2)
 
 /** Breaks along the wall where it changes from flat to curved. */
 private val bends = floatArrayOf(-FLAT - ARC, -FLAT, FLAT, FLAT + ARC)
 
-/** One painting whose left edge is [left] along the wall: what is on the wall behind it, an edge, then its face. */
-private fun DrawScope.drawCard(card: CardArt, left: Float, room: Room) {
+/**
+ * One painting whose left edge is [left] along the wall: what is on the wall
+ * behind it, the painting sunk in the frame, an edge, then the face and its
+ * glass. The edge goes down after the painting, which it stands in front of.
+ */
+private fun DrawScope.drawCard(card: CardArt, left: Float, room: Room, wall: Color) {
     card.wall?.let { drawSheet(it, card.pxPerUnit, card.top, left, 0f, room) }
+    card.back?.let { drawSheet(it, card.pxPerUnit, card.top, left, card.depth - card.recess, room) }
     if (card.edges != null) drawEdges(card, card.edges, left, room)
-    drawSheet(card.face, card.pxPerUnit, card.top, left, card.depth, room)
+    val glass = if (card.glass) pane.aim(card, left, room, wall) else null
+    drawSheet(card.face, card.pxPerUnit, card.top, left, card.depth, room, glass)
+}
+
+/*
+ * The glass. It throws back the room by Schlick's approximation of Fresnel —
+ * four percent square on, more and more as the wall turns away — and the room
+ * it throws back is the wall across from it. The doorway the visitor came in
+ * by, behind them and to the left, shows in it as a glow.
+ */
+private const val GLASS_SQUARE_ON = 0.04f
+private const val GLASS_MOST = 0.5f
+
+/** The doorway's middle, in the room. */
+private const val DOOR_X = -0.9f
+private const val DOOR_Y = -0.6f
+private const val DOOR_Z = -ENTER_FROM - 1f
+
+/** The doorway's glow on the glass: half its width and height in card heights, and how bright its middle. */
+private const val GLARE_WIDE = 0.22f
+private const val GLARE_TALL = 0.42f
+private const val GLARE_ALPHA = 0.16f
+private val GLARE = Color(0xFFFFFBF2)
+
+/** The glass over the painting being drawn, worked out once a painting; sizes in face-bitmap pixels. */
+private class Glaze {
+    var wall = Color.White
+
+    /** The opening, in from each side, and the face's width. */
+    var opening = 0f
+    var width = 0f
+
+    /** The doorway's glow: its middle, half-sizes and strength — 0 when it is not on this pane. */
+    var gx = 0f
+    var gy = 0f
+    var rx = 1f
+    var ry = 1f
+    var glow = 0f
+
+    /**
+     * Finds where the doorway shows on [card]'s glass. The pane is taken flat,
+     * square to the wall at the painting's middle, so the glow does not break
+     * where a painting bends round a corner.
+     */
+    fun aim(card: CardArt, left: Float, room: Room, wall: Color): Glaze {
+        val px = card.pxPerUnit
+        this.wall = wall
+        opening = card.opening.toFloat()
+        width = card.face.width.toFloat()
+        glow = 0f
+        if (room.glare <= 0f) return this
+        val mid = left + card.face.width / px / 2f
+        wallPoint(mid, p0, card.depth)
+        wallNormal(mid, n0)
+        val nx = n0[0]
+        val nz = n0[1]
+        val eye = (room.eyeX - p0[0]) * nx + (room.eyeZ - p0[1]) * nz
+        val door = (DOOR_X - p0[0]) * nx + (DOOR_Z - p0[1]) * nz
+        if (eye <= 0f || door <= 0f) return this
+        // Where the line from the eye to the doorway's mirror image crosses the pane.
+        val t = eye / (eye + door)
+        val hx = room.eyeX + t * (DOOR_X - 2f * door * nx - room.eyeX)
+        val hz = room.eyeZ + t * (DOOR_Z - 2f * door * nz - room.eyeZ)
+        val hy = room.eyeY + t * (DOOR_Y - room.eyeY)
+        val along = (hx - p0[0]) * -nz + (hz - p0[1]) * nx
+        gx = (mid + along - left) * px
+        gy = (hy - card.top) * px
+        rx = GLARE_WIDE * px
+        ry = GLARE_TALL * px
+        glow = GLARE_ALPHA * room.glare
+        return this
+    }
+}
+
+private val pane = Glaze()
+
+/** How much of the room glass throws back, met at the wall normal [nx], [nz] by a ray along [x], [z]. */
+private fun reflectance(nx: Float, nz: Float, x: Float, z: Float): Float {
+    val c = abs(nx * x + nz * z) / max(sqrt((nx * nx + nz * nz) * (x * x + z * z)), 1e-6f)
+    val k = 1f - c.coerceAtMost(1f)
+    return min(GLASS_SQUARE_ON + (1f - GLASS_SQUARE_ON) * k * k * k * k * k, GLASS_MOST)
+}
+
+/**
+ * The glass over one piece of a face, in the piece's own pixels, [start] to
+ * [start] + [w] of the face's columns and [s0] to [s1] along the wall; ([x0],
+ * [z0]) and ([x1], [z1]) are its ends from the eye. The wall is thrown back at
+ * either end and the middle, so neighbouring pieces meet without a step.
+ */
+private fun DrawScope.drawGlass(
+    glaze: Glaze,
+    start: Int,
+    w: Int,
+    h: Int,
+    s0: Float,
+    s1: Float,
+    x0: Float,
+    z0: Float,
+    x1: Float,
+    z1: Float,
+) {
+    val l = max(glaze.opening - start, 0f)
+    val r = min(glaze.width - glaze.opening - start, w.toFloat())
+    val t = glaze.opening
+    val b = h - glaze.opening
+    if (r <= l || b <= t) return
+    wallNormal(s0, n0)
+    wallNormal(s1, n1)
+    val near = reflectance(n0[0], n0[1], x0, z0)
+    val far = reflectance(n1[0], n1[1], x1, z1)
+    val middle = reflectance(n0[0] + n1[0], n0[1] + n1[1], (x0 + x1) / 2f, (z0 + z1) / 2f)
+    drawRect(
+        Brush.horizontalGradient(
+            0f to glaze.wall.copy(alpha = near),
+            0.5f to glaze.wall.copy(alpha = middle),
+            1f to glaze.wall.copy(alpha = far),
+            startX = 0f,
+            endX = w.toFloat(),
+        ),
+        topLeft = Offset(l, t),
+        size = Size(r - l, b - t),
+    )
+
+    val cx = glaze.gx - start
+    if (glaze.glow <= 0f || cx + glaze.rx < l || cx - glaze.rx > r) return
+    // Round, then stood up tall; the opening goes the other way so it still bounds it.
+    val k = glaze.ry / glaze.rx
+    withTransform({ translate(cx, glaze.gy); scale(1f, k, Offset.Zero) }) {
+        drawRect(
+            Brush.radialGradient(
+                0f to GLARE.copy(alpha = glaze.glow),
+                0.45f to GLARE.copy(alpha = glaze.glow * 0.45f),
+                1f to Color.Transparent,
+                center = Offset.Zero,
+                radius = glaze.rx,
+            ),
+            topLeft = Offset(l - cx, (t - glaze.gy) / k),
+            size = Size(r - l, (b - t) / k),
+        )
+    }
 }
 
 /**
  * A bitmap whose left edge is [left] along the wall, [inset] off it: cut where
  * the wall bends, each flat stretch through one exact projection and each
- * curved one in chords.
+ * curved one in chords; [glaze] glasses its opening.
  */
-private fun DrawScope.drawSheet(bitmap: ImageBitmap, pxPerUnit: Float, top: Float, left: Float, inset: Float, room: Room) {
+private fun DrawScope.drawSheet(
+    bitmap: ImageBitmap,
+    pxPerUnit: Float,
+    top: Float,
+    left: Float,
+    inset: Float,
+    room: Room,
+    glaze: Glaze? = null,
+) {
     val from = max(left, -room.reach)
     val to = min(left + bitmap.width / pxPerUnit, room.reach)
     if (to <= from) return
@@ -635,7 +839,7 @@ private fun DrawScope.drawSheet(bitmap: ImageBitmap, pxPerUnit: Float, top: Floa
         val curved = abs((a + b) / 2f) in FLAT..(FLAT + ARC)
         val pieces = if (curved) max(1, ceil((b - a) / (ARC / ARC_CHORDS)).toInt()) else 1
         for (n in 0 until pieces) {
-            drawPiece(bitmap, pxPerUnit, top, left, inset, a + (b - a) * n / pieces, a + (b - a) * (n + 1) / pieces, room)
+            drawPiece(bitmap, pxPerUnit, top, left, inset, a + (b - a) * n / pieces, a + (b - a) * (n + 1) / pieces, room, glaze)
         }
         a = b
     }
@@ -653,6 +857,7 @@ private fun DrawScope.drawPiece(
     a: Float,
     b: Float,
     room: Room,
+    glaze: Glaze?,
 ) {
     // On whole columns of the bitmap, so neighbours meet exactly.
     val c0 = ((a - left) * pxPerUnit).roundToInt().coerceIn(0, bitmap.width)
@@ -690,6 +895,9 @@ private fun DrawScope.drawPiece(
             dstSize = IntSize(w, h),
             filterQuality = FilterQuality.Medium,
         )
+        if (glaze != null) {
+            drawGlass(glaze, start, w, h, left + start / pxPerUnit, left + c1 / pxPerUnit, x0, z0, x1, z1)
+        }
     }
 }
 
@@ -779,7 +987,7 @@ private fun quadMatrix(q: FloatArray, w: Float, h: Float, out: Matrix): Boolean 
 
 /** A painting with its label under it, square on, as hung. */
 private class CardArt(
-    /** The painting, framed or not; with its label too when it hangs flat. */
+    /** The painting and label when it hangs flat; the frame alone, open in the middle, when framed. */
     val face: ImageBitmap,
     /** Bitmap pixels to a card height, both ways. */
     val pxPerUnit: Float,
@@ -791,6 +999,13 @@ private class CardArt(
     val edges: ImageBitmap? = null,
     /** How far the face stands off the wall, in card heights. */
     val depth: Float = 0f,
+    /** The painting in the frame, the inside of the moulding round it; the face's size. */
+    val back: ImageBitmap? = null,
+    /** How far [back] sits behind the face, in card heights. */
+    val recess: Float = 0f,
+    val glass: Boolean = false,
+    /** The face's opening, in from each side, in its pixels. */
+    val opening: Int = 0,
 ) {
     /** How far along the wall it runs, label and shadow included. */
     val wallWidth: Float get() = max(face.width, wall?.width ?: 0) / pxPerUnit
@@ -882,16 +1097,32 @@ private class WallArt(
         }
 
         if (frame == null) return CardArt(paint(bw, bh) { canvas(); label() }, pxPerUnit, top)
+        val recess = (frame.recess.coerceIn(0f, frame.depth) * unit).roundToInt().coerceAtMost(depth)
         val face = paint(outerW, outerH) {
-            canvas()
             drawFrame(frame, outerW.toFloat(), outerH.toFloat(), border.toFloat(), unit, seed)
+        }
+        val back = paint(outerW, outerH) {
+            drawReturns(frame, outerW.toFloat(), outerH.toFloat(), border.toFloat())
+            canvas()
+            drawSightShadow(outerW.toFloat(), outerH.toFloat(), border.toFloat(), max(0.012f * unit, 1.2f * recess))
         }
         val wall = paint(bw, bh) {
             drawShadow(outerW.toFloat(), outerH.toFloat(), shadow.toFloat())
             label()
         }
         val edges = if (depth > 0) paint(2 * depth, outerH) { drawFrameSides(frame, depth.toFloat(), outerH.toFloat(), unit, seed) } else null
-        return CardArt(face, pxPerUnit, top, wall, edges, if (edges != null) depth / pxPerUnit else 0f)
+        return CardArt(
+            face = face,
+            pxPerUnit = pxPerUnit,
+            top = top,
+            wall = wall,
+            edges = edges,
+            depth = depth / pxPerUnit,
+            back = back,
+            recess = recess / pxPerUnit,
+            glass = frame.glass,
+            opening = border,
+        )
     }
 }
 
@@ -1079,17 +1310,65 @@ private fun DrawScope.drawFrame(frame: GalleryWallFrame, w: Float, h: Float, bor
     drawLine(joint, Offset(w, h), Offset(w - mould, h - mould), seam)
     drawLine(joint, Offset(0f, h), Offset(mould, h - mould), seam)
     drawRect(joint, topLeft = Offset(mould, mould), size = Size(w - 2f * mould, h - 2f * mould), style = Stroke(seam))
+}
 
-    // The inner lip throws a little shadow onto the canvas itself.
-    val lip = max(1f, 0.012f * unit)
+/**
+ * Black over each inside face of the moulding — top, right, bottom, left — for
+ * a light from the upper left: the top and left face away from it, the bottom
+ * and right towards it, all down a well.
+ */
+private val RETURN_SHADE = floatArrayOf(0.62f, 0.2f, 0.3f, 0.5f)
+
+/**
+ * The inside of the frame round the opening, from the canvas out, on a [w] by
+ * [h] bitmap with the canvas [border] in. Drawn flat behind the face, it fills
+ * exactly the band a return sloping from the face down to the canvas would
+ * show, which is all of it that is ever seen.
+ */
+private fun DrawScope.drawReturns(frame: GalleryWallFrame, w: Float, h: Float, border: Float) {
+    for (side in 0..3) {
+        val path = Path()
+        val (outerA, outerB, innerB, innerA) = when (side) {
+            0 -> listOf(Offset(0f, 0f), Offset(w, 0f), Offset(w - border, border), Offset(border, border))
+            1 -> listOf(Offset(w, 0f), Offset(w, h), Offset(w - border, h - border), Offset(w - border, border))
+            2 -> listOf(Offset(w, h), Offset(0f, h), Offset(border, h - border), Offset(w - border, h - border))
+            else -> listOf(Offset(0f, h), Offset(0f, 0f), Offset(border, border), Offset(border, h - border))
+        }
+        path.moveTo(outerA.x, outerA.y)
+        path.lineTo(outerB.x, outerB.y)
+        path.lineTo(innerB.x, innerB.y)
+        path.lineTo(innerA.x, innerA.y)
+        path.close()
+        drawPath(path, lerp(frame.color, Color.Black, RETURN_SHADE[side]))
+    }
+}
+
+/**
+ * The shadow the frame throws onto a canvas sunk in it, [fall] onto it from
+ * the top and left, and a little dark in the corners of the well on the others.
+ */
+private fun DrawScope.drawSightShadow(w: Float, h: Float, border: Float, fall: Float) {
+    val iw = w - 2f * border
+    val ih = h - 2f * border
     drawRect(
-        Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.28f), Color.Transparent), border, border + lip),
+        Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.4f), Color.Transparent), border, border + fall),
         topLeft = Offset(border, border),
-        size = Size(w - 2f * border, lip),
+        size = Size(iw, fall),
     )
     drawRect(
-        Brush.horizontalGradient(listOf(Color.Black.copy(alpha = 0.18f), Color.Transparent), border, border + lip),
+        Brush.horizontalGradient(listOf(Color.Black.copy(alpha = 0.28f), Color.Transparent), border, border + fall),
         topLeft = Offset(border, border),
-        size = Size(lip, h - 2f * border),
+        size = Size(fall, ih),
+    )
+    val rim = fall * 0.5f
+    drawRect(
+        Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.14f)), h - border - rim, h - border),
+        topLeft = Offset(border, h - border - rim),
+        size = Size(iw, rim),
+    )
+    drawRect(
+        Brush.horizontalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.14f)), w - border - rim, w - border),
+        topLeft = Offset(w - border - rim, border),
+        size = Size(rim, ih),
     )
 }
