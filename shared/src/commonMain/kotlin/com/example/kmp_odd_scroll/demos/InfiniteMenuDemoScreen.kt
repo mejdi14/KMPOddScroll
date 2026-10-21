@@ -7,59 +7,78 @@ import androidx.compose.ui.Modifier
 import io.github.mejdi14.oddscroll.infinitemenu.InfiniteMenuItem
 import io.github.mejdi14.oddscroll.infinitemenu.InfiniteMenuScroll
 import kmpoddscroll.shared.generated.resources.Res
-import kmpoddscroll.shared.generated.resources.animal_bear
-import kmpoddscroll.shared.generated.resources.animal_bird
-import kmpoddscroll.shared.generated.resources.animal_bison
-import kmpoddscroll.shared.generated.resources.animal_bunny
-import kmpoddscroll.shared.generated.resources.animal_deer
-import kmpoddscroll.shared.generated.resources.animal_elephant
-import kmpoddscroll.shared.generated.resources.animal_ferret
-import kmpoddscroll.shared.generated.resources.animal_giraffe
-import kmpoddscroll.shared.generated.resources.animal_hare
-import kmpoddscroll.shared.generated.resources.animal_lion
-import kmpoddscroll.shared.generated.resources.animal_lion_cub
-import kmpoddscroll.shared.generated.resources.animal_penguin
-import kmpoddscroll.shared.generated.resources.animal_pig
-import kmpoddscroll.shared.generated.resources.animal_rabbit
-import kmpoddscroll.shared.generated.resources.animal_raccoon
-import kmpoddscroll.shared.generated.resources.animal_rhino
-import kmpoddscroll.shared.generated.resources.animal_stag
-import kmpoddscroll.shared.generated.resources.animal_zebra
-import kmpoddscroll.shared.generated.resources.animal_zebra_run
+import kmpoddscroll.shared.generated.resources.movie_2001_a_space_odyssey
+import kmpoddscroll.shared.generated.resources.movie_a_clockwork_orange
+import kmpoddscroll.shared.generated.resources.movie_akira
+import kmpoddscroll.shared.generated.resources.movie_alien
+import kmpoddscroll.shared.generated.resources.movie_amelie
+import kmpoddscroll.shared.generated.resources.movie_black_swan
+import kmpoddscroll.shared.generated.resources.movie_blade_runner
+import kmpoddscroll.shared.generated.resources.movie_drive
+import kmpoddscroll.shared.generated.resources.movie_dune
+import kmpoddscroll.shared.generated.resources.movie_everything_everywhere_all_at_once
+import kmpoddscroll.shared.generated.resources.movie_her
+import kmpoddscroll.shared.generated.resources.movie_in_the_mood_for_love
+import kmpoddscroll.shared.generated.resources.movie_jaws
+import kmpoddscroll.shared.generated.resources.movie_la_la_land
+import kmpoddscroll.shared.generated.resources.movie_moonlight
+import kmpoddscroll.shared.generated.resources.movie_parasite
+import kmpoddscroll.shared.generated.resources.movie_portrait_of_a_lady_on_fire
+import kmpoddscroll.shared.generated.resources.movie_pulp_fiction
+import kmpoddscroll.shared.generated.resources.movie_spirited_away
+import kmpoddscroll.shared.generated.resources.movie_star_wars
+import kmpoddscroll.shared.generated.resources.movie_the_batman
+import kmpoddscroll.shared.generated.resources.movie_the_french_dispatch
+import kmpoddscroll.shared.generated.resources.movie_the_godfather
+import kmpoddscroll.shared.generated.resources.movie_the_grand_budapest_hotel
+import kmpoddscroll.shared.generated.resources.movie_the_handmaiden
+import kmpoddscroll.shared.generated.resources.movie_the_lobster
+import kmpoddscroll.shared.generated.resources.movie_the_shape_of_water
+import kmpoddscroll.shared.generated.resources.movie_the_shining
+import kmpoddscroll.shared.generated.resources.movie_the_silence_of_the_lambs
+import kmpoddscroll.shared.generated.resources.movie_vertigo
 import org.jetbrains.compose.resources.imageResource
 
 /**
- * Nineteen flat-drawn animals, one to a tile.
+ * Thirty film posters, one to a tile.
  *
- * They were cut out of three collection sheets the same way the card sphere's
- * flowers were, except framed square rather than 4:5, since a tile is a square
- * patch of the sphere. Each is framed to fill its own square, so a tall giraffe
- * and a wide rhino sit the same size — without that the giraffes would read as
- * slivers. Two of the three giraffes were left out all the same: at better than
- * three to one they were thin enough to disappear. Credits are in the README.
+ * A tile is a square patch of the sphere, so each portrait poster is cut to a
+ * square from its top, keeping the artwork and clipping the credit block below.
+ * Credits are in the README.
  */
 @Composable
 fun InfiniteMenuDemoScreen() {
     val tiles = listOf(
-        InfiniteMenuItem(imageResource(Res.drawable.animal_elephant), "Elephant"),
-        InfiniteMenuItem(imageResource(Res.drawable.animal_lion), "Lion"),
-        InfiniteMenuItem(imageResource(Res.drawable.animal_zebra), "Zebra"),
-        InfiniteMenuItem(imageResource(Res.drawable.animal_giraffe), "Giraffe"),
-        InfiniteMenuItem(imageResource(Res.drawable.animal_bear), "Bear"),
-        InfiniteMenuItem(imageResource(Res.drawable.animal_penguin), "Penguin"),
-        InfiniteMenuItem(imageResource(Res.drawable.animal_rhino), "Rhinoceros"),
-        InfiniteMenuItem(imageResource(Res.drawable.animal_stag), "Stag"),
-        InfiniteMenuItem(imageResource(Res.drawable.animal_raccoon), "Raccoon"),
-        InfiniteMenuItem(imageResource(Res.drawable.animal_bison), "Bison"),
-        InfiniteMenuItem(imageResource(Res.drawable.animal_pig), "Pig"),
-        InfiniteMenuItem(imageResource(Res.drawable.animal_deer), "Deer"),
-        InfiniteMenuItem(imageResource(Res.drawable.animal_bunny), "Bunny"),
-        InfiniteMenuItem(imageResource(Res.drawable.animal_ferret), "Ferret"),
-        InfiniteMenuItem(imageResource(Res.drawable.animal_zebra_run), "Zebra at a run"),
-        InfiniteMenuItem(imageResource(Res.drawable.animal_lion_cub), "Lion cub"),
-        InfiniteMenuItem(imageResource(Res.drawable.animal_bird), "Bird"),
-        InfiniteMenuItem(imageResource(Res.drawable.animal_hare), "Hare"),
-        InfiniteMenuItem(imageResource(Res.drawable.animal_rabbit), "Rabbit"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_2001_a_space_odyssey), "2001: A Space Odyssey"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_vertigo), "Vertigo"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_the_grand_budapest_hotel), "The Grand Budapest Hotel"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_in_the_mood_for_love), "In the Mood for Love"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_blade_runner), "Blade Runner"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_pulp_fiction), "Pulp Fiction"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_the_godfather), "The Godfather"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_alien), "Alien"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_jaws), "Jaws"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_star_wars), "Star Wars"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_the_silence_of_the_lambs), "The Silence of the Lambs"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_black_swan), "Black Swan"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_moonlight), "Moonlight"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_la_la_land), "La La Land"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_the_shape_of_water), "The Shape of Water"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_the_french_dispatch), "The French Dispatch"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_parasite), "Parasite"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_spirited_away), "Spirited Away"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_akira), "Akira"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_the_shining), "The Shining"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_a_clockwork_orange), "A Clockwork Orange"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_drive), "Drive"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_her), "Her"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_the_lobster), "The Lobster"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_amelie), "Amélie"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_the_handmaiden), "The Handmaiden"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_portrait_of_a_lady_on_fire), "Portrait of a Lady on Fire"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_everything_everywhere_all_at_once), "Everything Everywhere All at Once"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_dune), "Dune"),
+        InfiniteMenuItem(imageResource(Res.drawable.movie_the_batman), "The Batman"),
     )
     val items = remember(tiles) { tiles }
 

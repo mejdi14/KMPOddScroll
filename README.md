@@ -268,11 +268,13 @@ collection sheets from [Freepik](https://www.freepik.com) — each flower found 
 its own run of ink on the paper, its neighbours painted back out, and the result
 framed to the card's 4:5.
 
-The `animal_*.jpg` set used by Infinite Menu was cut the same way out of three
-flat-illustration sheets, also from Freepik, framed square for the sphere's
-tiles.
+The `movie_*.jpg` set used by Infinite Menu is thirty film posters taken from
+each film's English Wikipedia infobox, cut square from the top for the sphere's
+tiles. Posters are copyrighted by their studios and shown here only to
+illustrate the demo, so swap them for your own artwork before using this
+anywhere real.
 
 **Neither set is covered by the licences above.** Freepik's free licence wants
-attribution and does not allow the assets to be redistributed on their own, so
+attribution and does not allow the flowers to be redistributed on their own, so
 swap them for your own artwork before using this anywhere real, or hold a
 Freepik licence that covers it.
