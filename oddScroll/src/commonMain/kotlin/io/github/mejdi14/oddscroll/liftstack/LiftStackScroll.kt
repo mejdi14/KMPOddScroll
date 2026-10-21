@@ -110,22 +110,23 @@ fun rememberLiftStackScrollState(intro: Int = 7): LiftStackScrollState =
 
 /**
  * A deck of pictures laid flat in a stack and seen from above at a quarter
- * turn, which runs up through itself one card at a time — and the card it
- * runs past, rather than fading off the top with the rest, gets up and stands.
+ * turn, which runs up through itself one card at a time — and whose top card,
+ * tapped, gets up off the deck and stands.
  *
  * The whole deck is one number. Every card is a fixed layer below the one
  * before, so where the deck has run to says where each of them is; a card
  * comes in at the bottom, rides up four layers and fades away above the top.
- * The one exception is the card one before where the deck comes to rest: it is
- * held in the top slot, lifts off it, and turns upright about the line through
- * its own middle until it faces you, on clocks of its own. Nothing grows,
- * shrinks or rounds off at any point; the change in size between layers is
- * only the camera's perspective, and each card is drawn through its own exact
+ * Tapping the card in the top slot selects it: it lifts off the slot and turns
+ * upright about the line through its own middle until it faces you, on clocks
+ * of its own, and says what it is underneath. Tapping again plays the same
+ * animation backwards and lays it back in its slot. Nothing grows, shrinks or
+ * rounds off at any point; the change in size between layers is only the
+ * camera's perspective, and each card is drawn through its own exact
  * projection rather than an approximation of one.
  *
- * Drag up and down to run the deck by hand, flick it to throw it, tap or scroll
- * to step it on a card. Whichever card it stops past stands up and says what
- * it is underneath.
+ * Drag up and down to run the deck by hand, flick it to throw it, or scroll to
+ * step it on a card. None of that moves it while a card is selected, or on its
+ * way back down.
  *
  * @param items cards, in order; the deck repeats, so it has no end.
  * @param background page colour.
@@ -192,7 +193,11 @@ fun LiftStackScroll(
                                 change.consume()
                             }
                         }
-                        if (started) state.onDragEnd() else state.step(1)
+                        if (started) {
+                            state.onDragEnd()
+                        } else {
+                            state.onTap(frame.hitsTop(down.position.x, down.position.y, state))
+                        }
                     }
                 }
                 .pointerInput(state) {
@@ -338,6 +343,24 @@ private class StackFrame {
         cardCorners(1f, 0f, 0f, pts)
         layerPx = abs(pts[1] - top) * side
     }
+
+    /** Whether a tap at [x], [y] lands on the card nearest the top slot. */
+    fun hitsTop(x: Float, y: Float, state: LiftStackScrollState): Boolean {
+        val pts = FloatArray(8)
+        cardCorners(state.top - state.phase, 0f, 0f, pts)
+        // Inside a convex quad is on the same side of all four edges.
+        var sign = 0f
+        for (k in 0 until 4) {
+            val ax = originX + pts[k * 2] * side
+            val ay = originY + pts[k * 2 + 1] * side
+            val bx = originX + pts[(k + 1) % 4 * 2] * side
+            val by = originY + pts[(k + 1) % 4 * 2 + 1] * side
+            val cross = (bx - ax) * (y - ay) - (by - ay) * (x - ax)
+            if (cross == 0f) continue
+            if (sign == 0f) sign = cross else if (sign * cross < 0f) return false
+        }
+        return true
+    }
 }
 
 // --- the stack ---------------------------------------------------------------
@@ -353,8 +376,7 @@ private fun DrawScope.drawStack(
     if (size.width <= 0f || size.height <= 0f) return
     val phase = state.phase
     val count = cards.size
-    val current = state.current
-    val leaving = state.leaving
+    val selected = state.selected
     val corners = FloatArray(8)
     val matrix = Matrix()
 
@@ -385,27 +407,18 @@ private fun DrawScope.drawStack(
     val first = ceil(phase + OUT_TO).toInt()
     val last = floor(phase + IN_TO).toInt()
 
-    fun raised(r: LiftStackScrollState.Raised, inOrder: Boolean) {
-        if (r.index == Int.MIN_VALUE) return
-        // Off the deck, or held in the top slot past where the deck would have
-        // faded it, it is drawn last, over everything; lying in the deck, it
-        // takes its turn with the rest.
-        val off = r.up > 0f || r.index < first || r.index > last
-        if (inOrder == off) return
-        val flat = r.index - phase
-        val p = flat + (max(flat, 0f) - flat) * r.pin
-        card(r.index, p, r.lift, r.stand * STAND_ANGLE, max(deckAlpha(p), r.up))
+    for (index in last downTo first) {
+        if (index == selected.index) continue
+        card(index, index - phase, 0f, 0f, deckAlpha(index - phase))
     }
 
-    for (index in last downTo first) {
-        when (index) {
-            current.index -> raised(current, inOrder = true)
-            leaving.index -> raised(leaving, inOrder = true)
-            else -> card(index, index - phase, 0f, 0f, deckAlpha(index - phase))
-        }
+    // Off the deck it goes over everything. It rises from wherever its slot
+    // was and is held at the top one while it is up, so a deck still easing
+    // the last fraction of a card in does not carry it along.
+    if (selected.index != NONE) {
+        val p = (selected.index - phase) * (1f - selected.up)
+        card(selected.index, p, selected.lift, selected.stand * STAND_ANGLE, max(deckAlpha(p), selected.up))
     }
-    raised(leaving, inOrder = false)
-    raised(current, inOrder = false)
 }
 
 /**
@@ -478,7 +491,7 @@ private fun BoxScope.Caption(
     markerColor: Color,
 ) {
     val standing = state.standing
-    if (standing == Int.MIN_VALUE) return
+    if (standing == NONE) return
     val item = items[wrapItem(standing, items.size)]
     if (item.title.isEmpty() && item.credit.isEmpty()) return
 
@@ -491,8 +504,7 @@ private fun BoxScope.Caption(
                 // caption is not recomposed every frame of it.
                 .graphicsLayer {
                     state.tick
-                    val card = if (state.current.index == standing) state.current else state.leaving
-                    alpha = smoothstep(0.35f, 0.75f, card.stand)
+                    alpha = smoothstep(0.35f, 0.75f, state.selected.stand)
                 },
             verticalAlignment = Alignment.CenterVertically,
         ) {

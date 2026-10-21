@@ -232,9 +232,10 @@ every run. Like Infinite Menu it needs no shader anywhere.
 
 A deck of pictures laid flat in a stack and seen from above at a quarter turn.
 It runs up through itself a card at a time — each one comes in at the bottom,
-rides up four layers and fades off the top — except the card it stops past,
-which is held in the top slot, lifts off it and turns upright to face you, with
-its title let in underneath. Drag it, flick it, or tap and scroll to step it on.
+rides up four layers and fades off the top. Tap the top card and it lifts off
+the deck and turns upright to face you, with its title let in underneath; tap
+again and it plays back down into its slot. Drag it, flick it, or scroll to step
+it on — except while a card is up, when the deck stays put.
 
 The geometry and timing were measured off a recording of the reference rather
 than eyeballed: a pinhole camera fitted to the resting stack (yaw 45°, looking
@@ -258,7 +259,8 @@ LiftStackScroll(
 | `captions` | `true` | title and credit of the standing card |
 | `state` | intro of `7` | `rememberLiftStackScrollState(intro)` — cards run on first show; `0` opens at rest |
 
-`LiftStackScrollState.step(by)` runs the deck on from a host's own controls.
+`LiftStackScrollState.step(by)` runs the deck on from a host's own controls, and
+`locked` says whether a card is up and the deck is holding still.
 Every card is one `drawImage` through its own exact projection — Compose's
 `Matrix` carries the perspective terms on every target — so it needs no shader
 and no strips anywhere.

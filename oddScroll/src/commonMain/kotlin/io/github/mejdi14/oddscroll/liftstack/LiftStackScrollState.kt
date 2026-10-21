@@ -6,9 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github.mejdi14.oddscroll.internal.clamped
 import io.github.mejdi14.oddscroll.internal.cubicBezierEase
-import io.github.mejdi14.oddscroll.internal.frameRate
 import kotlin.math.abs
-import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlin.math.sign
 import kotlin.math.sqrt
@@ -19,7 +17,7 @@ import kotlin.math.sqrt
  * two pieces, and one curve will not do for both: a run through several cards
  * that starts from rest and is still moving when it hands over, then the last
  * card on a long ease-out. The lift and the turn upright are their own clocks
- * again, started off the last card's.
+ * again, the turn started a little way into the lift.
  */
 
 /** The run through the deck: six cards in this long, from rest. */
@@ -40,9 +38,6 @@ private const val STAND_DELAY = 0.332f
 private const val STAND_SECONDS = 1.602f
 private val standEase = cubicBezierEase(0.483f, 0.018f, 0.130f, 1.034f)
 
-/** A card lays back down this many times faster than it got up. */
-private const val LOWER_RATE = 3f
-
 /**
  * Seconds of parting speed a throw is aimed on by. The settle curve starts at
  * 0.93 of its distance a second, so a throw this long leaves the deck moving
@@ -56,13 +51,19 @@ private const val SAMPLES = 5
 /** Longest a sample stays worth counting towards the throw, in seconds. */
 private const val WINDOW = 0.1f
 
+/** No card selected. */
+internal const val NONE = Int.MIN_VALUE
+
 /**
- * How far the deck has run, in cards, and which card is standing up off it.
+ * How far the deck has run, in cards, and which card is up off it.
  *
  * The deck is one number: card `i` sits [phase] cards from the top slot, at
- * `i - phase`, and the whole stack is a function of that. The card the deck has
- * just run past — one before the [target] it rests on — is the one that stands
- * up, held in the top slot rather than fading out above it.
+ * `i - phase`, and the whole stack is a function of that.
+ *
+ * Tapping the card in the top slot selects it: it lifts off the deck and turns
+ * upright. Tapping again runs the same animation backwards and lays it back in
+ * its slot. From the moment a card is selected until it is all the way back
+ * down, the deck does not scroll.
  */
 class LiftStackScrollState internal constructor(intro: Int) {
 
@@ -73,26 +74,26 @@ class LiftStackScrollState internal constructor(intro: Int) {
     /** Card the deck is resting on, or heading for. */
     private var target = intro
 
-    /** The card standing, or getting up. */
-    internal val current = Raised(target - 1)
-
-    /** The card that stood before it, on its way back down. */
-    internal val leaving = Raised(Int.MIN_VALUE)
+    /** The card that is up, getting up, or going back down. */
+    internal val selected = Raised()
 
     /** Bumped once per frame, so the stack repaints while anything moves. */
     internal var tick by mutableIntStateOf(0)
         private set
 
-    /** Index, unwrapped, of the card standing fully up; [Int.MIN_VALUE] when none. */
-    internal var standing by mutableIntStateOf(Int.MIN_VALUE)
+    /** Index, unwrapped, of the card standing up for its caption; [NONE] when none. */
+    internal var standing by mutableIntStateOf(NONE)
         private set
 
-    /** Counts each time a card finishes getting up, so its caption is let in afresh. */
+    /** Counts each time a card gets up, so its caption is let in afresh. */
     internal var stood by mutableIntStateOf(0)
         private set
 
     internal var dragging by mutableStateOf(false)
         private set
+
+    /** True while a card is selected or still on its way back down. */
+    val locked: Boolean get() = selected.index != NONE
 
     // A move is a run to [runTo], then the last card to [target]. A move
     // that has only the one card to go starts at the settle.
@@ -108,91 +109,91 @@ class LiftStackScrollState internal constructor(intro: Int) {
     private var taken = 0
 
     init {
-        if (intro != 0) {
-            plan(intro.toFloat(), fromRest = true)
-        } else {
-            // No opening run: the card before the first is already up.
-            current.seconds = LIFT_SECONDS
-            current.raising = true
-            current.pin = 1f
-        }
+        if (intro != 0) plan(intro.toFloat(), fromRest = true)
     }
 
-    /** One card that is up, or getting up, or lying back down. */
-    internal class Raised(var index: Int) {
-        /** Seconds into the rise; run backwards to lower it. */
+    /** The selected card and where it is in getting up. */
+    internal class Raised {
+        var index = NONE
+
+        /** Seconds into the rise; run backwards to lay it down again. */
         var seconds = 0f
         var raising = false
-
-        /** How firmly it is held in the top slot rather than riding the deck. */
-        var pin = 0f
 
         val lift: Float get() = liftEase((seconds / LIFT_SECONDS).clamped(0f, 1f))
         val stand: Float get() = standEase(((seconds - STAND_DELAY) / STAND_SECONDS).clamped(0f, 1f))
         val up: Float get() = (seconds / LIFT_SECONDS).clamped(0f, 1f)
     }
 
+    /** The card nearest the top slot. */
+    internal val top: Int get() = phase.roundToInt()
+
     // --- input ---------------------------------------------------------------
 
+    /**
+     * A tap on the card in the top slot. Selects it if nothing is; otherwise
+     * turns whatever is selected round, up or back down, from wherever it is.
+     */
+    internal fun onTap(onTop: Boolean) {
+        when {
+            selected.index != NONE -> selected.raising = !selected.raising
+            // Only the card the deck is coming to rest on: one tapped on its
+            // way through would be left standing over a slot that has moved on.
+            onTop && !dragging && top == target -> {
+                selected.index = top
+                selected.seconds = 0f
+                selected.raising = true
+            }
+        }
+    }
+
     internal fun onDragStart(seconds: Float) {
+        if (locked) return
         dragging = true
         moving = false
-        current.raising = false
         taken = 0
         sample(seconds)
     }
 
     /** [by] is the drag up the deck, already in cards. */
     internal fun onDrag(by: Float, seconds: Float) {
+        if (!dragging) return
         phase += by
         sample(seconds)
     }
 
     internal fun onDragEnd() {
+        if (!dragging) return
         dragging = false
         val aim = phase + partingSpeed() * THROW_SECONDS
-        aimAt(aim.roundToInt(), fromRest = false)
+        target = aim.roundToInt()
+        plan(target.toFloat(), fromRest = false)
     }
 
-    /** Run the deck on by [by] cards. Public so a host can drive it from its own chrome. */
+    /**
+     * Run the deck on by [by] cards. Public so a host can drive it from its own
+     * chrome; does nothing while a card is selected.
+     */
     fun step(by: Int) {
-        if (by == 0 || dragging) return
-        aimAt(target + by, fromRest = !moving)
-    }
-
-    private fun aimAt(next: Int, fromRest: Boolean) {
-        if (next - 1 != current.index) {
-            // The card standing gives way to the one the deck will now rest
-            // past. Only one can be lowering at once; if another was still on
-            // its way down it simply goes the rest of the way at once.
-            leaving.index = current.index
-            leaving.seconds = current.seconds
-            leaving.pin = current.pin
-            leaving.raising = false
-            current.index = next - 1
-            current.seconds = 0f
-            current.pin = 0f
-        }
-        current.raising = false
-        target = next
-        plan(next.toFloat(), fromRest)
+        if (by == 0 || dragging || locked) return
+        target += by
+        plan(target.toFloat(), fromRest = !moving)
     }
 
     private fun plan(to: Float, fromRest: Boolean) {
         val distance = to - phase
         moving = true
         clock = 0f
+        runFrom = phase
         if (fromRest && abs(distance) > 1f) {
             // From rest the deck runs up to speed through all but the last
             // card, and hands that one to the settle while still moving.
-            runFrom = phase
             runTo = to - sign(distance)
             runSeconds = (SPIN_SECONDS * sqrt((abs(distance) - 1f) / SPIN_CARDS))
                 .clamped(0.4f, 2.4f)
         } else {
             // Out of a throw the deck is already moving, so it goes straight
             // to the long ease-out over the whole of the distance.
-            runFrom = phase
             runTo = phase
             runSeconds = 0f
         }
@@ -212,9 +213,6 @@ class LiftStackScrollState internal constructor(intro: Int) {
             } else {
                 val t = ((clock - runSeconds) / SETTLE_SECONDS).clamped(0f, 1f)
                 phase = settleFrom + (target - settleFrom) * settleEase(t)
-                // The rise is timed off the last card: it starts as that card
-                // starts in.
-                current.raising = true
                 if (t >= 1f) {
                     phase = target.toFloat()
                     moving = false
@@ -222,34 +220,26 @@ class LiftStackScrollState internal constructor(intro: Int) {
             }
         }
 
-        val pull = frameRate(0.2f, deltaMs)
-        current.seconds = if (current.raising) {
-            (current.seconds + dt).coerceAtMost(LIFT_SECONDS)
-        } else {
-            (current.seconds - dt * LOWER_RATE).coerceAtLeast(0f)
-        }
-        val held = !dragging
-        current.pin += ((if (held) 1f else 0f) - current.pin) * pull
-        // A card that is not held lets go of the top slot no faster than it
-        // gets down, so it never slides out from under itself mid-air.
-        if (!held) current.pin = minOf(current.pin, max(current.up, 0f))
-
-        if (leaving.index != Int.MIN_VALUE) {
-            leaving.seconds = (leaving.seconds - dt * LOWER_RATE).coerceAtLeast(0f)
-            leaving.pin = minOf(leaving.pin, leaving.up)
-            if (leaving.seconds <= 0f && leaving.pin <= 0.001f) leaving.index = Int.MIN_VALUE
+        if (selected.index != NONE) {
+            // Down is the same animation run backwards, at the same pace.
+            selected.seconds = if (selected.raising) {
+                (selected.seconds + dt).coerceAtMost(LIFT_SECONDS)
+            } else {
+                (selected.seconds - dt).coerceAtLeast(0f)
+            }
+            if (!selected.raising && selected.seconds <= 0f) selected.index = NONE
         }
 
         // The caption comes in once the card is most of the way up, and stays
         // until it is all but down again.
         val up = when {
-            current.raising && current.stand > 0.62f -> current.index
-            standing == current.index && current.stand > 0.02f -> current.index
-            standing == leaving.index && leaving.stand > 0.02f -> leaving.index
-            else -> Int.MIN_VALUE
+            selected.index == NONE -> NONE
+            selected.raising && selected.stand > 0.62f -> selected.index
+            standing == selected.index && selected.stand > 0.02f -> selected.index
+            else -> NONE
         }
         if (up != standing) {
-            if (up != Int.MIN_VALUE) stood++
+            if (up != NONE) stood++
             standing = up
         }
     }
