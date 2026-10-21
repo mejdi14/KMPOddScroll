@@ -439,8 +439,7 @@ cards of the Edge Distortion gallery; Terrace stacks the same cuts.
 
 Flex Carousel uses museum scans of paintings, also from Unsplash and under the
 same licence, cut 800x600 for its 4:3 cards. Lift Stack uses the same six, cut
-square. Tape Rack prints both the scans and the wide photographs on its labels,
-and Gallery Wall hangs the scans between the photographs.
+square. Tape Rack prints both the scans and the wide photographs on its labels.
 
 | File | Scanned by |
 | --- | --- |
@@ -450,6 +449,14 @@ and Gallery Wall hangs the scans between the photographs.
 | `art_cowherd.jpg` | [The Metropolitan Museum of Art](https://unsplash.com/@themet) |
 | `art_village.jpg` | [Birmingham Museums Trust](https://unsplash.com/@birminghammuseumstrust) |
 | `art_cypresses.jpg` | [Tofan Teodor](https://unsplash.com/@tofanteodor) |
+
+Gallery Wall hangs fourteen `museum_*.jpg` masterworks instead, each cut 1200x800
+(3:2) from a 1,920 px scan on Wikipedia / Wikimedia Commons: *The Starry Night*,
+*Flaming June*, *A Sunday Afternoon on the Island of La Grande Jatte*, *The
+Scream*, *Whistler's Mother*, *The Kiss*, *Le Déjeuner sur l'herbe*, *The Great
+Wave off Kanagawa*, *The Night Watch*, *The Birth of Venus*, *The Calling of
+Saint Matthew*, *Composition VII*, *Wanderer above the Sea of Fog* and *Olympia*.
+The reuse terms of each scan are on its Commons page.
 
 ### Illustrations
 
