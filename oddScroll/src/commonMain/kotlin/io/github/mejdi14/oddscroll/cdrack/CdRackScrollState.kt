@@ -1,4 +1,4 @@
-package io.github.mejdi14.oddscroll.taperack
+package io.github.mejdi14.oddscroll.cdrack
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -57,7 +57,7 @@ private const val WINDOW = 0.1f
  * from the slot, and how high it is lifted is a fixed function of that. So
  * there is nothing per tape to animate — moving the number moves everything.
  */
-class TapeRackScrollState internal constructor(intro: Int) {
+class CdRackScrollState internal constructor(intro: Int) {
 
     /** Unbounded; wrapped only when a tape is drawn. */
     internal var position = 0f
@@ -191,4 +191,4 @@ class TapeRackScrollState internal constructor(intro: Int) {
 }
 
 /** Index of tape [index] of the endless rack, wrapped into [count]. */
-internal fun wrapTape(index: Int, count: Int): Int = ((index % count) + count) % count
+internal fun wrapCase(index: Int, count: Int): Int = ((index % count) + count) % count

@@ -1,4 +1,4 @@
-package io.github.mejdi14.oddscroll.taperack
+package io.github.mejdi14.oddscroll.cdrack
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -66,7 +66,7 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /** One case in the rack. */
-data class TapeRackItem(
+data class CdRackItem(
     /** Printed on the disc inside the case, cropped square to fit it. */
     val image: ImageBitmap,
     val title: String = "",
@@ -143,8 +143,8 @@ private const val LID_DEPTH = 0.19f
 private const val TAP_SLOP = 8f
 
 @Composable
-fun rememberTapeRackScrollState(intro: Int = 4): TapeRackScrollState =
-    remember { TapeRackScrollState(intro) }
+fun rememberCdRackScrollState(intro: Int = 4): CdRackScrollState =
+    remember { CdRackScrollState(intro) }
 
 /**
  * A row of clear CD jewel cases standing on edge, seen from above and to the
@@ -173,21 +173,21 @@ fun rememberTapeRackScrollState(intro: Int = 4): TapeRackScrollState =
  * @param state also sets how far the rack slides when it first appears.
  */
 @Composable
-fun TapeRackScroll(
-    items: List<TapeRackItem>,
+fun CdRackScroll(
+    items: List<CdRackItem>,
     modifier: Modifier = Modifier,
     background: Color = Color(0xFF050506),
     shellColor: Color = Color(0xFFDBE6ED),
     contentColor: Color = Color(0xFFEDEDE8),
     captions: Boolean = true,
-    state: TapeRackScrollState = rememberTapeRackScrollState(),
+    state: CdRackScrollState = rememberCdRackScrollState(),
 ) {
     if (items.isEmpty()) {
         Box(modifier)
         return
     }
 
-    val art = remember(items, shellColor) { TapeArt(items, shellColor) }
+    val art = remember(items, shellColor) { CaseArt(items, shellColor) }
     val frame = remember { RackFrame() }
 
     LaunchedEffect(state) {
@@ -266,7 +266,7 @@ fun TapeRackScroll(
         ) {
             state.tick // read, so the rack repaints every frame
             frame.fit(size.width, size.height)
-            art.ensure(frame.tapePx)
+            art.ensure(frame.casePx)
             drawRack(art, state.position, frame)
         }
 
@@ -282,7 +282,7 @@ private class RackFrame {
     var height = -1f
 
     /** A tape's width on screen. */
-    var tapePx = 1f
+    var casePx = 1f
     var pitchPx = 1f
 
     /** Top-left corner of the face of an unlifted tape at the slot. */
@@ -299,11 +299,11 @@ private class RackFrame {
         if (w == width && h == height) return
         width = w
         height = h
-        tapePx = min(w * 0.4f, h * 0.36f)
-        pitchPx = PITCH * tapePx
+        casePx = min(w * 0.4f, h * 0.36f)
+        pitchPx = PITCH * casePx
         // The lifted tape's face is centred in the frame.
-        originX = w / 2f - (EDGE_X * tapePx) / 2f
-        originY = h / 2f - (EDGE_Y + FACE_HEIGHT) * tapePx / 2f + LIFT * tapePx
+        originX = w / 2f - (EDGE_X * casePx) / 2f
+        originY = h / 2f - (EDGE_Y + FACE_HEIGHT) * casePx / 2f + LIFT * casePx
 
         // Scan out along the row for the first and last tape that lands in the
         // frame at all, lifted or not.
@@ -320,9 +320,9 @@ private class RackFrame {
     private fun overlaps(w: Float): Boolean {
         val x = originX + w * pitchPx * ROW_X
         val y = originY + w * pitchPx * ROW_Y
-        val right = x + (EDGE_X + THICKNESS * ROW_X) * tapePx
-        val top = y + (THICKNESS * ROW_Y - LIFT) * tapePx
-        val bottom = y + (EDGE_Y + FACE_HEIGHT) * tapePx
+        val right = x + (EDGE_X + THICKNESS * ROW_X) * casePx
+        val top = y + (THICKNESS * ROW_Y - LIFT) * casePx
+        val bottom = y + (EDGE_Y + FACE_HEIGHT) * casePx
         return right > 0f && x < width && bottom > 0f && top < height
     }
 
@@ -330,8 +330,8 @@ private class RackFrame {
     fun corner(w: Float, index: Int, out: FloatArray) {
         val along = w * PITCH + jitter(index, 0) * JITTER_ALONG
         val across = jitter(index, 1) * JITTER_ACROSS
-        out[0] = originX + (along * ROW_X - across * ROW_Y) * tapePx
-        out[1] = originY + (along * ROW_Y + across * ROW_X - lift(w) * LIFT) * tapePx
+        out[0] = originX + (along * ROW_X - across * ROW_Y) * casePx
+        out[1] = originY + (along * ROW_Y + across * ROW_X - lift(w) * LIFT) * casePx
     }
 
     /**
@@ -343,7 +343,7 @@ private class RackFrame {
         val first = ceil(position + nearest).toInt()
         val last = floor(position + farthest).toInt()
         for (i in first..last) {
-            corner(i - position, wrapTape(i, count), corner)
+            corner(i - position, wrapCase(i, count), corner)
             outline(corner[0], corner[1])
             if (inside(x, y)) return i
         }
@@ -352,11 +352,11 @@ private class RackFrame {
 
     /** The six corners of a tape's silhouette: face, top and right side. */
     private fun outline(x: Float, y: Float) {
-        val ex = EDGE_X * tapePx
-        val ey = EDGE_Y * tapePx
-        val tx = THICKNESS * ROW_X * tapePx
-        val ty = THICKNESS * ROW_Y * tapePx
-        val vy = FACE_HEIGHT * tapePx
+        val ex = EDGE_X * casePx
+        val ey = EDGE_Y * casePx
+        val tx = THICKNESS * ROW_X * casePx
+        val ty = THICKNESS * ROW_Y * casePx
+        val vy = FACE_HEIGHT * casePx
         hex[0] = x; hex[1] = y
         hex[2] = x + tx; hex[3] = y + ty
         hex[4] = x + ex + tx; hex[5] = y + ey + ty
@@ -400,18 +400,18 @@ private const val SQRT_3 = 1.7320508f
 
 // --- drawing -----------------------------------------------------------------
 
-private fun DrawScope.drawRack(art: TapeArt, position: Float, frame: RackFrame) {
+private fun DrawScope.drawRack(art: CaseArt, position: Float, frame: RackFrame) {
     if (size.width <= 0f || size.height <= 0f) return
-    val count = art.tapes.size
+    val count = art.cases.size
     val corner = FloatArray(2)
 
     // Back of the row first: each tape covers the one behind it.
     val first = ceil(position + frame.nearest).toInt()
     val last = floor(position + frame.farthest).toInt()
     for (i in last downTo first) {
-        val index = wrapTape(i, count)
+        val index = wrapCase(i, count)
         frame.corner(i - position, index, corner)
-        val image = art.tapes[index]
+        val image = art.cases[index]
         // Translated rather than offset by whole pixels, so a slow slide does
         // not step.
         withTransform({ translate(corner[0] + art.offsetX, corner[1] + art.offsetY) }) {
@@ -421,8 +421,8 @@ private fun DrawScope.drawRack(art: TapeArt, position: Float, frame: RackFrame) 
 
     // The light over the slot, centred between where the slotted tape stands
     // and where it would sit, since it lights both.
-    val cx = frame.originX + EDGE_X * frame.tapePx / 2f
-    val cy = frame.originY + ((EDGE_Y + FACE_HEIGHT) / 2f - LIFT / 2f) * frame.tapePx
+    val cx = frame.originX + EDGE_X * frame.casePx / 2f
+    val cy = frame.originY + ((EDGE_Y + FACE_HEIGHT) / 2f - LIFT / 2f) * frame.casePx
     val dark = Color.Black.copy(alpha = SHADE)
     drawRect(
         brush = Brush.radialGradient(
@@ -431,7 +431,7 @@ private fun DrawScope.drawRack(art: TapeArt, position: Float, frame: RackFrame) 
             0.62f to dark,
             1f to dark,
             center = Offset(cx, cy),
-            radius = 1.6f * frame.tapePx,
+            radius = 1.6f * frame.casePx,
         ),
         blendMode = BlendMode.SrcAtop,
     )
@@ -441,8 +441,8 @@ private fun DrawScope.drawRack(art: TapeArt, position: Float, frame: RackFrame) 
  * Every case drawn once, already as the camera sees it: face, top and right
  * side in one bitmap, rebuilt only when the cases change size on screen.
  */
-private class TapeArt(private val items: List<TapeRackItem>, private val shell: Color) {
-    var tapes: List<ImageBitmap> = emptyList()
+private class CaseArt(private val items: List<CdRackItem>, private val shell: Color) {
+    var cases: List<ImageBitmap> = emptyList()
         private set
 
     /** Where a bitmap's top-left sits from its tape's face corner. */
@@ -453,8 +453,8 @@ private class TapeArt(private val items: List<TapeRackItem>, private val shell: 
 
     private var builtFor = -1
 
-    fun ensure(tapePx: Float) {
-        val px = tapePx.roundToInt().coerceAtLeast(8)
+    fun ensure(casePx: Float) {
+        val px = casePx.roundToInt().coerceAtLeast(8)
         if (px == builtFor) return
         builtFor = px
         val w = px.toFloat()
@@ -500,7 +500,7 @@ private class TapeArt(private val items: List<TapeRackItem>, private val shell: 
         }
         val hairline = max(1f, w / 300f)
 
-        tapes = items.map { item ->
+        cases = items.map { item ->
             val flat = caseFace(item.image, faceW, shell)
             val bitmap = ImageBitmap(bw, bh)
             CanvasDrawScope().draw(
@@ -812,11 +812,11 @@ private fun corner(ax: Float, ay: Float, bx: Float, by: Float, cx: Float, cy: Fl
 
 @Composable
 private fun BoxScope.Caption(
-    items: List<TapeRackItem>,
-    state: TapeRackScrollState,
+    items: List<CdRackItem>,
+    state: CdRackScrollState,
     contentColor: Color,
 ) {
-    val item = items[wrapTape(state.slotted, items.size)]
+    val item = items[wrapCase(state.slotted, items.size)]
     if (item.title.isEmpty() && item.artist.isEmpty()) return
 
     key(state.slotted) {

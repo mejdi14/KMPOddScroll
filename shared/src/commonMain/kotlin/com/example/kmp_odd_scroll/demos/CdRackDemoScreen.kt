@@ -5,8 +5,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import com.example.kmp_odd_scroll.LocalPalette
-import io.github.mejdi14.oddscroll.taperack.TapeRackItem
-import io.github.mejdi14.oddscroll.taperack.TapeRackScroll
+import io.github.mejdi14.oddscroll.cdrack.CdRackItem
+import io.github.mejdi14.oddscroll.cdrack.CdRackScroll
 import kmpoddscroll.shared.generated.resources.Res
 import kmpoddscroll.shared.generated.resources.art_cowherd
 import kmpoddscroll.shared.generated.resources.art_cypresses
@@ -30,7 +30,7 @@ import org.jetbrains.compose.resources.imageResource
  * Credits are in the README.
  */
 @Composable
-fun TapeRackDemoScreen() {
+fun CdRackDemoScreen() {
     val palette = LocalPalette.current
     val sounds = imageResource(Res.drawable.wide_sounds)
     val peaks = imageResource(Res.drawable.wide_peaks)
@@ -47,22 +47,22 @@ fun TapeRackDemoScreen() {
 
     val items = remember(sounds, peaks, falls, basalt, forest, towers, wheatfield, night, farmhouse, village, cowherd, cypresses) {
         listOf(
-            TapeRackItem(sounds, "Marlborough Sounds", "Samuel Harrington"),
-            TapeRackItem(wheatfield, "Green Wheat Fields", "Vincent van Gogh"),
-            TapeRackItem(peaks, "Above the Clouds", "Maciej Marko"),
-            TapeRackItem(night, "Night with her Train of Stars", "Edward Robert Hughes"),
-            TapeRackItem(falls, "Golden Falls", "Ingrid Eich"),
-            TapeRackItem(farmhouse, "Farmhouse in Provence", "Vincent van Gogh"),
-            TapeRackItem(basalt, "Basalt Columns", "Adrien Olichon"),
-            TapeRackItem(village, "Harbour Village", "Birmingham Museums Trust"),
-            TapeRackItem(forest, "Forest Path", "Wolfgang Hasselmann"),
-            TapeRackItem(cowherd, "The Cowherd", "The Metropolitan Museum of Art"),
-            TapeRackItem(towers, "City Towers", "Heye Jensen"),
-            TapeRackItem(cypresses, "Wheat Field with Cypresses", "Vincent van Gogh"),
+            CdRackItem(sounds, "Marlborough Sounds", "Samuel Harrington"),
+            CdRackItem(wheatfield, "Green Wheat Fields", "Vincent van Gogh"),
+            CdRackItem(peaks, "Above the Clouds", "Maciej Marko"),
+            CdRackItem(night, "Night with her Train of Stars", "Edward Robert Hughes"),
+            CdRackItem(falls, "Golden Falls", "Ingrid Eich"),
+            CdRackItem(farmhouse, "Farmhouse in Provence", "Vincent van Gogh"),
+            CdRackItem(basalt, "Basalt Columns", "Adrien Olichon"),
+            CdRackItem(village, "Harbour Village", "Birmingham Museums Trust"),
+            CdRackItem(forest, "Forest Path", "Wolfgang Hasselmann"),
+            CdRackItem(cowherd, "The Cowherd", "The Metropolitan Museum of Art"),
+            CdRackItem(towers, "City Towers", "Heye Jensen"),
+            CdRackItem(cypresses, "Wheat Field with Cypresses", "Vincent van Gogh"),
         )
     }
 
-    TapeRackScroll(
+    CdRackScroll(
         items = items,
         modifier = Modifier.fillMaxSize(),
         background = palette.page,

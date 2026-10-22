@@ -265,7 +265,7 @@ Every card is one `drawImage` through its own exact projection — Compose's
 `Matrix` carries the perspective terms on every target — so it needs no shader
 and no strips anywhere.
 
-### Tape Rack
+### CD Rack
 
 A row of clear CD jewel cases standing on edge, seen from above and to the
 left, running up and to the right across the frame. It slides along its own
@@ -301,8 +301,8 @@ and one number per frame to 1.1 px, so the rack is a single scalar:
   0.664 s × √tapes — each within 0.6 px of the reference's own runs.
 
 ```kotlin
-TapeRackScroll(
-    items = listOf(TapeRackItem(image, "Funky Drummer", "James Brown"), /* ... */),
+CdRackScroll(
+    items = listOf(CdRackItem(image, "Funky Drummer", "James Brown"), /* ... */),
     modifier = Modifier.fillMaxSize(),
 )
 ```
@@ -314,9 +314,9 @@ TapeRackScroll(
 | `shellColor` | `#DBE6ED` | tint of the cases' clear plastic |
 | `contentColor` | `#EDEDE8` | caption text |
 | `captions` | `true` | title and artist of the case in the slot |
-| `state` | intro of `4` | `rememberTapeRackScrollState(intro)` — cases slid on first show; `0` opens at rest |
+| `state` | intro of `4` | `rememberCdRackScrollState(intro)` — cases slid on first show; `0` opens at rest |
 
-`TapeRackScrollState.scrollTo(index)` and `step(by)` drive it from a host's own
+`CdRackScrollState.scrollTo(index)` and `step(by)` drive it from a host's own
 controls, and `slotted` is the case in the slot. Each case is drawn once, as the
 camera sees it, into a bitmap that is then only moved — one `drawImage` a case
 a frame and one gradient for the light, so it needs no shader anywhere.
@@ -463,7 +463,7 @@ cards of the Edge Distortion gallery; Terrace stacks the same cuts.
 
 Flex Carousel uses museum scans of paintings, also from Unsplash and under the
 same licence, cut 800x600 for its 4:3 cards. Lift Stack uses the same six, cut
-square. Tape Rack prints both the scans and the wide photographs on its discs.
+square. CD Rack prints both the scans and the wide photographs on its discs.
 
 | File | Scanned by |
 | --- | --- |

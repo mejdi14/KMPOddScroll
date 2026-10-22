@@ -2,13 +2,13 @@ package com.example.kmp_odd_scroll
 
 import androidx.compose.runtime.Composable
 import com.example.kmp_odd_scroll.demos.CardSphereDemoScreen
+import com.example.kmp_odd_scroll.demos.CdRackDemoScreen
 import com.example.kmp_odd_scroll.demos.EdgeDistortionDemoScreen
 import com.example.kmp_odd_scroll.demos.FlexCarouselDemoScreen
 import com.example.kmp_odd_scroll.demos.GalleryWallDemoScreen
 import com.example.kmp_odd_scroll.demos.InfiniteMenuDemoScreen
 import com.example.kmp_odd_scroll.demos.InfiniteSpiralDemoScreen
 import com.example.kmp_odd_scroll.demos.LiftStackDemoScreen
-import com.example.kmp_odd_scroll.demos.TapeRackDemoScreen
 import com.example.kmp_odd_scroll.demos.TerraceDemoScreen
 
 /**
@@ -70,11 +70,11 @@ val scrollDemos: List<ScrollDemo> = listOf(
         screen = { LiftStackDemoScreen() },
     ),
     ScrollDemo(
-        route = "tape_rack",
+        route = "cd_rack",
         category = "Oblique",
-        title = "Tape Rack",
+        title = "CD Rack",
         subtitle = "A row of clear CD cases on edge that slides along itself and raises the one in the slot",
-        screen = { TapeRackDemoScreen() },
+        screen = { CdRackDemoScreen() },
     ),
     ScrollDemo(
         route = "gallery_wall",

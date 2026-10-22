@@ -38,7 +38,7 @@ fun ScrollArtwork(route: String, modifier: Modifier = Modifier) {
             "infinite_menu" -> infiniteMenu()
             "card_sphere" -> cardSphere()
             "lift_stack" -> liftStack()
-            "tape_rack" -> tapeRack()
+            "cd_rack" -> cdRack()
             "gallery_wall" -> galleryWall()
             "terrace" -> terrace()
             else -> infiniteSpiral()
@@ -234,7 +234,7 @@ private fun DrawScope.liftStack() {
  * The rack in miniature: a row of clear CD cases stepping up to the right, each
  * covering the one behind, and the one in the middle standing proud of it.
  */
-private fun DrawScope.tapeRack() {
+private fun DrawScope.cdRack() {
     val case = size.minDimension * 0.36f
     val slope = case * 0.177f
     val stepX = case * 0.322f * 0.889f
