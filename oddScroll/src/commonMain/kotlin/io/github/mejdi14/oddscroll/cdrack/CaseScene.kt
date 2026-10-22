@@ -1,5 +1,6 @@
 package io.github.mejdi14.oddscroll.cdrack
 
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
@@ -16,6 +17,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import io.github.mejdi14.oddscroll.internal.clamped
 import io.github.mejdi14.oddscroll.internal.lerp
+import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.exp
@@ -31,6 +33,9 @@ private const val MAX_PPM = 8.75f
 
 /** The largest the print is kept for the shader to sample. */
 private const val ART_PX = 1024
+
+/** A manual's page is printed this far in from the edges of its paper, in millimetres. */
+private const val PAGE_MARGIN = 7f
 
 /**
  * A drawing of one case, any pose, through any camera. Its pieces are baked
@@ -51,6 +56,19 @@ internal class CaseScene {
 
     /** The cover is out of the lid this frame, drawn at [loose] instead. */
     private var coverLoose = false
+
+    /** The manual behind the loose cover, this frame, or null for a single sheet. */
+    private var book: BookPose? = null
+    private var pages: List<ImageBitmap> = emptyList()
+    private var paper: ImageBitmap? = null
+    private val spine = Pose()
+    private val leaf = Pose()
+
+    /** How wide the loose cover stands, in covers: two with its manual open. */
+    private var footprint = 1f
+
+    /** The spine's two ends and a point right of it on screen, as last drawn. */
+    private val spineHull = FloatArray(6)
 
     private val trayLayers = trayLayers()
     private val lidLayer = lidLayer()
@@ -90,6 +108,16 @@ internal class CaseScene {
     }
 
     /**
+     * The manual the cover is the front of: [pages] two to a spread, each
+     * printed on its half of [paper] — an open spread on a clear ground, the
+     * spine down its middle — or on plain paper without one.
+     */
+    fun setManual(pages: List<ImageBitmap>, paper: ImageBitmap?) {
+        this.pages = pages
+        this.paper = paper
+    }
+
+    /**
      * Bakes the pieces for the size [camera] shows the case at, if they are
      * not already. Touches no drawing state, so it can run off the main thread
      * before the case is first drawn.
@@ -111,7 +139,7 @@ internal class CaseScene {
     /**
      * Draws the case at [pose] through [camera], its shadow on the backdrop at
      * [shadow] of its strength; with [cover], the cover is out of the lid and
-     * stands there on its own.
+     * stands there on its own, the front of [book] if it has one.
      */
     fun draw(
         scope: DrawScope,
@@ -119,6 +147,7 @@ internal class CaseScene {
         pose: CasePose,
         shadow: Float = 1f,
         cover: CasePose? = null,
+        book: BookPose? = null,
     ) = with(scope) {
         if (size.width <= 0f || size.height <= 0f) return@with
         this@CaseScene.camera = camera
@@ -128,12 +157,15 @@ internal class CaseScene {
         place()
         coverLoose = cover != null && this@CaseScene.cover != null
         if (cover != null) placeLoose(cover)
+        val manual = if (coverLoose && book != null && book.spreads > 0) book else null
+        this@CaseScene.book = manual
+        footprint = if (manual == null) 1f else lerp(manual.across(manual.from), manual.across(manual.to), manual.turn)
 
         // The shadows land on the backdrop, behind everything.
         if (shadow > 0f) {
             shadow(tray, -2f, trayShadow, shadow)
             shadow(lid, HINGE_Z, lidShadow, shadow)
-            if (coverLoose) shadow(loose, 0f, coverShadow, shadow)
+            if (coverLoose) shadow(loose, 0f, coverShadow, shadow, widen = footprint)
         }
 
         // Back half first: whichever of tray and lid is further from the
@@ -150,7 +182,7 @@ internal class CaseScene {
             drawTray()
         }
         // Out of the lid, the cover is in front of the case all the way.
-        if (coverLoose) insert(loose, 0f, facing(loose))
+        if (manual != null) drawBook(manual) else if (coverLoose) insert(loose, 0f, facing(loose))
         rememberHull()
     }
 
@@ -279,23 +311,154 @@ internal class CaseScene {
                     size = Size(2f * COVER_HALF, 2f * COVER_HALF),
                 )
             } else {
-                val square = discSquare(image)
-                val k = 2f * COVER_HALF / square.width
-                withTransform({
-                    translate(-COVER_HALF, -COVER_HALF)
-                    scale(k, k, Offset.Zero)
-                }) {
-                    drawImage(
-                        image = image,
-                        srcOffset = IntOffset(square.left, square.top),
-                        srcSize = IntSize(square.width, square.height),
-                        dstOffset = IntOffset.Zero,
-                        dstSize = IntSize(square.width, square.height),
-                        filterQuality = FilterQuality.Medium,
-                    )
-                }
+                coverPrint(image, -COVER_HALF)
             }
         }
+    }
+
+    /** [image]'s middle square across the cover, its left edge at [left]. */
+    private fun DrawScope.coverPrint(image: ImageBitmap, left: Float) {
+        val square = discSquare(image)
+        val k = 2f * COVER_HALF / square.width
+        withTransform({
+            translate(left, -COVER_HALF)
+            scale(k, k, Offset.Zero)
+        }) {
+            drawImage(
+                image = image,
+                srcOffset = IntOffset(square.left, square.top),
+                srcSize = IntSize(square.width, square.height),
+                dstOffset = IntOffset.Zero,
+                dstSize = IntSize(square.width, square.height),
+                filterQuality = FilterQuality.Medium,
+            )
+        }
+    }
+
+    // --- the manual ------------------------------------------------------------------
+
+    /**
+     * The manual at [b]: its spine where the open spread is centred, or along
+     * the edge of a shut one, so that whatever shows stands in the middle; a
+     * leaf turning over the spine on top of the two halves it uncovers and
+     * lands on, as the camera sees it, its back mirrored onto it.
+     */
+    private fun DrawScope.drawBook(b: BookPose) {
+        if (b.from < 0 && b.to < 0) {
+            // Shut on its front: the cover, as it came out of the lid.
+            insert(loose, 0f, facing(loose))
+            rememberSpine()
+            return
+        }
+        val at = lerp(b.spineAt(b.from), b.spineAt(b.to), b.turn)
+        spine.copyFrom(loose)
+        loose.turn(1f, 0f, 0f, v)
+        for (k in 0 until 3) spine.t[k] += loose.s * v[k] * at
+        rememberSpine()
+
+        if (b.from == b.to) {
+            side(spine, b.from, 0, mirror = false)
+            side(spine, b.from, 1, mirror = false)
+            return
+        }
+        val next = b.to > b.from
+        side(spine, if (next) b.from else b.to, 0, mirror = false)
+        side(spine, if (next) b.to else b.from, 1, mirror = false)
+        // The leaf turns about the spine, lifting towards the camera.
+        val angle = PI.toFloat() * b.turn
+        aboutY(if (next) -angle else angle, turn)
+        times(spine.r, turn, leaf.r)
+        leaf.s = spine.s
+        spine.t.copyInto(leaf.t)
+        if (facing(leaf)) {
+            side(leaf, b.from, if (next) 1 else 0, mirror = false)
+        } else {
+            side(leaf, b.to, if (next) 0 else 1, mirror = true)
+        }
+    }
+
+    /**
+     * What the manual shows at [at] on [side] of the spine — 0 left, 1 right
+     * — on [frame]'s plane; [mirror]ed for the back of a leaf.
+     */
+    private fun DrawScope.side(frame: Pose, at: Int, side: Int, mirror: Boolean) {
+        val b = book ?: return
+        val left = if (side == 0) -2f * COVER_HALF else 0f
+        frame.plane(camera, 0f, matrix, plane)
+        withTransform({
+            transform(matrix)
+            if (mirror) scale(-1f, 1f, Offset.Zero)
+        }) {
+            when {
+                at < 0 -> if (side == 1) cover?.let { coverPrint(it, left) }
+                at >= b.spreads -> if (side == 0) {
+                    drawRect(PAPER, Offset(left, -COVER_HALF), Size(2f * COVER_HALF, 2f * COVER_HALF))
+                }
+                else -> page(at * 2 + side, side, left)
+            }
+        }
+    }
+
+    /** Page [index] on its half of the paper, [side] of the spine, the half's left edge at [left]. */
+    private fun DrawScope.page(index: Int, side: Int, left: Float) {
+        val sheet = paper
+        if (sheet != null) {
+            val half = sheet.width / 2
+            val k = 2f * COVER_HALF / sheet.height
+            withTransform({
+                translate(if (side == 0) -half * k else 0f, -COVER_HALF)
+                scale(k, k, Offset.Zero)
+            }) {
+                drawImage(
+                    image = sheet,
+                    srcOffset = IntOffset(side * half, 0),
+                    srcSize = IntSize(half, sheet.height),
+                    dstOffset = IntOffset.Zero,
+                    dstSize = IntSize(half, sheet.height),
+                    filterQuality = FilterQuality.Medium,
+                )
+            }
+        } else {
+            drawRoundRect(
+                PAGE,
+                topLeft = Offset(left, -COVER_HALF),
+                size = Size(2f * COVER_HALF, 2f * COVER_HALF),
+                cornerRadius = CornerRadius(4f),
+            )
+        }
+        val print = pages.getOrNull(index) ?: return
+        val square = discSquare(print)
+        val k = (2f * COVER_HALF - 2f * PAGE_MARGIN) / square.width
+        // Multiplied, so the print's white is the paper's own and its ink
+        // lies in the grain.
+        withTransform({
+            translate(left + PAGE_MARGIN, -COVER_HALF + PAGE_MARGIN)
+            scale(k, k, Offset.Zero)
+        }) {
+            drawImage(
+                image = print,
+                srcOffset = IntOffset(square.left, square.top),
+                srcSize = IntSize(square.width, square.height),
+                dstOffset = IntOffset.Zero,
+                dstSize = IntSize(square.width, square.height),
+                filterQuality = FilterQuality.Medium,
+                blendMode = BlendMode.Multiply,
+            )
+        }
+    }
+
+    /** Where the spine's ends and the page right of it are on screen, for [bookSide]. */
+    private fun rememberSpine() {
+        val b = book ?: return
+        val at = if (b.from < 0 && b.to < 0) -COVER_HALF else lerp(b.spineAt(b.from), b.spineAt(b.to), b.turn)
+        var ok = true
+        loose.apply(at, -COVER_HALF, 0f, v)
+        ok = ok && camera.project(v[0], v[1], v[2], spineHull, 0)
+        loose.apply(at, COVER_HALF, 0f, v)
+        ok = ok && camera.project(v[0], v[1], v[2], spineHull, 2)
+        loose.apply(at + COVER_HALF, 0f, 0f, v)
+        ok = ok && camera.project(v[0], v[1], v[2], spineHull, 4)
+        if (!ok) spineHull.fill(Float.NaN)
     }
 
     // --- disc ----------------------------------------------------------------------
@@ -544,10 +707,11 @@ internal class CaseScene {
         }
     }
 
-    private fun DrawScope.shadow(frame: Pose, z: Float, map: ImageBitmap, strength: Float) {
+    private fun DrawScope.shadow(frame: Pose, z: Float, map: ImageBitmap, strength: Float, widen: Float = 1f) {
         frame.shadowPlane(camera, z, BACKDROP_Z, matrix, plane)
         withTransform({
             transform(matrix)
+            scale(widen, 1f, Offset.Zero)
             translate(SHADOW_LEFT, SHADOW_LEFT)
             scale(SHADOW_MM_PER_PX, SHADOW_MM_PER_PX, Offset.Zero)
         }) {
@@ -570,9 +734,10 @@ internal class CaseScene {
         var at = 0
         for (frame in arrayOf(tray, lid, loose)) {
             val half = if (frame === loose) COVER_HALF else HALF_MM
+            val across = if (frame === loose) half * footprint else half
             for ((cx, cy) in CORNERS) {
                 val seen = frame !== loose || coverLoose
-                frame.apply(cx * half, cy * half, 0f, v)
+                frame.apply(cx * across, cy * half, 0f, v)
                 if (!seen || !camera.project(v[0], v[1], v[2], hull, at)) {
                     hull[at] = Float.NaN
                     hull[at + 1] = Float.NaN
@@ -583,6 +748,21 @@ internal class CaseScene {
     }
 
     fun hit(x: Float, y: Float): Boolean = inside(x, y, 0) || inside(x, y, 8) || inside(x, y, 16)
+
+    /**
+     * Which side of the manual's spine [x], [y] falls on as it was last
+     * drawn, -1 left or 1 right; 0 off it, or with no manual out.
+     */
+    fun bookSide(x: Float, y: Float): Int {
+        if (book == null || spineHull[0].isNaN() || !inside(x, y, 16)) return 0
+        val ax = spineHull[0]
+        val ay = spineHull[1]
+        val dx = spineHull[2] - ax
+        val dy = spineHull[3] - ay
+        val at = dx * (y - ay) - dy * (x - ax)
+        val right = dx * (spineHull[5] - ay) - dy * (spineHull[4] - ax)
+        return if (at * right > 0f) 1 else -1
+    }
 
     private fun inside(x: Float, y: Float, at: Int): Boolean {
         var sign = 0f
@@ -615,6 +795,23 @@ private val WALL_PALE = Color(0xFFF3F5F7)
 
 /** The back of the cover, seen through the lid from behind. */
 private val PAPER = Color(0xFFF2EFE9)
+
+/** A manual's page with no paper given for it. */
+private val PAGE = Color(0xFFF4F1EA)
+
+/** How wide the manual stands at [at], in covers: open, a spread is two. */
+private fun BookPose.across(at: Int): Float = if (at in 0 until spreads) 2f else 1f
+
+/**
+ * Where the spine stands at [at], in millimetres across the loose cover:
+ * shut on its front, down the cover's left edge; open, in the middle; shut
+ * on its back, down its right edge.
+ */
+private fun BookPose.spineAt(at: Int): Float = when {
+    at < 0 -> -COVER_HALF
+    at >= spreads -> COVER_HALF
+    else -> 0f
+}
 
 /** A studio light the disc's tracks split: its direction, strength and how tight its streak is. */
 private class StudioLight(x: Float, y: Float, z: Float, val weight: Float, val spread: Float) {

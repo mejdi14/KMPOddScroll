@@ -5,10 +5,12 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github.mejdi14.oddscroll.internal.clamped
+import io.github.mejdi14.oddscroll.internal.cubicBezierEase
 import io.github.mejdi14.oddscroll.internal.inOutCubic
 import io.github.mejdi14.oddscroll.internal.lerp
 import kotlin.math.PI
 import kotlin.math.exp
+import kotlin.math.sign
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -80,6 +82,16 @@ private const val COVER_OUT_T = COVER_MOVE_FROM + COVER_MOVE_T
 private const val COVER_BACK_T = 1.1f
 private const val COVER_BACK_ARC_MM = 22f
 
+/*
+ * The manual the cover is the front of, once it is out: turned a leaf at a
+ * time, each turn one fold over the spine, after Omma's sketchbook. Shut on
+ * its front it is -1, open it is a spread, shut on its back it is the count
+ * of spreads. Opening it brings it up into the middle of the frame and sends
+ * the case up out of the way; shutting it sends it back under the case.
+ */
+private const val LEAF_T = 0.85f
+private val leafEase = cubicBezierEase(0.42f, 0.05f, 0.25f, 1f)
+
 /** Where the case is this frame: its turn, the lid's swing, how far it has moved over for being open. */
 internal class CasePose {
     var x = 0f
@@ -92,6 +104,14 @@ internal class CasePose {
     var lid = 0f
     var spread = 0f
     var spin = 0f
+}
+
+/** Where the manual is this frame: a leaf turning from [from] to [to], [turn] of the way over. */
+internal class BookPose {
+    var spreads = 0
+    var from = -1
+    var to = -1
+    var turn = 1f
 }
 
 private enum class Phase { Rest, Opening, Open, Closing }
@@ -119,12 +139,22 @@ class CdCaseState internal constructor() {
     var coverOut by mutableStateOf(false)
         private set
 
+    /**
+     * The spread the cover's manual is open at, or turning to: -1 shut on its
+     * front, the count of spreads shut on its back.
+     */
+    var manualPage by mutableIntStateOf(-1)
+        private set
+
     /** Bumped once per frame, so the case repaints while anything moves. */
     internal var tick by mutableIntStateOf(0)
         private set
 
     /** Whether there is a cover in the lid to take out; set by whatever draws the case. */
     internal var hasCover by mutableStateOf(true)
+
+    /** Spreads in the manual behind the cover, none for a single sheet; set by whatever draws the case. */
+    internal var manualSpreads = 0
 
     private var t = 0f
     private var phase = Phase.Rest
@@ -135,6 +165,11 @@ class CdCaseState internal constructor() {
     private var coverAt = 0f
     private var inspectAfter = false
     private var returnAfter = false
+
+    private var leafFrom = -1
+    private var leafTo = -1
+    private var leafAt = 0f
+    private var returnAfterLeaf = false
 
     /** The case as last posed, and the cover in its lid as it was when it was taken out. */
     private val last = CasePose()
@@ -201,17 +236,73 @@ class CdCaseState internal constructor() {
         closeAfter = false
     }
 
-    /** Slides the cover back up into the shut lid; one still coming out goes back once it is out. */
+    /**
+     * Slides the cover back up into the shut lid; one still coming out goes
+     * back once it is out, and an open manual is shut first.
+     */
     fun returnCover() {
         when (cover) {
             Cover.Leaving -> returnAfter = true
             Cover.Out -> {
+                if (leafFrom != -1 || leafTo != -1) {
+                    returnAfterLeaf = true
+                    turnTo(-1)
+                    return
+                }
                 cover = Cover.Returning
                 coverAt = t
                 coverOut = false
             }
             else -> Unit
         }
+    }
+
+    /** Whether the cover is out with a manual behind it to leaf through. */
+    internal val canRead: Boolean get() = cover == Cover.Out && manualSpreads > 0
+
+    /** Whether the manual is open, or shut on its back: anywhere but shut on its front. */
+    internal val manualOpen: Boolean get() = leafTo != -1
+
+    /**
+     * Turns the cover's manual a leaf on, or back for a negative [by], from
+     * wherever it is heading; a leaf still turning lands at once. Shut, it
+     * opens.
+     */
+    fun turnPage(by: Int) {
+        if (!canRead || by == 0) return
+        turnTo((leafTo + by.sign).coerceIn(-1, manualSpreads))
+    }
+
+    /** Shuts the cover's manual onto its front in one fold, from wherever it is open. */
+    fun closeManual() {
+        if (cover == Cover.Out) turnTo(-1)
+    }
+
+    /** A tap on the manual: shut, it opens; open, it turns the way of the [side] tapped, -1 or 1. */
+    internal fun tapManual(side: Int) {
+        when {
+            leafTo < 0 -> turnPage(1)
+            leafTo >= manualSpreads -> turnPage(-1)
+            else -> turnPage(side)
+        }
+    }
+
+    private fun turnTo(to: Int) {
+        if (to == leafTo) return
+        leafFrom = leafTo
+        leafTo = to
+        leafAt = t
+        manualPage = to
+    }
+
+    /** How far over the leaf turning is, eased; 1 with none turning. */
+    private fun leafTurn(): Float =
+        if (leafFrom == leafTo) 1f else leafEase(((t - leafAt) / LEAF_T).clamped(0f, 1f))
+
+    /** How far the manual has come up to be read, from 0 under the case to 1 open in the middle. */
+    private fun read(): Float {
+        fun open(at: Int) = if (at in 0 until manualSpreads) 1f else 0f
+        return lerp(open(leafFrom), open(leafTo), leafTurn())
     }
 
     /** The cover is out of the lid, or on its way out or back. */
@@ -296,6 +387,14 @@ class CdCaseState internal constructor() {
             Cover.Returning -> if (coverSince >= COVER_BACK_T) cover = Cover.In
             else -> Unit
         }
+
+        if (leafFrom != leafTo && t - leafAt >= LEAF_T) {
+            leafFrom = leafTo
+            if (returnAfterLeaf && leafTo == -1) {
+                returnAfterLeaf = false
+                returnCover()
+            }
+        }
     }
 
     internal fun pose(out: CasePose, camera: Camera) {
@@ -340,11 +439,12 @@ class CdCaseState internal constructor() {
         out.yaw += grabY
         // Open, the pair is centred: the tray moves over by half a case, the
         // lid swung out to its left. With the cover out, the case stands
-        // smaller and higher, the cover under it.
+        // smaller and higher, the cover under it; with its manual open, up
+        // out of the frame.
         val room = room()
         val s = lerp(1f, camera.openScale, out.spread) * lerp(1f, camera.pairScale, room)
         out.x = HALF_MM * s * out.spread * 0.92f
-        out.y += camera.pairRise * room
+        out.y += camera.pairRise * room + camera.readRise * read()
         out.z = 0f
         out.scale = s
         out.spin = spin
@@ -368,14 +468,17 @@ class CdCaseState internal constructor() {
      */
     internal fun coverPose(out: CasePose, case: CasePose, camera: Camera): Boolean {
         if (cover == Cover.In) return false
-        // At rest under the case, face on, swaying a little out of step with it.
+        // At rest under the case, face on, swaying a little out of step with
+        // it; open to be read, in the middle and steadier.
+        val read = read()
+        val sway = 1f - 0.7f * read
         rest.x = 0f
-        rest.y = -camera.pairDrop + 1.2f * sin(t * 0.95f + 1.3f)
+        rest.y = lerp(-camera.pairDrop, 0f, read) + 1.2f * sway * sin(t * 0.95f + 1.3f)
         rest.z = 0f
-        rest.pitch = -0.04f + 0.035f * sin(t * 0.6f + 0.8f)
-        rest.yaw = 0.06f * sin(t * 0.75f + 2.1f)
-        rest.roll = -0.01f + 0.012f * sin(t * 0.45f)
-        rest.scale = camera.pairScale
+        rest.pitch = (-0.04f + 0.035f * sin(t * 0.6f + 0.8f)) * sway
+        rest.yaw = 0.06f * sway * sin(t * 0.75f + 2.1f)
+        rest.roll = (-0.01f + 0.012f * sin(t * 0.45f)) * sway
+        rest.scale = lerp(camera.pairScale, camera.readScale, read)
         val since = t - coverAt
         when (cover) {
             Cover.Leaving, Cover.Out -> {
@@ -410,6 +513,16 @@ class CdCaseState internal constructor() {
         out.lid = 0f
         out.spread = 0f
         out.spin = 0f
+        return true
+    }
+
+    /** Where the cover's manual is, into [out]; false with no manual behind the cover. */
+    internal fun bookPose(out: BookPose): Boolean {
+        if (manualSpreads <= 0) return false
+        out.spreads = manualSpreads
+        out.from = leafFrom
+        out.to = leafTo
+        out.turn = leafTurn()
         return true
     }
 }

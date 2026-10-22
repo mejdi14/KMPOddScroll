@@ -278,9 +278,16 @@ off the screen either way, and it turns to face you and comes forward — the
 single case below, to drag round and tap open. Open, an Inspect button at the
 bottom takes its cover out: the paper lifts off the lid, turns over to its
 printed side and comes down under the case, which shuts and rises to make room.
-`CdRackScrollState.leave()` (the demo wires it to the system's back) slides the
-cover back up into the lid if it is out, shuts the case if it is open, turns it
-back into the rack and brings the row in again.
+Give the case a `manual` and the cover is the front of a booklet: tap it and
+the cover folds open over the spine, the spread coming up into the middle of the
+frame as the case goes up out of it. Swipe it, tap a page or scroll to turn the
+leaves — each turn is one fold of the leaf over the spine, its back mirrored
+onto it, after a sketchbook from another project of mine — and the pages are
+printed on the `manualPaper` spread, multiplied in so the print's white is the
+paper's. `CdRackScrollState.leave()` (the demo wires it to the system's back)
+shuts the manual if it is open, slides the cover back up into the lid if it is
+out, shuts the case if it is open, turns it back into the rack and brings the
+row in again.
 
 Every case is the 3D case of `CdCase`, drawn after Ann Nguyen's WebGL
 [CD case](https://github.com/annnguyentt/vibe-coding/tree/main/cd-case). The
@@ -321,18 +328,21 @@ CdRackScroll(
 
 | Parameter | Default | |
 | --- | --- | --- |
-| `items` | — | cases in order; the rack repeats, so it has no end. Each `CdRackItem` has the disc's `image`, a `title` and `artist`, and an optional `cover` slipped in under the lid's glass |
+| `items` | — | cases in order; the rack repeats, so it has no end. Each `CdRackItem` has the disc's `image`, a `title` and `artist`, an optional `cover` slipped in under the lid's glass, and an optional `manual` — a suspending loader for the pages behind the cover, two to a spread, called off the main thread only for the case that is out |
 | `background` | white | the backdrop; the plastic is shaded for a pale one |
 | `contentColor` | `#111114` | caption text |
 | `captions` | `true` | title and artist of the case in the slot |
 | `inspectLabel` | `"Inspect"` | the button under an open case that takes its cover out; `null` for none |
+| `manualPaper` | `null` | an open spread on a clear ground, spine down the middle, that manual pages are printed on; `null` for plain paper |
 | `state` | intro of `4` | `rememberCdRackScrollState(intro)` — cases slid on first show; `0` opens at rest |
 
 `CdRackScrollState.scrollTo(index)` and `step(by)` drive it from a host's own
 controls, `inspect(index)` takes a case out, `leave()` puts it back, `slotted`
 is the case in the slot and `inspecting` whether one is out. `canInspectCover`
 is true while the case out is open with its cover in, and `inspectCover()`
-takes the cover out — for a host that brings its own button.
+takes the cover out — for a host that brings its own button. With the cover
+out, `case.turnPage(by)` and `case.closeManual()` leaf through its manual, and
+`case.manualPage` is the spread it is open at (`-1` shut).
 
 #### One case: `CdCase`
 
@@ -564,3 +574,11 @@ Lee-Loi Chieng's [PAL PS1 Cover Scans](https://archive.org/details/PAL_PS1_Cover
 on the Internet Archive. The artwork belongs to each game's publisher and is
 shown here only to illustrate the demo, so swap it for your own before using
 this anywhere real.
+
+The `ps1_manual_*.jpg` pages are ten interior pages from each game's English
+instruction booklet, scaled to 720 px squares: from the PAL and NTSC scans of
+[Emu-Land](https://www.emu-land.net/library/manuals/psx), the PS1 RPG manuals
+collection, and Kirkland's VideoGameManual.com scan of Rayman 2 preserved by the
+Wayback Machine. The manuals belong to each game's publisher, under the same
+terms as the covers. `ps1_manual_paper.webp`, the blank spread they are printed
+on, is carried over from the sketchbook in my Omma app.

@@ -67,6 +67,13 @@ data class CdRackItem(
     val artist: String = "",
     /** Slipped in under the lid's glass, cropped square to fill it; none leaves the lid clear. */
     val cover: ImageBitmap? = null,
+    /**
+     * The manual [cover] is the front of: its pages in reading order, two to
+     * a spread, each cropped square. Read in off the main thread while the
+     * case is out, and let go when it goes back; none leaves the cover a
+     * single sheet.
+     */
+    val manual: (suspend () -> List<ImageBitmap>)? = null,
 )
 
 /*
@@ -118,6 +125,9 @@ private const val EXIT_STAGGER = 0.03f
 
 private const val TAP_SLOP = 8f
 
+/** A drag across an open manual this long, in dp, turns a leaf. */
+private const val LEAF_SWIPE = 24f
+
 @Composable
 fun rememberCdRackScrollState(intro: Int = 4): CdRackScrollState =
     remember { CdRackScrollState(intro) }
@@ -129,8 +139,11 @@ fun rememberCdRackScrollState(intro: Int = 4): CdRackScrollState =
  * slot, the rest of the row clears off the screen, and it turns to face you:
  * drag it round, tap it to open it. Open, [inspectLabel] takes its cover out:
  * the cover turns over and comes to rest under the case, which shuts and
- * rises to make room. [CdRackScrollState.leave] — the system's back, say —
- * puts the cover back, then the case, and brings the row in again.
+ * rises to make room. With a [CdRackItem.manual] behind it, the cover is a
+ * booklet: tap it and it folds open over its spine, coming up into the middle
+ * as the case goes up out of the way; swipe it, tap a page or scroll to turn
+ * its leaves. [CdRackScrollState.leave] — the system's back, say — shuts the
+ * manual, puts the cover back, then the case, and brings the row in again.
  *
  * Each case is the same 3D case as [CdCase], drawn once at the rack's turn and
  * then only moved, since the rack's camera is far enough off that every case
@@ -146,6 +159,9 @@ fun rememberCdRackScrollState(intro: Int = 4): CdRackScrollState =
  * @param inspectLabel the button under an open case that takes its cover
  *   out, or null for none — a host can show its own off
  *   [CdRackScrollState.canInspectCover].
+ * @param manualPaper what a manual's pages are printed on: an open spread on
+ *   a clear ground, the spine down its middle; none prints them on plain
+ *   paper.
  * @param state also sets how far the rack slides when it first appears.
  */
 @Composable
@@ -156,6 +172,7 @@ fun CdRackScroll(
     contentColor: Color = Color(0xFF111114),
     captions: Boolean = true,
     inspectLabel: String? = "Inspect",
+    manualPaper: ImageBitmap? = null,
     state: CdRackScrollState = rememberCdRackScrollState(),
 ) {
     if (items.isEmpty()) {
@@ -211,6 +228,14 @@ fun CdRackScroll(
         rack.ready = true
     }
 
+    // The manual of the case out, read in while it is out.
+    LaunchedEffect(rack, state.inspecting) {
+        rack.manual = emptyList()
+        if (!state.inspecting) return@LaunchedEffect
+        val load = items[wrapCase(state.chosen, items.size)].manual ?: return@LaunchedEffect
+        rack.manual = withContext(Dispatchers.Default) { load() }
+    }
+
     Box(modifier.background(background)) {
         Canvas(
             Modifier
@@ -221,8 +246,12 @@ fun CdRackScroll(
                         var last = down.position
                         var travel = 0f
                         var started = false
-                        // Out of the rack, the finger turns the case instead.
+                        // Out of the rack, the finger turns the case instead,
+                        // and on its manual, the manual's leaves.
                         val out = state.inspecting && state.focus >= FOCUS_SECONDS
+                        val leafing = out && state.case.canRead &&
+                            rack.scene.bookSide(down.position.x, down.position.y) != 0
+                        var swept = 0f
                         var lastMillis = down.uptimeMillis
                         while (true) {
                             val event = awaitPointerEvent()
@@ -236,10 +265,13 @@ fun CdRackScroll(
                             travel += abs(dx) + abs(dy)
                             if (travel > TAP_SLOP) {
                                 if (!started) {
-                                    if (out) state.case.onGrab() else state.onDragStart(change.uptimeMillis / 1000f)
+                                    if (out && !leafing) state.case.onGrab()
+                                    if (!out) state.onDragStart(change.uptimeMillis / 1000f)
                                     started = true
                                 }
-                                if (out) {
+                                if (leafing) {
+                                    swept += dx
+                                } else if (out) {
                                     state.case.onGrabMove(dx / density, dy / density, change.uptimeMillis)
                                 } else {
                                     // Only the part of the drag that runs along
@@ -252,9 +284,21 @@ fun CdRackScroll(
                             }
                         }
                         if (started) {
-                            if (out) state.case.onLetGo(lastMillis) else state.onDragEnd()
+                            if (leafing) {
+                                // Left turns on, as a page is turned.
+                                if (abs(swept) >= LEAF_SWIPE * density) state.case.turnPage(if (swept < 0f) 1 else -1)
+                            } else if (out) {
+                                state.case.onLetGo(lastMillis)
+                            } else {
+                                state.onDragEnd()
+                            }
                         } else if (out) {
-                            if (rack.scene.hit(down.position.x, down.position.y)) state.case.toggle()
+                            val side = if (state.case.canRead) rack.scene.bookSide(down.position.x, down.position.y) else 0
+                            if (side != 0) {
+                                state.case.tapManual(side)
+                            } else if (rack.scene.hit(down.position.x, down.position.y)) {
+                                state.case.toggle()
+                            }
                         } else if (state.racked && rack.ready) {
                             val hit = rack.hit(down.position.x, down.position.y, state.position, items.size)
                             if (hit != null) state.inspect(hit)
@@ -262,8 +306,9 @@ fun CdRackScroll(
                     }
                 }
                 .pointerInput(state) {
-                    // A notch is a case. A trackpad sends fractions of one, so
-                    // they are added up until they come to a whole case.
+                    // A notch is a case, or a leaf of a manual out. A trackpad
+                    // sends fractions of one, so they are added up until they
+                    // come to a whole one.
                     var notches = 0f
                     awaitPointerEventScope {
                         while (true) {
@@ -274,7 +319,7 @@ fun CdRackScroll(
                             notches += scroll
                             while (abs(notches) >= 1f) {
                                 val by = if (notches > 0f) 1 else -1
-                                state.step(by)
+                                if (state.inspecting) state.case.turnPage(by) else state.step(by)
                                 notches -= by
                             }
                             event.changes.forEach { it.consume() }
@@ -287,7 +332,7 @@ fun CdRackScroll(
             val h = size.height.toInt()
             if (frameSize.width != w || frameSize.height != h) frameSize = IntSize(w, h)
             rack.fit(size.width, size.height)
-            rack.draw(this, state)
+            rack.draw(this, state, manualPaper)
         }
 
         if (captions) Caption(items, state, contentColor)
@@ -353,6 +398,10 @@ private class RackScene(private val items: List<CdRackItem>) {
     private val outPose = CasePose()
     private val livePose = CasePose()
     private val coverPose = CasePose()
+    private val bookPose = BookPose()
+
+    /** The pages of the manual of the case out, once read in. */
+    var manual: List<ImageBitmap> = emptyList()
 
     val sprites = arrayOfNulls<ImageBitmap>(items.size)
     var box: SpriteBox? = null
@@ -422,7 +471,7 @@ private class RackScene(private val items: List<CdRackItem>) {
         out[2] = s * w * SPACING_MM * AXIS[2]
     }
 
-    fun draw(scope: DrawScope, state: CdRackScrollState) = with(scope) {
+    fun draw(scope: DrawScope, state: CdRackScrollState, paper: ImageBitmap?) = with(scope) {
         val position = state.position
         val count = items.size
         val focus = state.focus
@@ -441,13 +490,16 @@ private class RackScene(private val items: List<CdRackItem>) {
             scene.setCover(item.cover)
             val covered = item.cover != null
             if (state.case.hasCover != covered) state.case.hasCover = covered
+            scene.setManual(manual, paper)
+            state.case.manualSpreads = if (covered) (manual.size + 1) / 2 else 0
         }
         val loose = if (chosen != NONE && state.case.coverPose(coverPose, livePose, liveCamera)) coverPose else null
+        val book = if (loose != null && state.case.bookPose(bookPose)) bookPose else null
 
         // Back of the row first: each case covers the one behind it.
         for (i in last downTo first) {
             if (i == chosen) {
-                scene.draw(this, liveCamera, livePose, shadow = come, cover = loose)
+                scene.draw(this, liveCamera, livePose, shadow = come, cover = loose, book = book)
                 continue
             }
             val sprite = sprites[wrapCase(i, count)] ?: continue

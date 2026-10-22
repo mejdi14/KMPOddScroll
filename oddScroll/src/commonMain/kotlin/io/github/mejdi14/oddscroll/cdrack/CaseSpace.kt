@@ -22,6 +22,10 @@ private const val FIT = 0.6f
 private const val PAIR_FIT = 0.8f
 private const val PAIR_GAP = 16f
 
+/** The open manual fills at most this much of the width, and of the height. */
+private const val READ_ACROSS = 0.92f
+private const val READ_TALL = 0.8f
+
 /** The light the backdrop's shadows fall from. */
 internal val LIGHT = normalized(-0.3f, 0.48f, 1f)
 
@@ -72,6 +76,15 @@ internal class Camera {
     var pairDrop = 0f
         private set
 
+    /**
+     * The manual open in the middle of the frame: how large it is drawn so
+     * the spread fits, and how far up the case goes to clear the frame for it.
+     */
+    var readScale = 1f
+        private set
+    var readRise = 0f
+        private set
+
     private val cx get() = width / 2f
     private val cy get() = height / 2f
 
@@ -93,6 +106,8 @@ internal class Camera {
         pairScale = minOf(1f, tall * PAIR_FIT / stack)
         pairRise = pairScale * (stack / 2f - HALF_MM)
         pairDrop = pairScale * (stack / 2f - COVER_HALF)
+        readScale = minOf(across * READ_ACROSS / (4f * COVER_HALF), tall * READ_TALL / (2f * COVER_HALF))
+        readRise = tall * 0.6f + HALF_MM
     }
 
     /** Screen x, y of a world point into [out] at [at]; false if it is behind the lens. */

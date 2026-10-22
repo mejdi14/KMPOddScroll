@@ -172,12 +172,13 @@ class CdRackScrollState internal constructor(intro: Int) {
 
     /**
      * Puts the case back in the rack, shutting it first if it is open; with
-     * its cover out, puts that back first.
+     * its cover out, puts that back first, and with the cover's manual open,
+     * shuts that before anything.
      */
     fun leave() {
         if (!inspecting) return
         if (case.coverLoose) {
-            case.returnCover()
+            if (case.manualOpen) case.closeManual() else case.returnCover()
             return
         }
         if (!case.shut) {
