@@ -333,12 +333,12 @@ internal fun bakeLayer(
 private fun DrawScope.lookRod(rod: Rod) {
     val w = rod.width
     fun stroke(width: Float) = Stroke(width, cap = rod.cap, join = StrokeJoin.Round)
-    drawPath(rod.path, Color(0xFF3B4047), style = stroke(w))
-    drawPath(rod.path, if (rod.overPrint) Color(0xFF6A7078) else Color(0xFF9AA1A9), style = stroke(w * 0.72f))
+    drawPath(rod.path, Color(0xFF8A9199), style = stroke(w))
+    drawPath(rod.path, if (rod.overPrint) Color(0xFF6A7078) else Color(0xFFC2C7CD), style = stroke(w * 0.72f))
     drawPath(rod.path, if (rod.overPrint) Color(0xFF2A2D32) else Color(0xFFF3F5F7), style = stroke(w * 0.4f))
     // The light bent through it lands a little down and right of its middle.
     translate(w * 0.12f, w * 0.12f) {
-        drawPath(rod.path, Color(0xFF23272D).copy(alpha = 0.55f), style = stroke(w * 0.08f))
+        drawPath(rod.path, Color(0xFF5A6068).copy(alpha = 0.4f), style = stroke(w * 0.08f))
     }
 }
 

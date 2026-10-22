@@ -142,6 +142,17 @@ uniform float3x3 toWorld;
 uniform float thickness;
 uniform float overDisc;
 
+/*
+ * The studio's room is all but black away from its softboxes, and a rod
+ * turned side on shows little else — so its edge, and the whole of a thin
+ * rod, came out as a hard black line. The darks are lifted towards a pale
+ * grey instead, and further the thinner the rod is on screen; the bright
+ * reflections are left as they are.
+ */
+const float3 LIFT_TO = float3(0.62, 0.64, 0.67);
+const float LIFT_WIDE = 0.55;
+const float LIFT_THIN = 0.85;
+
 float distanceAt(float2 xy) {
     float4 c = float4(height.eval(xy));
     return c.a > 0.004 ? (c.r / c.a - 0.5) * 8.0 : -4.0;
@@ -226,6 +237,9 @@ half4 main(float2 xy) {
     acc += thr * 0.6 * room(dir);
 
     float3 col = refl * F + acc * (1.0 - F);
+    float lum = dot(col, float3(0.2126, 0.7152, 0.0722));
+    float lift = mix(LIFT_THIN, LIFT_WIDE, smoothstep(1.5, 6.0, rc / frame.z));
+    col = mix(col, LIFT_TO, lift * (1.0 - smoothstep(0.0, 0.5, lum)));
     float k = rodCover * cover;
     return half4(half3(toSrgb(col)), 1.0) * half(k) + plate * half(1.0 - k);
 }

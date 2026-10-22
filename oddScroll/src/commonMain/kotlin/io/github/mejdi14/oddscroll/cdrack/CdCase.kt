@@ -501,11 +501,11 @@ private class CaseScene(private val art: ImageBitmap) {
             drawPath(
                 path,
                 Brush.linearGradient(
-                    0f to WALL_DARK.copy(alpha = 0.9f * alpha),
-                    0.18f to WALL_MID.copy(alpha = 0.75f * alpha),
-                    0.5f to WALL_PALE.copy(alpha = 0.55f * alpha),
-                    0.82f to WALL_MID.copy(alpha = 0.75f * alpha),
-                    1f to WALL_DARK.copy(alpha = 0.9f * alpha),
+                    0f to WALL_DARK.copy(alpha = 0.7f * alpha),
+                    0.18f to WALL_MID.copy(alpha = 0.55f * alpha),
+                    0.5f to WALL_PALE.copy(alpha = 0.4f * alpha),
+                    0.82f to WALL_MID.copy(alpha = 0.55f * alpha),
+                    1f to WALL_DARK.copy(alpha = 0.7f * alpha),
                     start = Offset((screen[0] + screen[2]) / 2f, (screen[1] + screen[3]) / 2f),
                     end = Offset((screen[4] + screen[6]) / 2f, (screen[5] + screen[7]) / 2f),
                 ),
@@ -612,8 +612,9 @@ private val TRAY_ORDER = listOf(0, DISC, 1, 2, 3)
 
 private val CORNERS = listOf(-1f to -1f, 1f to -1f, 1f to 1f, -1f to 1f)
 
-private val WALL_DARK = Color(0xFF3B4047)
-private val WALL_MID = Color(0xFF9AA1A9)
+// Kept off black: a darker rim drew a hard outline round the whole case.
+private val WALL_DARK = Color(0xFF959CA4)
+private val WALL_MID = Color(0xFFC2C7CD)
 private val WALL_PALE = Color(0xFFF3F5F7)
 
 /** A studio light the disc's tracks split: its direction, strength and how tight its streak is. */
