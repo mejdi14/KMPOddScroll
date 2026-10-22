@@ -59,6 +59,8 @@ private const val TAP_SLOP = 6f
  * drawn from a look baked once.
  *
  * @param art printed across the disc, its middle square to the disc's width.
+ * @param cover slipped in under the lid's glass, its middle square filling
+ *   the lid; none leaves the lid clear.
  * @param background the backdrop; the reference's is white, and the clear
  *   plastic is shaded for a pale one.
  * @param spin turn the disc inside the case.
@@ -67,6 +69,7 @@ private const val TAP_SLOP = 6f
 fun CdCase(
     art: ImageBitmap,
     modifier: Modifier = Modifier,
+    cover: ImageBitmap? = null,
     background: Color = Color.White,
     spin: Boolean = true,
     state: CdCaseState = rememberCdCaseState(),
@@ -129,6 +132,7 @@ fun CdCase(
             camera.fit(size.width, size.height)
             state.pose(pose, camera.openScale)
             scene.setArt(art)
+            scene.setCover(cover)
             scene.draw(this, camera, pose)
         }
     }

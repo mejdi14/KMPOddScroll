@@ -58,6 +58,8 @@ data class CdRackItem(
     val title: String = "",
     /** Second line of the caption, under the title. */
     val artist: String = "",
+    /** Slipped in under the lid's glass, cropped square to fill it; none leaves the lid clear. */
+    val cover: ImageBitmap? = null,
 )
 
 /*
@@ -180,6 +182,7 @@ fun CdRackScroll(
         rack.box = box
         for (index in items.indices) {
             withContext(Dispatchers.Default) { rack.scene.setArt(items[index].image) }
+            rack.scene.setCover(items[index].cover)
             val layer = graphics.createGraphicsLayer()
             try {
                 layer.record(layerDensity, direction, IntSize(box.width, box.height)) {
@@ -378,7 +381,9 @@ private class RackScene(private val items: List<CdRackItem>) {
             liveCamera.zoom = exp(lerp(ln(RACK_ZOOM), 0f, come))
             state.case.pose(outPose, liveCamera.openScale)
             blend(come)
-            scene.setArt(items[wrapCase(chosen, count)].image)
+            val item = items[wrapCase(chosen, count)]
+            scene.setArt(item.image)
+            scene.setCover(item.cover)
         }
 
         // Back of the row first: each case covers the one behind it.

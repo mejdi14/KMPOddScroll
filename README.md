@@ -311,14 +311,14 @@ and one number per frame to 1.1 px, so the rack is a single scalar:
 
 ```kotlin
 CdRackScroll(
-    items = listOf(CdRackItem(image, "Funky Drummer", "James Brown"), /* ... */),
+    items = listOf(CdRackItem(disc, "Tekken 3", "Namco", cover = front), /* ... */),
     modifier = Modifier.fillMaxSize(),
 )
 ```
 
 | Parameter | Default | |
 | --- | --- | --- |
-| `items` | — | cases in order; the rack repeats, so it has no end |
+| `items` | — | cases in order; the rack repeats, so it has no end. Each `CdRackItem` has the disc's `image`, a `title` and `artist`, and an optional `cover` slipped in under the lid's glass |
 | `background` | white | the backdrop; the plastic is shaded for a pale one |
 | `contentColor` | `#111114` | caption text |
 | `captions` | `true` | title and artist of the case in the slot |
@@ -363,6 +363,7 @@ CdCase(
 | Parameter | Default | |
 | --- | --- | --- |
 | `art` | — | printed across the disc, its middle square to the disc's width |
+| `cover` | `null` | slipped in under the lid's glass, its middle square filling the lid; `null` leaves it clear |
 | `background` | white | the backdrop; the plastic is shaded for a pale one |
 | `spin` | `true` | turn the disc inside the case |
 | `state` | — | `rememberCdCaseState()`; `open()`, `close()`, `toggle()` and `isOpen` |
@@ -509,7 +510,7 @@ cards of the Edge Distortion gallery; Terrace stacks the same cuts.
 
 Flex Carousel uses museum scans of paintings, also from Unsplash and under the
 same licence, cut 800x600 for its 4:3 cards. Lift Stack uses the same six, cut
-square. CD Rack prints both the scans and the wide photographs on its discs.
+square.
 
 | File | Scanned by |
 | --- | --- |
@@ -546,3 +547,14 @@ anywhere real.
 attribution and does not allow the flowers to be redistributed on their own, so
 swap them for your own artwork before using this anywhere real, or hold a
 Freepik licence that covers it.
+
+### Game artwork
+
+CD Rack's `ps1_disc_*.jpg` and `ps1_cover_*.jpg` are the disc labels and front
+covers of twenty European PlayStation releases, cut square and scaled to 640 and
+720 px. The disc labels are community scans from the
+[LaunchBox Games Database](https://gamesdb.launchbox-app.com); the covers are
+Lee-Loi Chieng's [PAL PS1 Cover Scans](https://archive.org/details/PAL_PS1_CoverScans)
+on the Internet Archive. The artwork belongs to each game's publisher and is
+shown here only to illustrate the demo, so swap it for your own before using
+this anywhere real.

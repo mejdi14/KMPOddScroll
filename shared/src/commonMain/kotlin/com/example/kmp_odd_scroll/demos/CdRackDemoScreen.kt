@@ -10,26 +10,56 @@ import io.github.mejdi14.oddscroll.cdrack.CdRackItem
 import io.github.mejdi14.oddscroll.cdrack.CdRackScroll
 import io.github.mejdi14.oddscroll.cdrack.rememberCdRackScrollState
 import kmpoddscroll.shared.generated.resources.Res
-import kmpoddscroll.shared.generated.resources.art_cowherd
-import kmpoddscroll.shared.generated.resources.art_cypresses
-import kmpoddscroll.shared.generated.resources.art_farmhouse
-import kmpoddscroll.shared.generated.resources.art_night
-import kmpoddscroll.shared.generated.resources.art_village
-import kmpoddscroll.shared.generated.resources.art_wheatfield
-import kmpoddscroll.shared.generated.resources.wide_basalt
-import kmpoddscroll.shared.generated.resources.wide_falls
-import kmpoddscroll.shared.generated.resources.wide_forest
-import kmpoddscroll.shared.generated.resources.wide_peaks
-import kmpoddscroll.shared.generated.resources.wide_sounds
-import kmpoddscroll.shared.generated.resources.wide_towers
+import kmpoddscroll.shared.generated.resources.ps1_cover_ape_escape
+import kmpoddscroll.shared.generated.resources.ps1_cover_crash_bandicoot
+import kmpoddscroll.shared.generated.resources.ps1_cover_ctr
+import kmpoddscroll.shared.generated.resources.ps1_cover_dino_crisis
+import kmpoddscroll.shared.generated.resources.ps1_cover_final_fantasy_ix
+import kmpoddscroll.shared.generated.resources.ps1_cover_final_fantasy_vii
+import kmpoddscroll.shared.generated.resources.ps1_cover_final_fantasy_viii
+import kmpoddscroll.shared.generated.resources.ps1_cover_gran_turismo
+import kmpoddscroll.shared.generated.resources.ps1_cover_medal_of_honor
+import kmpoddscroll.shared.generated.resources.ps1_cover_medievil
+import kmpoddscroll.shared.generated.resources.ps1_cover_metal_gear_solid
+import kmpoddscroll.shared.generated.resources.ps1_cover_micro_machines_v3
+import kmpoddscroll.shared.generated.resources.ps1_cover_rayman_2
+import kmpoddscroll.shared.generated.resources.ps1_cover_resident_evil
+import kmpoddscroll.shared.generated.resources.ps1_cover_resident_evil_2
+import kmpoddscroll.shared.generated.resources.ps1_cover_silent_hill
+import kmpoddscroll.shared.generated.resources.ps1_cover_soul_blade
+import kmpoddscroll.shared.generated.resources.ps1_cover_spyro
+import kmpoddscroll.shared.generated.resources.ps1_cover_tekken_3
+import kmpoddscroll.shared.generated.resources.ps1_cover_tomb_raider
+import kmpoddscroll.shared.generated.resources.ps1_disc_ape_escape
+import kmpoddscroll.shared.generated.resources.ps1_disc_crash_bandicoot
+import kmpoddscroll.shared.generated.resources.ps1_disc_ctr
+import kmpoddscroll.shared.generated.resources.ps1_disc_dino_crisis
+import kmpoddscroll.shared.generated.resources.ps1_disc_final_fantasy_ix
+import kmpoddscroll.shared.generated.resources.ps1_disc_final_fantasy_vii
+import kmpoddscroll.shared.generated.resources.ps1_disc_final_fantasy_viii
+import kmpoddscroll.shared.generated.resources.ps1_disc_gran_turismo
+import kmpoddscroll.shared.generated.resources.ps1_disc_medal_of_honor
+import kmpoddscroll.shared.generated.resources.ps1_disc_medievil
+import kmpoddscroll.shared.generated.resources.ps1_disc_metal_gear_solid
+import kmpoddscroll.shared.generated.resources.ps1_disc_micro_machines_v3
+import kmpoddscroll.shared.generated.resources.ps1_disc_rayman_2
+import kmpoddscroll.shared.generated.resources.ps1_disc_resident_evil
+import kmpoddscroll.shared.generated.resources.ps1_disc_resident_evil_2
+import kmpoddscroll.shared.generated.resources.ps1_disc_silent_hill
+import kmpoddscroll.shared.generated.resources.ps1_disc_soul_blade
+import kmpoddscroll.shared.generated.resources.ps1_disc_spyro
+import kmpoddscroll.shared.generated.resources.ps1_disc_tekken_3
+import kmpoddscroll.shared.generated.resources.ps1_disc_tomb_raider
 import org.jetbrains.compose.resources.imageResource
 
 /**
- * Twelve CD cases, the wide photographs and the museum scans printed on their
- * discs and dealt alternately so no two neighbours look alike, on the white
- * studio wall the case's reference is set on. Twelve is about what the row
- * holds in view, so it only repeats off screen. Tap one to take it out; the
+ * Twenty PlayStation games in clear CD cases, each disc's own label printed
+ * on it and the front cover slipped in under the lid's glass, on the white
+ * studio wall the case's reference is set on. Tap one to take it out; the
  * system's back puts it back before it leaves the demo.
+ *
+ * Both are cut square: the disc scans already are, and the covers lose the
+ * edges of the wider PAL inserts, spines and all.
  * Credits are in the README.
  */
 @OptIn(ExperimentalComposeUiApi::class)
@@ -37,35 +67,129 @@ import org.jetbrains.compose.resources.imageResource
 fun CdRackDemoScreen() {
     val state = rememberCdRackScrollState()
     BackHandler(enabled = state.inspecting) { state.leave() }
-    val sounds = imageResource(Res.drawable.wide_sounds)
-    val peaks = imageResource(Res.drawable.wide_peaks)
-    val falls = imageResource(Res.drawable.wide_falls)
-    val basalt = imageResource(Res.drawable.wide_basalt)
-    val forest = imageResource(Res.drawable.wide_forest)
-    val towers = imageResource(Res.drawable.wide_towers)
-    val wheatfield = imageResource(Res.drawable.art_wheatfield)
-    val night = imageResource(Res.drawable.art_night)
-    val farmhouse = imageResource(Res.drawable.art_farmhouse)
-    val village = imageResource(Res.drawable.art_village)
-    val cowherd = imageResource(Res.drawable.art_cowherd)
-    val cypresses = imageResource(Res.drawable.art_cypresses)
-
-    val items = remember(sounds, peaks, falls, basalt, forest, towers, wheatfield, night, farmhouse, village, cowherd, cypresses) {
-        listOf(
-            CdRackItem(sounds, "Marlborough Sounds", "Samuel Harrington"),
-            CdRackItem(wheatfield, "Green Wheat Fields", "Vincent van Gogh"),
-            CdRackItem(peaks, "Above the Clouds", "Maciej Marko"),
-            CdRackItem(night, "Night with her Train of Stars", "Edward Robert Hughes"),
-            CdRackItem(falls, "Golden Falls", "Ingrid Eich"),
-            CdRackItem(farmhouse, "Farmhouse in Provence", "Vincent van Gogh"),
-            CdRackItem(basalt, "Basalt Columns", "Adrien Olichon"),
-            CdRackItem(village, "Harbour Village", "Birmingham Museums Trust"),
-            CdRackItem(forest, "Forest Path", "Wolfgang Hasselmann"),
-            CdRackItem(cowherd, "The Cowherd", "The Metropolitan Museum of Art"),
-            CdRackItem(towers, "City Towers", "Heye Jensen"),
-            CdRackItem(cypresses, "Wheat Field with Cypresses", "Vincent van Gogh"),
-        )
-    }
+    val cases = listOf(
+        CdRackItem(
+            image = imageResource(Res.drawable.ps1_disc_tekken_3),
+            title = "Tekken 3",
+            artist = "Namco",
+            cover = imageResource(Res.drawable.ps1_cover_tekken_3),
+        ),
+        CdRackItem(
+            image = imageResource(Res.drawable.ps1_disc_final_fantasy_vii),
+            title = "Final Fantasy VII",
+            artist = "Square",
+            cover = imageResource(Res.drawable.ps1_cover_final_fantasy_vii),
+        ),
+        CdRackItem(
+            image = imageResource(Res.drawable.ps1_disc_spyro),
+            title = "Spyro the Dragon",
+            artist = "Insomniac Games",
+            cover = imageResource(Res.drawable.ps1_cover_spyro),
+        ),
+        CdRackItem(
+            image = imageResource(Res.drawable.ps1_disc_metal_gear_solid),
+            title = "Metal Gear Solid",
+            artist = "Konami",
+            cover = imageResource(Res.drawable.ps1_cover_metal_gear_solid),
+        ),
+        CdRackItem(
+            image = imageResource(Res.drawable.ps1_disc_crash_bandicoot),
+            title = "Crash Bandicoot",
+            artist = "Naughty Dog",
+            cover = imageResource(Res.drawable.ps1_cover_crash_bandicoot),
+        ),
+        CdRackItem(
+            image = imageResource(Res.drawable.ps1_disc_silent_hill),
+            title = "Silent Hill",
+            artist = "Konami",
+            cover = imageResource(Res.drawable.ps1_cover_silent_hill),
+        ),
+        CdRackItem(
+            image = imageResource(Res.drawable.ps1_disc_gran_turismo),
+            title = "Gran Turismo",
+            artist = "Polyphony Digital",
+            cover = imageResource(Res.drawable.ps1_cover_gran_turismo),
+        ),
+        CdRackItem(
+            image = imageResource(Res.drawable.ps1_disc_resident_evil_2),
+            title = "Resident Evil 2",
+            artist = "Capcom",
+            cover = imageResource(Res.drawable.ps1_cover_resident_evil_2),
+        ),
+        CdRackItem(
+            image = imageResource(Res.drawable.ps1_disc_ape_escape),
+            title = "Ape Escape",
+            artist = "Sony Computer Entertainment",
+            cover = imageResource(Res.drawable.ps1_cover_ape_escape),
+        ),
+        CdRackItem(
+            image = imageResource(Res.drawable.ps1_disc_final_fantasy_viii),
+            title = "Final Fantasy VIII",
+            artist = "Square",
+            cover = imageResource(Res.drawable.ps1_cover_final_fantasy_viii),
+        ),
+        CdRackItem(
+            image = imageResource(Res.drawable.ps1_disc_ctr),
+            title = "Crash Team Racing",
+            artist = "Naughty Dog",
+            cover = imageResource(Res.drawable.ps1_cover_ctr),
+        ),
+        CdRackItem(
+            image = imageResource(Res.drawable.ps1_disc_dino_crisis),
+            title = "Dino Crisis",
+            artist = "Capcom",
+            cover = imageResource(Res.drawable.ps1_cover_dino_crisis),
+        ),
+        CdRackItem(
+            image = imageResource(Res.drawable.ps1_disc_rayman_2),
+            title = "Rayman 2: The Great Escape",
+            artist = "Ubi Soft",
+            cover = imageResource(Res.drawable.ps1_cover_rayman_2),
+        ),
+        CdRackItem(
+            image = imageResource(Res.drawable.ps1_disc_medal_of_honor),
+            title = "Medal of Honor",
+            artist = "DreamWorks Interactive",
+            cover = imageResource(Res.drawable.ps1_cover_medal_of_honor),
+        ),
+        CdRackItem(
+            image = imageResource(Res.drawable.ps1_disc_medievil),
+            title = "MediEvil",
+            artist = "SCE Cambridge Studio",
+            cover = imageResource(Res.drawable.ps1_cover_medievil),
+        ),
+        CdRackItem(
+            image = imageResource(Res.drawable.ps1_disc_final_fantasy_ix),
+            title = "Final Fantasy IX",
+            artist = "Square",
+            cover = imageResource(Res.drawable.ps1_cover_final_fantasy_ix),
+        ),
+        CdRackItem(
+            image = imageResource(Res.drawable.ps1_disc_micro_machines_v3),
+            title = "Micro Machines V3",
+            artist = "Codemasters",
+            cover = imageResource(Res.drawable.ps1_cover_micro_machines_v3),
+        ),
+        CdRackItem(
+            image = imageResource(Res.drawable.ps1_disc_resident_evil),
+            title = "Resident Evil",
+            artist = "Capcom",
+            cover = imageResource(Res.drawable.ps1_cover_resident_evil),
+        ),
+        CdRackItem(
+            image = imageResource(Res.drawable.ps1_disc_soul_blade),
+            title = "Soul Blade",
+            artist = "Namco",
+            cover = imageResource(Res.drawable.ps1_cover_soul_blade),
+        ),
+        CdRackItem(
+            image = imageResource(Res.drawable.ps1_disc_tomb_raider),
+            title = "Tomb Raider",
+            artist = "Core Design",
+            cover = imageResource(Res.drawable.ps1_cover_tomb_raider),
+        ),
+    )
+    val items = remember(cases) { cases }
 
     CdRackScroll(
         items = items,

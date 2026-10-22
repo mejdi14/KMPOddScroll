@@ -42,6 +42,7 @@ internal class CaseScene {
     private var camera = Camera()
     private var pose = CasePose()
     private var art: ImageBitmap? = null
+    private var cover: ImageBitmap? = null
 
     private val tray = Pose()
     private val lid = Pose()
@@ -76,6 +77,11 @@ internal class CaseScene {
         art = image
         square = if (shader != null) squareArt(image, ART_PX) else null
         discArt = if (shader == null && ppm > 0f) bakeDisc(image, ppm) else null
+    }
+
+    /** Slips [image] in under the lid's glass from now on, or takes it out for null. */
+    fun setCover(image: ImageBitmap?) {
+        cover = image
     }
 
     /**
@@ -182,10 +188,15 @@ internal class CaseScene {
     }
 
     private fun DrawScope.drawLid() {
+        val front = facing(lid)
         val hinge = hingeFacing(lid)
         if (!hinge) knuckles(lid, lidKnuckles)
         walls(lid, LID_BACK, LID_FRONT, front = false)
+        // The cover is just behind the glass: under it from the front, over
+        // it from behind.
+        if (front) insert(front)
         lidBitmap?.let { layer(lid, lidLayer, it) }
+        if (!front) insert(front)
         if (shader == null) glare(lid)
         walls(lid, LID_BACK, LID_FRONT, front = true)
         if (hinge) knuckles(lid, lidKnuckles)
@@ -223,6 +234,40 @@ internal class CaseScene {
                     dstSize = IntSize(bitmap.width, bitmap.height),
                     filterQuality = FilterQuality.Medium,
                 )
+            }
+        }
+    }
+
+    /**
+     * The cover under the lid's glass, its middle square across the inside of
+     * the rim; from behind, the back of the paper.
+     */
+    private fun DrawScope.insert(front: Boolean) {
+        val image = cover ?: return
+        lid.plane(camera, COVER_Z, matrix, plane)
+        withTransform({ transform(matrix) }) {
+            if (!front) {
+                drawRect(
+                    PAPER,
+                    topLeft = Offset(-COVER_HALF, -COVER_HALF),
+                    size = Size(2f * COVER_HALF, 2f * COVER_HALF),
+                )
+            } else {
+                val square = discSquare(image)
+                val k = 2f * COVER_HALF / square.width
+                withTransform({
+                    translate(-COVER_HALF, -COVER_HALF)
+                    scale(k, k, Offset.Zero)
+                }) {
+                    drawImage(
+                        image = image,
+                        srcOffset = IntOffset(square.left, square.top),
+                        srcSize = IntSize(square.width, square.height),
+                        dstOffset = IntOffset.Zero,
+                        dstSize = IntSize(square.width, square.height),
+                        filterQuality = FilterQuality.Medium,
+                    )
+                }
             }
         }
     }
@@ -539,6 +584,9 @@ private val CORNERS = listOf(-1f to -1f, 1f to -1f, 1f to 1f, -1f to 1f)
 private val WALL_DARK = Color(0xFF959CA4)
 private val WALL_MID = Color(0xFFC2C7CD)
 private val WALL_PALE = Color(0xFFF3F5F7)
+
+/** The back of the cover, seen through the lid from behind. */
+private val PAPER = Color(0xFFF2EFE9)
 
 /** A studio light the disc's tracks split: its direction, strength and how tight its streak is. */
 private class StudioLight(x: Float, y: Float, z: Float, val weight: Float, val spread: Float) {

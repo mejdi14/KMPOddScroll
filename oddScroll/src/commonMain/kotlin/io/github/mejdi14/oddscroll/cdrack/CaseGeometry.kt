@@ -64,6 +64,10 @@ internal const val DISC_Z = -1.8f
 internal const val LID_BACK = 3f
 internal const val LID_FRONT = 5f
 
+/** The cover slipped in under the lid's glass, just behind it, and filling its rim. */
+internal const val COVER_Z = LID_BACK - 0.2f
+internal const val COVER_HALF = HALF_MM - 4f
+
 /** Where the backdrop stands behind the case, which its shadow lands on. */
 internal const val BACKDROP_Z = -70f
 
