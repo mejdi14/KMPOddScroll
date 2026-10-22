@@ -11,6 +11,9 @@ import androidx.compose.ui.graphics.ImageBitmap
  * perspective with it, and is handed the camera in those same coordinates.
  */
 internal interface CaseShader {
+    /** A height map from the ARGB [pixels] worked out for it, [width] by [height]. */
+    fun heightMap(pixels: IntArray, width: Int, height: Int): ImageBitmap
+
     /**
      * The glass of one layer, drawn over its [height] map in that map's own
      * pixels. [left], [top] and [mmPerPx] put a pixel back in millimetres;

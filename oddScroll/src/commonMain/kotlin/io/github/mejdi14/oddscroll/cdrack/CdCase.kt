@@ -230,8 +230,9 @@ private class CaseScene(private val art: ImageBitmap) {
         if (rounded == ppm) return
         ppm = rounded
         val mode = if (shader != null) Bake.Height else Bake.Look
-        trayBitmaps = trayLayers.map { bakeLayer(it, ppm, mode) }
-        lidBitmap = bakeLayer(lidLayer, ppm, mode)
+        val make = shader?.let { it::heightMap }
+        trayBitmaps = trayLayers.map { bakeLayer(it, ppm, mode, make) }
+        lidBitmap = bakeLayer(lidLayer, ppm, mode, make)
         if (shader == null) discArt = bakeDisc(art, ppm)
     }
 

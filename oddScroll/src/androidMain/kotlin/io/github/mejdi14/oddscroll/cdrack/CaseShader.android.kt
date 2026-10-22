@@ -1,5 +1,6 @@
 package io.github.mejdi14.oddscroll.cdrack
 
+import android.graphics.Bitmap
 import android.graphics.BitmapShader
 import android.graphics.RuntimeShader
 import android.graphics.Shader
@@ -9,6 +10,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 
 /*
  * The reference's shaders, carried over to AGSL. Its studio is analytic — a
@@ -119,8 +121,13 @@ half4 sheet(float3 N, float3 V, float thickness, float k) {
 /**
  * A layer of the case's clear plastic, over its height map.
  *
- * A rod's profile comes back out of the map as a slope, so a normal, and it is
- * taken for round in section: the view refracts in, crosses the section,
+ * The map holds each pixel's signed distance in from the nearest rod's edge,
+ * and the radius that rod's section is rounded to. Down the middle of a rod,
+ * further in than that radius, its face is flat; towards the edge it rolls
+ * over on the radius until it stands upright — so the normal is worked out
+ * exactly from the distance and the way it rises, and the edge is
+ * antialiased off the same distance. For the light through it the section is
+ * taken for round: the view refracts in, crosses the section,
  * and either leaves — bent into the dark room, or, if it carries on near
  * enough the way it came, onto the page or the disc behind — or reflects and
  * crosses again, three times over, as the reference's rods do. What the rod
@@ -135,9 +142,9 @@ uniform float3x3 toWorld;
 uniform float thickness;
 uniform float overDisc;
 
-float heightAt(float2 xy) {
+float distanceAt(float2 xy) {
     float4 c = float4(height.eval(xy));
-    return c.a > 0.004 ? c.r / c.a : 0.0;
+    return c.a > 0.004 ? (c.r / c.a - 0.5) * 8.0 : -4.0;
 }
 
 float3 outside(float3 way, float3 I, float3 seen, float matter) {
@@ -160,17 +167,24 @@ half4 main(float2 xy) {
     float3 V = normalize(toWorld * Vl);
     float3 I = -V;
 
-    if (m.b < 0.004) {
-        if (m.g < 0.004) return half4(0.0);
-        return sheet(normalize(toWorld * float3(0.0, 0.0, side)), V, thickness, m.g * cover);
-    }
+    float d = (m.r - 0.5) * 8.0;
+    float rodCover = clamp(d / frame.z + 0.5, 0.0, 1.0);
+    half4 plate = m.g > 0.004
+        ? sheet(normalize(toWorld * float3(0.0, 0.0, side)), V, thickness, m.g * cover)
+        : half4(0.0);
+    if (rodCover <= 0.0) return plate;
 
-    float hw = m.b * 4.0;
-    float s = 1.5;
-    float gx = (heightAt(xy + float2(s, 0.0)) - heightAt(xy - float2(s, 0.0))) / (2.0 * s * frame.z);
-    float gy = (heightAt(xy + float2(0.0, s)) - heightAt(xy - float2(0.0, s))) / (2.0 * s * frame.z);
-    float3 Nl = normalize(float3(-hw * gx, -hw * gy, 1.0));
-    Nl.z *= side;
+    // Which way is in, from how the distance rises; how far over the section
+    // has rolled, from how near the edge this is against its corner radius.
+    float s = 1.0;
+    float2 rise = float2(
+        distanceAt(xy + float2(s, 0.0)) - distanceAt(xy - float2(s, 0.0)),
+        distanceAt(xy + float2(0.0, s)) - distanceAt(xy - float2(0.0, s)));
+    float rl = length(rise);
+    float2 inward = rl > 0.00001 ? rise / rl : float2(0.0);
+    float rc = max(m.b * 4.0, 0.2);
+    float off = clamp((rc - max(d, 0.0)) / rc, 0.0, 1.0);
+    float3 Nl = float3(-inward * off, sqrt(max(1.0 - off * off, 0.0)) * side);
     float3 N = normalize(toWorld * Nl);
     float3 nz = normalize(toWorld * float3(0.0, 0.0, side));
 
@@ -212,7 +226,8 @@ half4 main(float2 xy) {
     acc += thr * 0.6 * room(dir);
 
     float3 col = refl * F + acc * (1.0 - F);
-    return half4(half3(toSrgb(col)), 1.0) * half(cover);
+    float k = rodCover * cover;
+    return half4(half3(toSrgb(col)), 1.0) * half(k) + plate * half(1.0 - k);
 }
 """
 
@@ -332,6 +347,9 @@ private class AgslCase : CaseShader {
     private val disc = RuntimeShader(DISC)
     private val discBrush = ShaderBrush(disc)
     private val maps = HashMap<ImageBitmap, BitmapShader>()
+
+    override fun heightMap(pixels: IntArray, width: Int, height: Int): ImageBitmap =
+        Bitmap.createBitmap(pixels, width, height, Bitmap.Config.ARGB_8888).asImageBitmap()
 
     override fun glass(
         height: ImageBitmap,

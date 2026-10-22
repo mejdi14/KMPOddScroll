@@ -67,10 +67,15 @@ internal const val LID_FRONT = 5f
 /** Where the backdrop stands behind the case, which its shadow lands on. */
 internal const val BACKDROP_Z = -70f
 
-/** One rod: a path, and the width of its profile across. */
+/**
+ * One rod: a path, the width of its profile across, and the radius its
+ * profile's corners are rounded to — the reference's rods are rounded
+ * rectangles in section, most of them very nearly round.
+ */
 internal class Rod(
     val path: Path,
     val width: Float,
+    val round: Float = width / 2f * 0.88f,
     val cap: StrokeCap = StrokeCap.Round,
     /** It lies over the dark of the disc, which is what its middle shows. */
     val overPrint: Boolean = false,
@@ -109,20 +114,20 @@ private fun floorLayer() = CaseLayer(
     z = FLOOR_Z,
     sheet = roundedSquare(HALF_MM, CORNER_MM),
     thickness = 1.4f,
-    rods = listOf(Rod(roundedSquare(HALF_MM - 0.75f, CORNER_MM - 0.6f), 1.5f)),
+    rods = listOf(Rod(roundedSquare(HALF_MM - 0.75f, CORNER_MM - 0.6f), 1.5f, round = 0.68f)),
 )
 
 /** The tray's rails and ribs, the well the disc sits in and the clips round it. */
 private fun rodLayer(): CaseLayer {
     val rods = ArrayList<Rod>()
     val at = HALF_MM - 3.3f
-    rods += Rod(roundedSquare(at, CORNER_MM - 1.5f), 6.6f)
+    rods += Rod(roundedSquare(at, CORNER_MM - 1.5f), 6.6f, round = 2.8f)
     for (s in floatArrayOf(-1f, 1f)) {
         for (c in floatArrayOf(-35f, -12f, 12f, 35f)) {
-            rods += Rod(segment(c - 1.2f, s * at, c + 1.2f, s * at), 7.5f)
+            rods += Rod(segment(c - 1.2f, s * at, c + 1.2f, s * at), 7.5f, round = 3.1f)
             // The tab takes the middle of the hinge side.
             if (s < 0f && kotlin.math.abs(c) < 20f) continue
-            rods += Rod(segment(s * at, c - 1.2f, s * at, c + 1.2f), 7.5f)
+            rods += Rod(segment(s * at, c - 1.2f, s * at, c + 1.2f), 7.5f, round = 3.1f)
         }
     }
     val e = HALF_MM - 9.6f
@@ -140,7 +145,7 @@ private fun rodLayer(): CaseLayer {
         val a = deg / 180f * PI.toFloat()
         val dx = cos(a)
         val dy = -sin(a)
-        rods += Rod(segment(dx * 58.6f, dy * 58.6f, dx * 63.2f, dy * 63.2f), 3.2f)
+        rods += Rod(segment(dx * 58.6f, dy * 58.6f, dx * 63.2f, dy * 63.2f), 3.2f, round = 0.85f)
     }
     // The two hooks along the foot that hold the booklet.
     for (sx in floatArrayOf(-1f, 1f)) {
@@ -204,8 +209,8 @@ private fun tabLayer(): CaseLayer {
         thickness = 1.6f,
         rods = listOf(
             Rod(roundedRect(mid, 0f, hw - 0.8f, 21.2f, 3.4f), 1.6f),
-            Rod(bracket, 2.7f),
-            Rod(roundedRect(-55.4f, 0f, 4.4f, 3.2f, 1.2f), 1.3f),
+            Rod(bracket, 2.7f, round = 0.9f),
+            Rod(roundedRect(-55.4f, 0f, 4.4f, 3.2f, 1.2f), 1.3f, round = 0.5f),
         ),
     )
 }
@@ -214,7 +219,7 @@ private fun tabLayer(): CaseLayer {
 internal fun lidLayer(): CaseLayer {
     val inset = HALF_MM - 3.4f
     val rods = arrayListOf(
-        Rod(roundedSquare(HALF_MM - 1f, CORNER_MM - 1f), 2f),
+        Rod(roundedSquare(HALF_MM - 1f, CORNER_MM - 1f), 2f, round = 0.98f),
         Rod(roundedSquare(inset, CORNER_MM - 3f), 0.84f),
     )
     for (x in floatArrayOf(-42f, 30f)) {
@@ -283,11 +288,19 @@ internal enum class Bake { Look, Height }
  * they look straight through to the page — so each is a dark stroke with a
  * light one inside it, and the sheet is all but invisible.
  *
- * As a height map, for the shader: red is how high a rod's profile stands
- * (0 at its edge, 1 down its middle), green is the sheet, blue is the rod's
- * half-width over 4 mm, so its slope comes back out in millimetres.
+ * As a height map, for the shader: red is how far a pixel is inside the
+ * nearest rod's edge, signed and in millimetres — 0.5 at the edge, a unit
+ * either way 8 mm — green is the sheet, blue is the radius the rod's corners
+ * are rounded to over 4 mm. The rod's section comes back out of the distance
+ * exactly, so its surface is smooth however it is lit; [make] turns the
+ * pixels worked out here into a bitmap, which only the platform can do.
  */
-internal fun bakeLayer(layer: CaseLayer, ppm: Float, mode: Bake): ImageBitmap {
+internal fun bakeLayer(
+    layer: CaseLayer,
+    ppm: Float,
+    mode: Bake,
+    make: ((IntArray, Int, Int) -> ImageBitmap)? = null,
+): ImageBitmap {
     val w = ceil(layer.width * ppm).toInt().coerceAtLeast(1)
     val h = ceil(layer.height * ppm).toInt().coerceAtLeast(1)
     val bitmap = ImageBitmap(w, h)
@@ -308,12 +321,13 @@ internal fun bakeLayer(layer: CaseLayer, ppm: Float, mode: Bake): ImageBitmap {
                 }
                 Bake.Height -> {
                     layer.sheet?.let { drawPath(it, Color(0f, 1f, 0f)) }
-                    for (rod in layer.rods) heightRod(rod)
+                    for (rod in layer.rods) maskRod(rod)
                 }
             }
         }
     }
-    return bitmap
+    if (mode == Bake.Look || make == null) return bitmap
+    return make(heightField(bitmap, ppm), w, h)
 }
 
 private fun DrawScope.lookRod(rod: Rod) {
@@ -328,22 +342,116 @@ private fun DrawScope.lookRod(rod: Rod) {
     }
 }
 
-/** Steps a rod's profile is drawn in; fine enough that each is under a pixel. */
-private const val PROFILE_STEPS = 24
+/**
+ * A rod as plain coverage in red, its corner radius in blue; where rods cross,
+ * the rounder one's radius is kept.
+ */
+private fun DrawScope.maskRod(rod: Rod) {
+    drawPath(
+        rod.path,
+        Color(1f, 0f, (rod.round / 4f).coerceIn(0f, 1f)),
+        style = Stroke(rod.width, cap = rod.cap, join = StrokeJoin.Round),
+        blendMode = BlendMode.Lighten,
+    )
+}
 
-private fun DrawScope.heightRod(rod: Rod) {
-    val half = rod.width / 2f
-    // From the full width in, each narrower stroke standing higher, kept only
-    // where it is the highest yet, so crossing rods keep the taller profile.
-    for (i in 0 until PROFILE_STEPS) {
-        val across = 1f - i.toFloat() / PROFILE_STEPS
-        val height = sqrt(1f - across * across)
-        drawPath(
-            rod.path,
-            Color(height, 0f, (half / 4f).coerceAtMost(1f)),
-            style = Stroke(rod.width * across, cap = rod.cap, join = StrokeJoin.Round),
-            blendMode = BlendMode.Lighten,
-        )
+/** Outside the rods, the distance is only kept this many pixels out, for their antialiased edge. */
+private const val FRINGE_PX = 2f
+
+/**
+ * The mask turned into the shader's map: an exact Euclidean distance from
+ * every pixel to the edge of the rods — inside, to the nearest pixel outside;
+ * outside, to the nearest inside — so a rod's surface is worked out from a
+ * smooth ramp rather than steps.
+ */
+private fun heightField(mask: ImageBitmap, ppm: Float): IntArray {
+    val w = mask.width
+    val h = mask.height
+    val px = IntArray(w * h)
+    mask.readPixels(px)
+    val inside = BooleanArray(w * h)
+    val sheet = FloatArray(w * h)
+    val round = FloatArray(w * h)
+    for (i in px.indices) {
+        val c = px[i]
+        val a = (c ushr 24 and 0xFF) / 255f
+        val r = (c shr 16 and 0xFF) / 255f
+        val g = (c shr 8 and 0xFF) / 255f
+        val b = (c and 0xFF) / 255f
+        // Read back unpremultiplied, so coverage is the colour times alpha.
+        inside[i] = r * a >= 0.5f
+        sheet[i] = g * a
+        round[i] = if (r > 0f) (b / r).coerceAtMost(1f) else 0f
+    }
+    val toOutside = squaredDistances(w, h) { !inside[it] }
+    val toInside = squaredDistances(w, h) { inside[it] }
+    val out = IntArray(w * h)
+    for (i in out.indices) {
+        val d = if (inside[i]) sqrt(toOutside[i]).toFloat() - 0.5f else 0.5f - sqrt(toInside[i]).toFloat()
+        val nearRod = d > -FRINGE_PX
+        val alpha = if (nearRod) 1f else sheet[i]
+        if (alpha <= 0f) continue
+        val red = (0.5f + d / ppm / 8f).coerceIn(0f, 1f)
+        val green = if (nearRod) sheet[i] else 1f
+        val blue = if (nearRod) round[i] else 0f
+        out[i] = ((alpha * 255f).roundToInt() shl 24) or
+            ((red * 255f).roundToInt() shl 16) or
+            ((green * 255f).roundToInt() shl 8) or
+            (blue * 255f).roundToInt()
+    }
+    return out
+}
+
+private const val FAR = 1e12
+
+/**
+ * Squared distance from every pixel to the nearest one [seed] picks, by
+ * Felzenszwalb and Huttenlocher's two passes of lower envelopes of parabolas.
+ */
+private fun squaredDistances(w: Int, h: Int, seed: (Int) -> Boolean): DoubleArray {
+    val grid = DoubleArray(w * h) { if (seed(it)) 0.0 else FAR }
+    val n = max(w, h)
+    val f = DoubleArray(n)
+    val d = DoubleArray(n)
+    val v = IntArray(n)
+    val z = DoubleArray(n + 1)
+    for (x in 0 until w) {
+        for (y in 0 until h) f[y] = grid[y * w + x]
+        envelope(f, h, d, v, z)
+        for (y in 0 until h) grid[y * w + x] = d[y]
+    }
+    for (y in 0 until h) {
+        for (x in 0 until w) f[x] = grid[y * w + x]
+        envelope(f, w, d, v, z)
+        for (x in 0 until w) grid[y * w + x] = d[x]
+    }
+    return grid
+}
+
+private fun envelope(f: DoubleArray, n: Int, d: DoubleArray, v: IntArray, z: DoubleArray) {
+    fun meet(q: Int, p: Int): Double =
+        ((f[q] + q.toDouble() * q) - (f[p] + p.toDouble() * p)) / (2.0 * (q - p))
+    var k = 0
+    v[0] = 0
+    z[0] = -FAR
+    z[1] = FAR
+    for (q in 1 until n) {
+        // The first boundary is -FAR, which every meeting point lies past.
+        var s = meet(q, v[k])
+        while (s <= z[k]) {
+            k--
+            s = meet(q, v[k])
+        }
+        k++
+        v[k] = q
+        z[k] = s
+        z[k + 1] = FAR
+    }
+    k = 0
+    for (q in 0 until n) {
+        while (z[k + 1] < q) k++
+        val p = v[k]
+        d[q] = (q - p).toDouble() * (q - p) + f[p]
     }
 }
 
