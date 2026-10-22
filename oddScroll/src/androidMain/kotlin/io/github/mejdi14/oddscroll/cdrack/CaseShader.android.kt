@@ -149,9 +149,9 @@ uniform float overDisc;
  * grey instead, and further the thinner the rod is on screen; the bright
  * reflections are left as they are.
  */
-const float3 LIFT_TO = float3(0.62, 0.64, 0.67);
-const float LIFT_WIDE = 0.55;
-const float LIFT_THIN = 0.85;
+const float3 LIFT_TO = float3(0.7, 0.72, 0.75);
+const float LIFT_WIDE = 0.7;
+const float LIFT_THIN = 0.92;
 
 float distanceAt(float2 xy) {
     float4 c = float4(height.eval(xy));
@@ -239,7 +239,7 @@ half4 main(float2 xy) {
     float3 col = refl * F + acc * (1.0 - F);
     float lum = dot(col, float3(0.2126, 0.7152, 0.0722));
     float lift = mix(LIFT_THIN, LIFT_WIDE, smoothstep(1.5, 6.0, rc / frame.z));
-    col = mix(col, LIFT_TO, lift * (1.0 - smoothstep(0.0, 0.5, lum)));
+    col = mix(col, LIFT_TO, lift * (1.0 - smoothstep(0.0, 0.6, lum)));
     float k = rodCover * cover;
     return half4(half3(toSrgb(col)), 1.0) * half(k) + plate * half(1.0 - k);
 }
