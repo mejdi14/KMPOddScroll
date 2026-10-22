@@ -591,6 +591,29 @@ internal fun bakeShadow(lid: Boolean): ImageBitmap {
     return bitmap
 }
 
+/**
+ * What the cover keeps off the backdrop once it is out on its own: paper,
+ * so more than the clear lid, all over.
+ */
+internal fun bakeCoverShadow(): ImageBitmap {
+    val bitmap = ImageBitmap(SHADOW_PX, SHADOW_PX)
+    val ppm = SHADOW_PX / (CASE_MM + 12f)
+    CanvasDrawScope().draw(
+        Density(1f),
+        LayoutDirection.Ltr,
+        BitmapCanvas(bitmap),
+        Size(SHADOW_PX.toFloat(), SHADOW_PX.toFloat()),
+    ) {
+        withTransform({
+            scale(ppm, ppm, Offset.Zero)
+            translate(HALF_MM + 6f, HALF_MM + 6f)
+        }) {
+            drawPath(roundedSquare(COVER_HALF, 1.5f), Color.Black.copy(alpha = 0.12f))
+        }
+    }
+    return bitmap
+}
+
 /** Where a shadow map's pixel (0, 0) sits on the case, and how many millimetres a pixel is. */
 internal const val SHADOW_LEFT = -HALF_MM - 6f
 internal val SHADOW_MM_PER_PX = (CASE_MM + 12f) / SHADOW_PX

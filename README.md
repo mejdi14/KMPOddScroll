@@ -275,9 +275,12 @@ part along it counts), flick to throw it, or scroll to step it a case.
 
 Tap a case to take it out: it comes to the slot, the rest of the row clears
 off the screen either way, and it turns to face you and comes forward — the
-single case below, to drag round and tap open. `CdRackScrollState.leave()`
-(the demo wires it to the system's back) shuts it if it is open, turns it back
-into the rack and brings the row in again.
+single case below, to drag round and tap open. Open, an Inspect button at the
+bottom takes its cover out: the paper lifts off the lid, turns over to its
+printed side and comes down under the case, which shuts and rises to make room.
+`CdRackScrollState.leave()` (the demo wires it to the system's back) slides the
+cover back up into the lid if it is out, shuts the case if it is open, turns it
+back into the rack and brings the row in again.
 
 Every case is the 3D case of `CdCase`, drawn after Ann Nguyen's WebGL
 [CD case](https://github.com/annnguyentt/vibe-coding/tree/main/cd-case). The
@@ -322,11 +325,14 @@ CdRackScroll(
 | `background` | white | the backdrop; the plastic is shaded for a pale one |
 | `contentColor` | `#111114` | caption text |
 | `captions` | `true` | title and artist of the case in the slot |
+| `inspectLabel` | `"Inspect"` | the button under an open case that takes its cover out; `null` for none |
 | `state` | intro of `4` | `rememberCdRackScrollState(intro)` — cases slid on first show; `0` opens at rest |
 
 `CdRackScrollState.scrollTo(index)` and `step(by)` drive it from a host's own
 controls, `inspect(index)` takes a case out, `leave()` puts it back, `slotted`
-is the case in the slot and `inspecting` whether one is out.
+is the case in the slot and `inspecting` whether one is out. `canInspectCover`
+is true while the case out is open with its cover in, and `inspectCover()`
+takes the cover out — for a host that brings its own button.
 
 #### One case: `CdCase`
 
@@ -366,7 +372,7 @@ CdCase(
 | `cover` | `null` | slipped in under the lid's glass, its middle square filling the lid; `null` leaves it clear |
 | `background` | white | the backdrop; the plastic is shaded for a pale one |
 | `spin` | `true` | turn the disc inside the case |
-| `state` | — | `rememberCdCaseState()`; `open()`, `close()`, `toggle()` and `isOpen` |
+| `state` | — | `rememberCdCaseState()`; `open()`, `close()`, `toggle()` and `isOpen`; open, `inspectCover()` takes the cover out from under the lid and `returnCover()` puts it back, with `coverOut` true in between |
 
 ### Gallery Wall
 

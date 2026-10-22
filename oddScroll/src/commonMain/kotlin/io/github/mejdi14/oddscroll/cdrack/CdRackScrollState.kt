@@ -154,9 +154,32 @@ class CdRackScrollState internal constructor(intro: Int) {
         if (moving || index.toFloat() != position) aim(index, speed)
     }
 
-    /** Puts the case back in the rack, shutting it first if it is open. */
+    /**
+     * Whether the case out of the rack is open with its cover still in the
+     * lid — what [inspectCover] takes out.
+     */
+    val canInspectCover: Boolean
+        get() = inspecting && case.isOpen && !case.coverOut && case.hasCover
+
+    /**
+     * Takes the cover out of the open case: it turns over and comes to rest
+     * under the case, which shuts and rises to make room. [leave], or a tap
+     * on either, puts it back.
+     */
+    fun inspectCover() {
+        if (inspecting && focus >= FOCUS_SECONDS) case.inspectCover()
+    }
+
+    /**
+     * Puts the case back in the rack, shutting it first if it is open; with
+     * its cover out, puts that back first.
+     */
     fun leave() {
         if (!inspecting) return
+        if (case.coverLoose) {
+            case.returnCover()
+            return
+        }
         if (!case.shut) {
             case.close()
             leaving = true

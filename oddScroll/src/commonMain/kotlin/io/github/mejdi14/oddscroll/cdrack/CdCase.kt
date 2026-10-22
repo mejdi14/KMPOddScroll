@@ -49,7 +49,8 @@ private const val TAP_SLOP = 6f
  *
  * Drag it to turn it, and it springs back when let go; tap it to open it —
  * it turns right round as the lid swings out to its left — and tap again to
- * shut it.
+ * shut it. Open, [CdCaseState.inspectCover] takes the [cover] out: it turns
+ * over and comes to rest under the case, which shuts and rises to make room.
  *
  * Every piece is flat in its own frame, so each is drawn once and then sent
  * through its own exact projection, back to front as the case faces; the
@@ -77,6 +78,7 @@ fun CdCase(
     val scene = remember { CaseScene() }
     val camera = remember { Camera() }
     val pose = remember { CasePose() }
+    val coverPose = remember { CasePose() }
     val spinning = rememberUpdatedState(spin)
 
     LaunchedEffect(state) {
@@ -130,10 +132,12 @@ fun CdCase(
         ) {
             state.tick // read, so the case repaints every frame
             camera.fit(size.width, size.height)
-            state.pose(pose, camera.openScale)
+            state.hasCover = cover != null
+            state.pose(pose, camera)
             scene.setArt(art)
             scene.setCover(cover)
-            scene.draw(this, camera, pose)
+            val loose = if (state.coverPose(coverPose, pose, camera)) coverPose else null
+            scene.draw(this, camera, pose, cover = loose)
         }
     }
 }

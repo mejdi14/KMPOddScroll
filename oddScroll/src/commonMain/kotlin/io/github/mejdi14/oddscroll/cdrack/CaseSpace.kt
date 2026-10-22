@@ -18,6 +18,10 @@ internal const val FOV_DEGREES = 28f
 /** The camera stands far enough back that the case fills this much of the height. */
 private const val FIT = 0.6f
 
+/** The shut case and its cover under it fill at most this much of the height, this far apart. */
+private const val PAIR_FIT = 0.8f
+private const val PAIR_GAP = 16f
+
 /** The light the backdrop's shadows fall from. */
 internal val LIGHT = normalized(-0.3f, 0.48f, 1f)
 
@@ -56,6 +60,18 @@ internal class Camera {
     var openScale = 1f
         private set
 
+    /**
+     * The shut case with its cover out under it: how small the two are drawn
+     * so they fit one over the other, how far up the case stands for it and
+     * how far down the cover hangs, in millimetres at the case.
+     */
+    var pairScale = 1f
+        private set
+    var pairRise = 0f
+        private set
+    var pairDrop = 0f
+        private set
+
     private val cx get() = width / 2f
     private val cy get() = height / 2f
 
@@ -72,6 +88,11 @@ internal class Camera {
         zoom = zoom
         val across = 2f * baseDistance * tanHalf * aspect
         openScale = minOf(1.04f, across / (CASE_MM * 2.25f))
+        val tall = 2f * baseDistance * tanHalf
+        val stack = CASE_MM + PAIR_GAP + 2f * COVER_HALF
+        pairScale = minOf(1f, tall * PAIR_FIT / stack)
+        pairRise = pairScale * (stack / 2f - HALF_MM)
+        pairDrop = pairScale * (stack / 2f - COVER_HALF)
     }
 
     /** Screen x, y of a world point into [out] at [at]; false if it is behind the lens. */

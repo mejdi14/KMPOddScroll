@@ -1,7 +1,11 @@
 package io.github.mejdi14.oddscroll.cdrack
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
@@ -9,6 +13,8 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -23,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -120,8 +127,10 @@ fun rememberCdRackScrollState(intro: Int = 4): CdRackScrollState =
  * left, that slides along its own length — the case that comes to the slot in
  * the middle of the frame rises out of the row. Tap a case and it comes to the
  * slot, the rest of the row clears off the screen, and it turns to face you:
- * drag it round, tap it to open it. [CdRackScrollState.leave] — the system's
- * back, say — puts it back and brings the row in again.
+ * drag it round, tap it to open it. Open, [inspectLabel] takes its cover out:
+ * the cover turns over and comes to rest under the case, which shuts and
+ * rises to make room. [CdRackScrollState.leave] — the system's back, say —
+ * puts the cover back, then the case, and brings the row in again.
  *
  * Each case is the same 3D case as [CdCase], drawn once at the rack's turn and
  * then only moved, since the rack's camera is far enough off that every case
@@ -134,6 +143,9 @@ fun rememberCdRackScrollState(intro: Int = 4): CdRackScrollState =
  * @param background the backdrop; the clear plastic is shaded for a pale one.
  * @param contentColor caption text.
  * @param captions say what the case in the slot is, top left.
+ * @param inspectLabel the button under an open case that takes its cover
+ *   out, or null for none — a host can show its own off
+ *   [CdRackScrollState.canInspectCover].
  * @param state also sets how far the rack slides when it first appears.
  */
 @Composable
@@ -143,6 +155,7 @@ fun CdRackScroll(
     background: Color = Color.White,
     contentColor: Color = Color(0xFF111114),
     captions: Boolean = true,
+    inspectLabel: String? = "Inspect",
     state: CdRackScrollState = rememberCdRackScrollState(),
 ) {
     if (items.isEmpty()) {
@@ -278,7 +291,48 @@ fun CdRackScroll(
         }
 
         if (captions) Caption(items, state, contentColor)
+        if (inspectLabel != null) {
+            InspectButton(
+                label = inspectLabel,
+                state = state,
+                background = background,
+                contentColor = contentColor,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 48.dp),
+            )
+        }
     }
+}
+
+@Composable
+private fun InspectButton(
+    label: String,
+    state: CdRackScrollState,
+    background: Color,
+    contentColor: Color,
+    modifier: Modifier,
+) {
+    val shown = state.canInspectCover
+    val reveal by animateFloatAsState(if (shown) 1f else 0f, tween(if (shown) 450 else 200))
+    val shape = RoundedCornerShape(50)
+    BasicText(
+        text = label.uppercase(),
+        style = TextStyle(
+            color = contentColor,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            letterSpacing = 1.4.sp,
+        ),
+        modifier = modifier
+            .graphicsLayer {
+                alpha = reveal
+                translationY = (1f - reveal) * 10.dp.toPx()
+            }
+            // Only while it shows, or it would take taps meant for the case.
+            .then(if (shown) Modifier.pointerInput(state) { detectTapGestures { state.inspectCover() } } else Modifier)
+            .background(background.copy(alpha = 0.9f), shape)
+            .border(1.dp, contentColor.copy(alpha = 0.35f), shape)
+            .padding(horizontal = 26.dp, vertical = 12.dp),
+    )
 }
 
 // --- the rack ------------------------------------------------------------------
@@ -298,6 +352,7 @@ private class RackScene(private val items: List<CdRackItem>) {
     val rackPose = CasePose()
     private val outPose = CasePose()
     private val livePose = CasePose()
+    private val coverPose = CasePose()
 
     val sprites = arrayOfNulls<ImageBitmap>(items.size)
     var box: SpriteBox? = null
@@ -379,17 +434,20 @@ private class RackScene(private val items: List<CdRackItem>) {
         val come = inOutCubic(((focus - COME_FROM) / COME_SECONDS).clamped(0f, 1f))
         if (chosen != NONE) {
             liveCamera.zoom = exp(lerp(ln(RACK_ZOOM), 0f, come))
-            state.case.pose(outPose, liveCamera.openScale)
+            state.case.pose(outPose, liveCamera)
             blend(come)
             val item = items[wrapCase(chosen, count)]
             scene.setArt(item.image)
             scene.setCover(item.cover)
+            val covered = item.cover != null
+            if (state.case.hasCover != covered) state.case.hasCover = covered
         }
+        val loose = if (chosen != NONE && state.case.coverPose(coverPose, livePose, liveCamera)) coverPose else null
 
         // Back of the row first: each case covers the one behind it.
         for (i in last downTo first) {
             if (i == chosen) {
-                scene.draw(this, liveCamera, livePose, shadow = come)
+                scene.draw(this, liveCamera, livePose, shadow = come, cover = loose)
                 continue
             }
             val sprite = sprites[wrapCase(i, count)] ?: continue

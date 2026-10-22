@@ -63,6 +63,23 @@ private val closePitch = monotone(
 )
 private val closeRoll = monotone(0f to 0f, 0.8f to -0.05f, 1.95f to 0f)
 
+/*
+ * Taking the cover out, in seconds: it lifts off the open lid, then turns
+ * over and comes down under the case, while the case shuts and rises to make
+ * room. Putting it back slides it up into the shut lid, face on.
+ */
+private const val COVER_LIFT_T = 0.45f
+private const val COVER_LIFT_MM = 36f
+private const val COVER_MOVE_FROM = 0.2f
+private const val COVER_MOVE_T = 1.35f
+private const val COVER_TURN_FROM = 0.3f
+private const val COVER_TURN_T = 1.2f
+private const val COVER_SHUT_AT = 0.3f
+private const val COVER_ROOM_T = 1.5f
+private const val COVER_OUT_T = COVER_MOVE_FROM + COVER_MOVE_T
+private const val COVER_BACK_T = 1.1f
+private const val COVER_BACK_ARC_MM = 22f
+
 /** Where the case is this frame: its turn, the lid's swing, how far it has moved over for being open. */
 internal class CasePose {
     var x = 0f
@@ -79,6 +96,9 @@ internal class CasePose {
 
 private enum class Phase { Rest, Opening, Open, Closing }
 
+/** The cover: in the lid, on its way out, out under the case, or on its way back. */
+private enum class Cover { In, Leaving, Out, Returning }
+
 @androidx.compose.runtime.Composable
 fun rememberCdCaseState(): CdCaseState = androidx.compose.runtime.remember { CdCaseState() }
 
@@ -92,14 +112,34 @@ class CdCaseState internal constructor() {
     var isOpen by mutableStateOf(false)
         private set
 
+    /**
+     * Whether the cover is out of the lid, or on its way out — [inspectCover]
+     * takes it out, [returnCover] puts it back.
+     */
+    var coverOut by mutableStateOf(false)
+        private set
+
     /** Bumped once per frame, so the case repaints while anything moves. */
     internal var tick by mutableIntStateOf(0)
         private set
+
+    /** Whether there is a cover in the lid to take out; set by whatever draws the case. */
+    internal var hasCover by mutableStateOf(true)
 
     private var t = 0f
     private var phase = Phase.Rest
     private var phaseAt = 0f
     private var closeAfter = false
+
+    private var cover = Cover.In
+    private var coverAt = 0f
+    private var inspectAfter = false
+    private var returnAfter = false
+
+    /** The case as last posed, and the cover in its lid as it was when it was taken out. */
+    private val last = CasePose()
+    private val coverFrom = CasePose()
+    private val rest = CasePose()
 
     private var spin = 0f
     private var spinRate = SPIN
@@ -134,8 +174,48 @@ class CdCaseState internal constructor() {
     }
 
     fun toggle() {
-        if (phase == Phase.Opening || phase == Phase.Open) close() else open()
+        when (cover) {
+            Cover.In -> if (phase == Phase.Opening || phase == Phase.Open) close() else open()
+            else -> returnCover()
+        }
     }
+
+    /**
+     * Takes the cover out of the open lid: it turns over and comes to rest
+     * under the case, which shuts and rises to make room. Asked while the
+     * case is still opening, it waits until it is open.
+     */
+    fun inspectCover() {
+        if (cover != Cover.In || !hasCover) return
+        if (phase == Phase.Opening) {
+            inspectAfter = true
+            return
+        }
+        if (phase != Phase.Open) return
+        // The lid's turn as a pose of its own holds only with the case
+        // unrolled, as it is while it stands open.
+        coverInLid(last, coverFrom)
+        cover = Cover.Leaving
+        coverAt = t
+        coverOut = true
+        closeAfter = false
+    }
+
+    /** Slides the cover back up into the shut lid; one still coming out goes back once it is out. */
+    fun returnCover() {
+        when (cover) {
+            Cover.Leaving -> returnAfter = true
+            Cover.Out -> {
+                cover = Cover.Returning
+                coverAt = t
+                coverOut = false
+            }
+            else -> Unit
+        }
+    }
+
+    /** The cover is out of the lid, or on its way out or back. */
+    internal val coverLoose: Boolean get() = cover != Cover.In
 
     /** Shut and still: not opening, open or closing. */
     internal val shut: Boolean get() = phase == Phase.Rest
@@ -188,7 +268,10 @@ class CdCaseState internal constructor() {
         if (phase == Phase.Opening && since >= OPEN_T) {
             phase = Phase.Open
             phaseAt = t
-            if (closeAfter) {
+            if (inspectAfter) {
+                inspectAfter = false
+                inspectCover()
+            } else if (closeAfter) {
                 closeAfter = false
                 close()
             }
@@ -196,9 +279,26 @@ class CdCaseState internal constructor() {
             phase = Phase.Rest
             phaseAt = t
         }
+
+        val coverSince = t - coverAt
+        when (cover) {
+            Cover.Leaving -> {
+                if (coverSince >= COVER_SHUT_AT && phase == Phase.Open) close()
+                // Out once it has landed and the case has shut over it.
+                if (coverSince >= COVER_OUT_T && phase == Phase.Rest) {
+                    cover = Cover.Out
+                    if (returnAfter) {
+                        returnAfter = false
+                        returnCover()
+                    }
+                }
+            }
+            Cover.Returning -> if (coverSince >= COVER_BACK_T) cover = Cover.In
+            else -> Unit
+        }
     }
 
-    internal fun pose(out: CasePose, openScale: Float) {
+    internal fun pose(out: CasePose, camera: Camera) {
         // Idling, it sways a little, turned a touch off square.
         out.y = 1.8f * sin(t * 1.1f)
         out.yaw = -0.2f + 0.1f * sin(t * 0.9f) + 0.03f * sin(t * 2.1f)
@@ -239,13 +339,120 @@ class CdCaseState internal constructor() {
         out.pitch += grabX
         out.yaw += grabY
         // Open, the pair is centred: the tray moves over by half a case, the
-        // lid swung out to its left.
-        val s = lerp(1f, openScale, out.spread)
+        // lid swung out to its left. With the cover out, the case stands
+        // smaller and higher, the cover under it.
+        val room = room()
+        val s = lerp(1f, camera.openScale, out.spread) * lerp(1f, camera.pairScale, room)
         out.x = HALF_MM * s * out.spread * 0.92f
+        out.y += camera.pairRise * room
         out.z = 0f
         out.scale = s
         out.spin = spin
+        copy(out, last)
     }
+
+    /** How far the case has moved over for the cover, from 0 to 1. */
+    private fun room(): Float {
+        val since = t - coverAt
+        return when (cover) {
+            Cover.In -> 0f
+            Cover.Leaving -> inOutCubic(((since - COVER_SHUT_AT) / COVER_ROOM_T).clamped(0f, 1f))
+            Cover.Out -> 1f
+            Cover.Returning -> 1f - inOutCubic((since / COVER_BACK_T).clamped(0f, 1f))
+        }
+    }
+
+    /**
+     * Where the cover is out of the lid, into [out], with the case at [case]
+     * this frame; false while it is in the lid, drawn with it.
+     */
+    internal fun coverPose(out: CasePose, case: CasePose, camera: Camera): Boolean {
+        if (cover == Cover.In) return false
+        // At rest under the case, face on, swaying a little out of step with it.
+        rest.x = 0f
+        rest.y = -camera.pairDrop + 1.2f * sin(t * 0.95f + 1.3f)
+        rest.z = 0f
+        rest.pitch = -0.04f + 0.035f * sin(t * 0.6f + 0.8f)
+        rest.yaw = 0.06f * sin(t * 0.75f + 2.1f)
+        rest.roll = -0.01f + 0.012f * sin(t * 0.45f)
+        rest.scale = camera.pairScale
+        val since = t - coverAt
+        when (cover) {
+            Cover.Leaving, Cover.Out -> {
+                val lift = 1f - (1f - (since / COVER_LIFT_T).clamped(0f, 1f)).let { it * it * it }
+                val move = inOutCubic(((since - COVER_MOVE_FROM) / COVER_MOVE_T).clamped(0f, 1f))
+                val turn = inOutCubic(((since - COVER_TURN_FROM) / COVER_TURN_T).clamped(0f, 1f))
+                val from = coverFrom
+                out.x = lerp(from.x, rest.x, move)
+                out.y = lerp(from.y, rest.y, move)
+                out.z = lerp(from.z + COVER_LIFT_MM * from.scale * lift, rest.z, move)
+                // Seen from the open lid's side it is the back of the paper;
+                // it turns over on its way down.
+                out.pitch = lerp(from.pitch, rest.pitch, turn)
+                out.yaw = lerp(from.yaw, rest.yaw, turn)
+                out.roll = lerp(from.roll, rest.roll, turn)
+                out.scale = lerp(from.scale, rest.scale, move)
+            }
+            else -> {
+                // Back into the shut lid, wherever the case has got to.
+                coverInLid(case, coverFrom)
+                val move = inOutCubic((since / COVER_BACK_T).clamped(0f, 1f))
+                val to = coverFrom
+                out.x = lerp(rest.x, to.x, move)
+                out.y = lerp(rest.y, to.y, move)
+                out.z = lerp(rest.z, to.z, move) + COVER_BACK_ARC_MM * to.scale * sin(PI.toFloat() * move)
+                out.pitch = lerp(rest.pitch, to.pitch, move)
+                out.yaw = lerp(rest.yaw, to.yaw, move)
+                out.roll = lerp(rest.roll, to.roll, move)
+                out.scale = lerp(rest.scale, to.scale, move)
+            }
+        }
+        out.lid = 0f
+        out.spread = 0f
+        out.spin = 0f
+        return true
+    }
+}
+
+private fun copy(from: CasePose, to: CasePose) {
+    to.x = from.x
+    to.y = from.y
+    to.z = from.z
+    to.scale = from.scale
+    to.yaw = from.yaw
+    to.pitch = from.pitch
+    to.roll = from.roll
+    to.lid = from.lid
+    to.spread = from.spread
+    to.spin = from.spin
+}
+
+/**
+ * The cover in the lid of a case at [case], as a pose of its own into [out]:
+ * the middle of the paper, and the lid's turn. The lid swings about the
+ * case's own y after its roll, so this is exact only with [CasePose.roll] or
+ * [CasePose.lid] at 0 — open, the case stands unrolled, and shut, the lid is.
+ */
+private fun coverInLid(case: CasePose, out: CasePose) {
+    val r = FloatArray(9)
+    val turn = FloatArray(9)
+    val lid = FloatArray(9)
+    eulerXyz(case.pitch, case.yaw, case.roll, r)
+    aboutY(-case.lid, turn)
+    times(r, turn, lid)
+    val s = case.scale
+    // The hinge pin stays put, as the case's own drawing has it.
+    val px = HINGE_X - (turn[0] * HINGE_X + turn[2] * HINGE_Z)
+    val pz = HINGE_Z - (turn[6] * HINGE_X + turn[8] * HINGE_Z)
+    val t = floatArrayOf(case.x, case.y, case.z)
+    for (k in 0 until 3) t[k] += s * (r[k * 3] * px + r[k * 3 + 2] * pz) + s * lid[k * 3 + 2] * COVER_Z
+    out.x = t[0]
+    out.y = t[1]
+    out.z = t[2]
+    out.pitch = case.pitch
+    out.yaw = case.yaw - case.lid
+    out.roll = case.roll
+    out.scale = s
 }
 
 /**

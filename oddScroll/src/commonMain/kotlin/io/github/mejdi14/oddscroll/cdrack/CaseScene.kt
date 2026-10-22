@@ -47,6 +47,10 @@ internal class CaseScene {
     private val tray = Pose()
     private val lid = Pose()
     private val disc = Pose()
+    private val loose = Pose()
+
+    /** The cover is out of the lid this frame, drawn at [loose] instead. */
+    private var coverLoose = false
 
     private val trayLayers = trayLayers()
     private val lidLayer = lidLayer()
@@ -56,6 +60,7 @@ internal class CaseScene {
     private var square: ImageBitmap? = null
     private val trayShadow = bakeShadow(lid = false)
     private val lidShadow = bakeShadow(lid = true)
+    private val coverShadow = bakeCoverShadow()
     private var ppm = 0f
 
     private val matrix = Matrix()
@@ -69,7 +74,7 @@ internal class CaseScene {
     private val v = FloatArray(3)
     private val n = FloatArray(3)
     private val path = Path()
-    private val hull = FloatArray(16)
+    private val hull = FloatArray(24)
 
     /** Prints [image] on the disc from now on. */
     fun setArt(image: ImageBitmap) {
@@ -105,20 +110,30 @@ internal class CaseScene {
 
     /**
      * Draws the case at [pose] through [camera], its shadow on the backdrop at
-     * [shadow] of its strength.
+     * [shadow] of its strength; with [cover], the cover is out of the lid and
+     * stands there on its own.
      */
-    fun draw(scope: DrawScope, camera: Camera, pose: CasePose, shadow: Float = 1f) = with(scope) {
+    fun draw(
+        scope: DrawScope,
+        camera: Camera,
+        pose: CasePose,
+        shadow: Float = 1f,
+        cover: CasePose? = null,
+    ) = with(scope) {
         if (size.width <= 0f || size.height <= 0f) return@with
         this@CaseScene.camera = camera
         this@CaseScene.pose = pose
         prepare(camera)
         if (art == null) return@with
         place()
+        coverLoose = cover != null && this@CaseScene.cover != null
+        if (cover != null) placeLoose(cover)
 
         // The shadows land on the backdrop, behind everything.
         if (shadow > 0f) {
             shadow(tray, -2f, trayShadow, shadow)
             shadow(lid, HINGE_Z, lidShadow, shadow)
+            if (coverLoose) shadow(loose, 0f, coverShadow, shadow)
         }
 
         // Back half first: whichever of tray and lid is further from the
@@ -134,6 +149,8 @@ internal class CaseScene {
             drawLid()
             drawTray()
         }
+        // Out of the lid, the cover is in front of the case all the way.
+        if (coverLoose) insert(loose, 0f, facing(loose))
         rememberHull()
     }
 
@@ -162,6 +179,14 @@ internal class CaseScene {
         times(tray.r, turn, disc.r)
         disc.s = s
         tray.t.copyInto(disc.t)
+    }
+
+    private fun placeLoose(cover: CasePose) {
+        eulerXyz(cover.pitch, cover.yaw, cover.roll, loose.r)
+        loose.s = cover.scale
+        loose.t[0] = cover.x
+        loose.t[1] = cover.y
+        loose.t[2] = cover.z
     }
 
     /** Which way a frame's face points: towards the camera, or away. */
@@ -194,9 +219,9 @@ internal class CaseScene {
         walls(lid, LID_BACK, LID_FRONT, front = false)
         // The cover is just behind the glass: under it from the front, over
         // it from behind.
-        if (front) insert(front)
+        if (front && !coverLoose) insert(lid, COVER_Z, front)
         lidBitmap?.let { layer(lid, lidLayer, it) }
-        if (!front) insert(front)
+        if (!front && !coverLoose) insert(lid, COVER_Z, front)
         if (shader == null) glare(lid)
         walls(lid, LID_BACK, LID_FRONT, front = true)
         if (hinge) knuckles(lid, lidKnuckles)
@@ -239,12 +264,13 @@ internal class CaseScene {
     }
 
     /**
-     * The cover under the lid's glass, its middle square across the inside of
-     * the rim; from behind, the back of the paper.
+     * The cover on [frame]'s plane at [z] — under the lid's glass, its middle
+     * square across the inside of the rim, or out on its own; from behind,
+     * the back of the paper.
      */
-    private fun DrawScope.insert(front: Boolean) {
+    private fun DrawScope.insert(frame: Pose, z: Float, front: Boolean) {
         val image = cover ?: return
-        lid.plane(camera, COVER_Z, matrix, plane)
+        frame.plane(camera, z, matrix, plane)
         withTransform({ transform(matrix) }) {
             if (!front) {
                 drawRect(
@@ -539,13 +565,15 @@ internal class CaseScene {
 
     // --- hits --------------------------------------------------------------------------
 
-    /** The tray's and the lid's outlines on screen as they were last drawn, four corners each. */
+    /** The tray's, the lid's and a loose cover's outlines on screen as they were last drawn, four corners each. */
     private fun rememberHull() {
         var at = 0
-        for (frame in arrayOf(tray, lid)) {
+        for (frame in arrayOf(tray, lid, loose)) {
+            val half = if (frame === loose) COVER_HALF else HALF_MM
             for ((cx, cy) in CORNERS) {
-                frame.apply(cx * HALF_MM, cy * HALF_MM, 0f, v)
-                if (!camera.project(v[0], v[1], v[2], hull, at)) {
+                val seen = frame !== loose || coverLoose
+                frame.apply(cx * half, cy * half, 0f, v)
+                if (!seen || !camera.project(v[0], v[1], v[2], hull, at)) {
                     hull[at] = Float.NaN
                     hull[at + 1] = Float.NaN
                 }
@@ -554,7 +582,7 @@ internal class CaseScene {
         }
     }
 
-    fun hit(x: Float, y: Float): Boolean = inside(x, y, 0) || inside(x, y, 8)
+    fun hit(x: Float, y: Float): Boolean = inside(x, y, 0) || inside(x, y, 8) || inside(x, y, 16)
 
     private fun inside(x: Float, y: Float, at: Int): Boolean {
         var sign = 0f
