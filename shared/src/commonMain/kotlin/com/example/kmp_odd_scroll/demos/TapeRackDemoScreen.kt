@@ -23,8 +23,8 @@ import kmpoddscroll.shared.generated.resources.wide_towers
 import org.jetbrains.compose.resources.imageResource
 
 /**
- * Twelve tapes, the wide photographs and the museum scans dealt alternately so
- * no two neighbours look alike, on the app's page colour (near-black is the
+ * Twelve CD cases, the wide photographs and the museum scans printed on their
+ * discs and dealt alternately so no two neighbours look alike, on the app's page colour (near-black is the
  * one the reference is set on).
  * Twelve is about what the row holds in view, so it only repeats off screen.
  * Credits are in the README.

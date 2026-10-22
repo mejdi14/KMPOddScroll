@@ -30,6 +30,9 @@ import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathFillType
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -37,7 +40,6 @@ import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
@@ -52,16 +54,20 @@ import io.github.mejdi14.oddscroll.internal.SplitBy
 import io.github.mejdi14.oddscroll.internal.SplitText
 import io.github.mejdi14.oddscroll.internal.clamped
 import io.github.mejdi14.oddscroll.internal.smoothstep
+import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.ceil
+import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.sin
+import kotlin.math.sqrt
 
-/** One tape in the rack. */
+/** One case in the rack. */
 data class TapeRackItem(
-    /** Printed on the tape's label, cropped to fit it. */
+    /** Printed on the disc inside the case, cropped square to fit it. */
     val image: ImageBitmap,
     val title: String = "",
     /** Second line of the caption, under the title. */
@@ -82,13 +88,16 @@ private const val ROW_X = 0.88869f
 private const val ROW_Y = -0.45849f
 private const val PITCH = 0.322f
 
-/** The face: its top edge falls 0.18 to the right, its sides are upright. */
+/**
+ * The face: its top edge falls 0.18 to the right, its sides are upright. A
+ * jewel case is square, so the face is as tall as it is wide.
+ */
 private const val EDGE_X = 0.98419f
 private const val EDGE_Y = 0.17715f
-private const val FACE_HEIGHT = 0.719f
+private const val FACE_HEIGHT = 1f
 
-/** How deep a tape is, back along the row. Read off the top band; the loosest number here. */
-private const val THICKNESS = 0.066f
+/** How deep a case is, back along the row: 10.4 mm on 146. */
+private const val THICKNESS = 0.071f
 
 /*
  * The tape in the slot stands 0.342 widths proud of the rest, straight up.
@@ -109,13 +118,27 @@ private const val JITTER_ALONG = 0.009f
 private const val JITTER_ACROSS = 0.018f
 
 /*
- * A light sits over the slot: a tape's shell reads 18% brighter there than
- * two tapes off it, whether or not it is lifted. One gradient over the lot.
+ * A light sits over the slot: a case reads 18% brighter there than two cases
+ * off it, whether or not it is lifted. One gradient over the lot.
  */
 private const val SHADE = 0.15f
 
-/** Corner rounding of the shell, as a share of the tape's width. */
-private const val SHELL_CORNER = 0.045f
+/*
+ * The case itself, in millimetres from the middle of its face, after Ann
+ * Nguyen's clear jewel case (github.com/annnguyentt/vibe-coding, cd-case):
+ * 146 square, the hinge down the left, a 120 mm disc printed from 16.2 to 59.1.
+ */
+private const val CASE_MM = 146f
+private const val HALF_MM = CASE_MM / 2f
+private const val DISC_R = 60f
+private const val PRINT_IN = 16.2f
+private const val PRINT_OUT = 59.1f
+private const val CLEAR_R = 15f
+private const val DISC_HOLE = 7.5f
+private const val HINGE_X = -HALF_MM + 1f
+
+/** Share of the case's depth, from the face back, taken up by the lid. */
+private const val LID_DEPTH = 0.19f
 
 private const val TAP_SLOP = 8f
 
@@ -124,9 +147,9 @@ fun rememberTapeRackScrollState(intro: Int = 4): TapeRackScrollState =
     remember { TapeRackScrollState(intro) }
 
 /**
- * A row of cassettes standing on edge, seen from above and to the left, that
- * slides along its own length — and the tape that comes to the slot in the
- * middle of the frame rises out of the row.
+ * A row of clear CD jewel cases standing on edge, seen from above and to the
+ * left, that slides along its own length — and the case that comes to the slot
+ * in the middle of the frame rises out of the row.
  *
  * The whole rack is one number. Each tape stands a fixed pitch up the row from
  * the one before, so where the rack has slid to says where every tape is, and
@@ -136,12 +159,15 @@ fun rememberTapeRackScrollState(intro: Int = 4): TapeRackScrollState =
  * enough away that every tape is the same shape on screen, so each is drawn
  * once into a bitmap and then only moved — one `drawImage` a tape a frame.
  *
- * Drag along the row, or across it, and the tapes follow the finger; flick to
- * throw it, scroll to step it a tape, or tap a tape to bring it to the slot.
+ * The cases are clear, so each is drawn translucent and the ones behind show
+ * through the plastic round its disc.
  *
- * @param items tapes, in order; the rack repeats, so it has no end.
+ * Drag along the row, or across it, and the cases follow the finger; flick to
+ * throw it, scroll to step it a case, or tap a case to bring it to the slot.
+ *
+ * @param items cases, in order; the rack repeats, so it has no end.
  * @param background page colour.
- * @param shellColor the tapes' plastic.
+ * @param shellColor the tint of the cases' clear plastic.
  * @param contentColor caption text.
  * @param captions say what the tape in the slot is, top left.
  * @param state also sets how far the rack slides when it first appears.
@@ -151,7 +177,7 @@ fun TapeRackScroll(
     items: List<TapeRackItem>,
     modifier: Modifier = Modifier,
     background: Color = Color(0xFF050506),
-    shellColor: Color = Color(0xFF1B1B1E),
+    shellColor: Color = Color(0xFFDBE6ED),
     contentColor: Color = Color(0xFFEDEDE8),
     captions: Boolean = true,
     state: TapeRackScrollState = rememberTapeRackScrollState(),
@@ -273,7 +299,7 @@ private class RackFrame {
         if (w == width && h == height) return
         width = w
         height = h
-        tapePx = min(w * 0.4f, h * 0.42f)
+        tapePx = min(w * 0.4f, h * 0.36f)
         pitchPx = PITCH * tapePx
         // The lifted tape's face is centred in the frame.
         originX = w / 2f - (EDGE_X * tapePx) / 2f
@@ -412,8 +438,8 @@ private fun DrawScope.drawRack(art: TapeArt, position: Float, frame: RackFrame) 
 }
 
 /**
- * Every tape drawn once, already as the camera sees it: face, top and right
- * side in one bitmap, rebuilt only when the tapes change size on screen.
+ * Every case drawn once, already as the camera sees it: face, top and right
+ * side in one bitmap, rebuilt only when the cases change size on screen.
  */
 private class TapeArt(private val items: List<TapeRackItem>, private val shell: Color) {
     var tapes: List<ImageBitmap> = emptyList()
@@ -465,11 +491,17 @@ private class TapeArt(private val items: List<TapeRackItem>, private val shell: 
             lineTo(ex, ey + vy)
             close()
         }
-        val topColor = lerp(shell, Color.White, 0.14f)
-        val sideColor = lerp(shell, Color.Black, 0.35f)
+        // Seen edge on, clear plastic is a lot of plastic: the top band reads
+        // pale, the shaded side less so, with the seam where the lid closes.
+        val seam = Path().apply {
+            moveTo(LID_DEPTH * tx, LID_DEPTH * ty)
+            lineTo(ex + LID_DEPTH * tx, ey + LID_DEPTH * ty)
+            lineTo(ex + LID_DEPTH * tx, ey + LID_DEPTH * ty + vy)
+        }
+        val hairline = max(1f, w / 300f)
 
         tapes = items.map { item ->
-            val flat = tapeFace(item.image, faceW, faceH, shell)
+            val flat = caseFace(item.image, faceW, shell)
             val bitmap = ImageBitmap(bw, bh)
             CanvasDrawScope().draw(
                 Density(1f),
@@ -478,8 +510,10 @@ private class TapeArt(private val items: List<TapeRackItem>, private val shell: 
                 Size(bw.toFloat(), bh.toFloat()),
             ) {
                 translate(-offsetX, -offsetY) {
-                    drawPath(top, topColor)
-                    drawPath(side, sideColor)
+                    drawPath(top, shell.copy(alpha = 0.26f))
+                    drawPath(side, shell.copy(alpha = 0.11f))
+                    drawPath(seam, Color.Black.copy(alpha = 0.45f), style = Stroke(hairline))
+                    drawPath(top, Color.White.copy(alpha = 0.35f), style = Stroke(hairline))
                     withTransform({ transform(face) }) {
                         drawImage(
                             image = flat,
@@ -498,95 +532,280 @@ private class TapeArt(private val items: List<TapeRackItem>, private val shell: 
 }
 
 /**
- * The face of a tape, square on: the shell, a label carrying the picture, the
- * window with its two reels, the head opening along the foot and the screws.
+ * The face of a case, square on, through the lid: the tray's rails and ribs,
+ * the disc carrying the picture, the hub that holds it, the lid and its hinge.
+ * Drawn in millimetres, back to front, and all of it but the disc's print
+ * translucent, so whatever is behind the case shows through its plastic.
  */
-private fun tapeFace(source: ImageBitmap, w: Int, h: Int, shell: Color): ImageBitmap {
-    val bitmap = ImageBitmap(w, h)
-    val fw = w.toFloat()
-    val fh = h.toFloat()
+private fun caseFace(source: ImageBitmap, px: Int, tint: Color): ImageBitmap {
+    val bitmap = ImageBitmap(px, px)
+    val size = px.toFloat()
     CanvasDrawScope().draw(
         Density(1f),
         LayoutDirection.Ltr,
         BitmapCanvas(bitmap),
-        Size(fw, fh),
+        Size(size, size),
     ) {
-        val corner = CornerRadius(SHELL_CORNER * fw)
-        drawRoundRect(shell, cornerRadius = corner)
-        val rim = 0.012f * fw
-        drawRoundRect(
-            color = lerp(shell, Color.White, 0.1f),
-            topLeft = Offset(rim / 2f, rim / 2f),
-            size = Size(fw - rim, fh - rim),
-            cornerRadius = corner,
-            style = Stroke(rim),
-        )
-
-        // Label, the picture cropped to it.
-        val label = Rect(0.075f * fw, 0.08f * fh, 0.925f * fw, 0.74f * fh)
-        val clip = Path().apply {
-            addRoundRect(RoundRect(label, CornerRadius(0.02f * fw)))
-        }
-        clipPath(clip) {
-            val ratio = label.width / label.height
-            val srcRatio = source.width.toFloat() / max(source.height, 1)
-            val cropW: Int
-            val cropH: Int
-            if (srcRatio > ratio) {
-                cropH = source.height
-                cropW = (source.height * ratio).roundToInt().coerceIn(1, source.width)
-            } else {
-                cropW = source.width
-                cropH = (source.width / ratio).roundToInt().coerceIn(1, source.height)
-            }
-            drawImage(
-                image = source,
-                srcOffset = IntOffset((source.width - cropW) / 2, (source.height - cropH) / 2),
-                srcSize = IntSize(cropW, cropH),
-                dstOffset = IntOffset(label.left.roundToInt(), label.top.roundToInt()),
-                dstSize = IntSize(label.width.roundToInt(), label.height.roundToInt()),
-                filterQuality = FilterQuality.High,
-            )
-        }
-
-        // Window and reels.
-        val windowH = 0.22f * fh
-        val windowTop = 0.47f * fh - windowH / 2f
-        drawRoundRect(
-            color = Color(0xE6101012),
-            topLeft = Offset(0.24f * fw, windowTop),
-            size = Size(0.52f * fw, windowH),
-            cornerRadius = CornerRadius(windowH / 2f),
-        )
-        val reel = windowH * 0.38f
-        for (rx in floatArrayOf(0.355f, 0.645f)) {
-            val c = Offset(rx * fw, 0.47f * fh)
-            drawCircle(Color(0xFFE6E1D6), radius = reel, center = c)
-            drawCircle(Color(0xFF151517), radius = reel * 0.52f, center = c)
-            drawCircle(Color(0xFFE6E1D6), radius = reel * 0.52f, center = c, style = Stroke(reel * 0.12f))
-        }
-
-        // Head opening along the foot.
-        val foot = Path().apply {
-            moveTo(0.22f * fw, fh)
-            lineTo(0.27f * fw, 0.8f * fh)
-            lineTo(0.73f * fw, 0.8f * fh)
-            lineTo(0.78f * fw, fh)
-            close()
-        }
-        drawPath(foot, lerp(shell, Color.White, 0.06f))
-        for (hx in floatArrayOf(0.37f, 0.63f)) {
-            drawCircle(Color(0xFF09090A), radius = 0.028f * fh, center = Offset(hx * fw, 0.9f * fh))
-        }
-
-        // Screws.
-        val screw = 0.016f * fw
-        val screwColor = Color(0xFF8E8E94)
-        for ((sx, sy) in listOf(0.035f to 0.05f, 0.965f to 0.05f, 0.035f to 0.93f, 0.965f to 0.93f, 0.5f to 0.88f)) {
-            drawCircle(screwColor, radius = screw, center = Offset(sx * fw, sy * fh))
+        val k = size / CASE_MM
+        withTransform({
+            translate(size / 2f, size / 2f)
+            scale(k, k, Offset.Zero)
+        }) {
+            tray(tint)
+            disc(source, tint)
+            hub(tint)
+            lid(tint)
         }
     }
     return bitmap
+}
+
+private fun DrawScope.tray(tint: Color) {
+    // The floor, and the thin rim round its edge.
+    drawPath(roundedSquare(HALF_MM, 8f), tint.copy(alpha = 0.05f))
+    rod(roundedSquare(HALF_MM - 0.75f, 7.4f), 1.5f, tint, 0.7f)
+
+    // The rail round the tray, and the collars along it.
+    val at = HALF_MM - 3.3f
+    rod(roundedSquare(at, 6.5f), 6.6f, tint)
+    for (s in floatArrayOf(-1f, 1f)) {
+        for (c in floatArrayOf(-35f, -12f, 12f, 35f)) {
+            rod(segment(c - 1.2f, s * at, c + 1.2f, s * at), 7.5f, tint, 0.8f)
+            // The tab takes the middle of the hinge side.
+            if (s < 0f && abs(c) < 20f) continue
+            rod(segment(s * at, c - 1.2f, s * at, c + 1.2f), 7.5f, tint, 0.8f)
+        }
+    }
+
+    // A rib in each corner, stepped back to the rail at both ends.
+    val e = HALF_MM - 9.6f
+    for (sx in floatArrayOf(-1f, 1f)) {
+        for (sy in floatArrayOf(-1f, 1f)) {
+            val along = if (sx < 0f) 26f else 35f
+            rod(corner(sx * e, sy * along, sx * e, sy * e, sx * 35f, sy * e, 4.5f), 4.8f, tint)
+            rod(segment(sx * e, sy * along, sx * at, sy * along), 3.8f, tint, 0.8f)
+            rod(segment(sx * 35f, sy * e, sx * 35f, sy * at), 3.8f, tint, 0.8f)
+        }
+    }
+
+    // The well the disc sits in, and the clips at its edge.
+    rod(circle(61.6f), 2.3f, tint)
+    rod(circle(60.05f), 1f, tint, 0.6f)
+    for (deg in floatArrayOf(59f, 121f, 238.5f, 301.5f)) {
+        val a = deg / 180f * PI.toFloat()
+        val dx = cos(a)
+        val dy = -sin(a)
+        rod(segment(dx * 58.6f, dy * 58.6f, dx * 63.2f, dy * 63.2f), 3.2f, tint, 0.8f)
+    }
+
+    // The two hooks along the foot that hold the booklet.
+    for (sx in floatArrayOf(-1f, 1f)) {
+        rod(corner(sx * 46f, e, sx * 46f, 49.5f, sx * 42.6f, 45.6f, 4.2f), 3.8f, tint, 0.8f)
+    }
+}
+
+private fun DrawScope.disc(source: ImageBitmap, tint: Color) {
+    // The disc's edge, and the bare dark ring inside the print.
+    drawPath(ring(DISC_R, PRINT_OUT), Color(0xFF66686D))
+    drawPath(ring(PRINT_IN, CLEAR_R), Color(0xFF0E0E10))
+
+    clipPath(ring(PRINT_OUT, PRINT_IN)) {
+        val crop = min(source.width, source.height).coerceAtLeast(1)
+        val d = (2f * PRINT_OUT).roundToInt()
+        drawImage(
+            image = source,
+            srcOffset = IntOffset((source.width - crop) / 2, (source.height - crop) / 2),
+            srcSize = IntSize(crop, crop),
+            dstOffset = IntOffset(-d / 2, -d / 2),
+            dstSize = IntSize(d, d),
+            filterQuality = FilterQuality.High,
+        )
+        // The gloss on the print, caught along two opposite radii the way a
+        // disc's tracks throw the light back.
+        drawCircle(
+            brush = Brush.sweepGradient(
+                0f to Color.Transparent,
+                0.08f to Color.White.copy(alpha = 0.16f),
+                0.18f to Color.Transparent,
+                0.5f to Color.Transparent,
+                0.58f to Color.White.copy(alpha = 0.1f),
+                0.68f to Color.Transparent,
+                1f to Color.Transparent,
+                center = Offset.Zero,
+            ),
+            radius = PRINT_OUT,
+            center = Offset.Zero,
+        )
+    }
+
+    // A rainbow round the rim, where the bare tracks show past the print.
+    drawCircle(
+        brush = Brush.sweepGradient(
+            0f to Color(0xFFFF5E8A),
+            0.17f to Color(0xFFFFD35E),
+            0.33f to Color(0xFF6EF0A0),
+            0.5f to Color(0xFF5EC8FF),
+            0.67f to Color(0xFFA77BFF),
+            0.83f to Color(0xFFFF7BD5),
+            1f to Color(0xFFFF5E8A),
+            center = Offset.Zero,
+        ),
+        radius = (DISC_R + PRINT_OUT) / 2f,
+        center = Offset.Zero,
+        alpha = 0.55f,
+        style = Stroke(DISC_R - PRINT_OUT),
+    )
+    drawCircle(Color.Black.copy(alpha = 0.35f), radius = 16.6f, center = Offset.Zero, style = Stroke(0.5f))
+
+    // The clear middle the hub shows through, and the edge of the hole.
+    drawPath(ring(CLEAR_R, DISC_HOLE), tint.copy(alpha = 0.12f))
+    rod(circle(DISC_HOLE + 0.25f), 0.5f, tint, 0.8f)
+}
+
+private fun DrawScope.hub(tint: Color) {
+    val cap = Path().apply {
+        fillType = PathFillType.EvenOdd
+        addOval(Rect(Offset.Zero, 19.4f))
+        addOval(Rect(Offset.Zero, 6.2f))
+        for (hx in floatArrayOf(-1f, 1f)) for (hy in floatArrayOf(-1f, 1f)) {
+            addOval(Rect(Offset(hx * 8.9f, hy * 8.9f), 1.7f))
+        }
+    }
+    drawPath(cap, tint.copy(alpha = 0.08f))
+    rod(circle(18.8f), 1.6f, tint)
+    rod(circle(16.5f), 0.9f, tint, 0.7f)
+    rod(circle(9.6f), 1.9f, tint)
+    rod(circle(6.6f), 1.1f, tint, 0.8f)
+    for (hx in floatArrayOf(-1f, 1f)) for (hy in floatArrayOf(-1f, 1f)) {
+        rod(circle(2f, hx * 8.9f, hy * 8.9f), 0.9f, tint, 0.7f)
+    }
+}
+
+private fun DrawScope.lid(tint: Color) {
+    // The tab on the hinge side, over the edge of the disc.
+    val tabLeft = -HALF_MM
+    val tabRight = -50.5f
+    val tabMid = (tabLeft + tabRight) / 2f
+    val tabHw = (tabRight - tabLeft) / 2f
+    drawPath(roundedRect(tabMid, 0f, tabHw, 22f, 4.2f), tint.copy(alpha = 0.07f))
+    rod(roundedRect(tabMid, 0f, tabHw - 0.8f, 21.2f, 3.4f), 1.6f, tint, 0.8f)
+    rod(
+        Path().apply {
+            moveTo(-69f, -13f)
+            lineTo(-61.7f, -13f)
+            quadraticTo(-58.5f, -13f, -58.5f, -9.8f)
+            lineTo(-58.5f, 9.8f)
+            quadraticTo(-58.5f, 13f, -61.7f, 13f)
+            lineTo(-69f, 13f)
+        },
+        2.7f,
+        tint,
+    )
+    rod(roundedRect(-55.4f, 0f, 4.4f, 3.2f, 1.2f), 1.3f, tint, 0.7f)
+
+    // The lid, its rim, the notches along its edges and the hinge.
+    drawPath(roundedSquare(HALF_MM, 8f), tint.copy(alpha = 0.04f))
+    rod(roundedSquare(HALF_MM - 1f, 7f), 2f, tint)
+    val inset = HALF_MM - 3.4f
+    rod(roundedSquare(inset, 5f), 0.84f, tint, 0.6f)
+    for (x in floatArrayOf(-42f, 30f)) {
+        rod(
+            Path().apply {
+                arcTo(Rect(Offset(x, -inset), 4.4f), 0f, 180f, true)
+                arcTo(Rect(Offset(x, inset), 4.4f), 180f, 180f, true)
+            },
+            0.84f,
+            tint,
+            0.6f,
+        )
+    }
+    for (sx in floatArrayOf(-1f, 1f)) for (y in floatArrayOf(-30f, 30f)) {
+        rod(segment(sx * inset, y - 3f, sx * inset, y + 3f), 1f, tint, 0.6f)
+    }
+    for ((y0, y1) in listOf(-63f to -44f, -42f to -20f, 20f to 42f, 44f to 63f)) {
+        rod(segment(HINGE_X, y0, HINGE_X, y1), 4.2f, tint, cap = StrokeCap.Butt)
+    }
+
+    // A long glare across the whole lid, from the softbox over the left.
+    drawPath(
+        roundedSquare(HALF_MM, 8f),
+        Brush.linearGradient(
+            0f to Color.Transparent,
+            0.26f to Color.Transparent,
+            0.33f to Color.White.copy(alpha = 0.11f),
+            0.4f to Color.Transparent,
+            0.62f to Color.Transparent,
+            0.66f to Color.White.copy(alpha = 0.05f),
+            0.7f to Color.Transparent,
+            1f to Color.Transparent,
+            start = Offset(-HALF_MM, -HALF_MM),
+            end = Offset(HALF_MM, HALF_MM),
+        ),
+    )
+}
+
+/**
+ * A clear rod, seen from the front: it bends the light from behind away, so
+ * it darkens what it lies over, with a pale body and a bright line down the
+ * side the light comes from and a dimmer one opposite.
+ */
+private fun DrawScope.rod(
+    path: Path,
+    width: Float,
+    tint: Color,
+    strength: Float = 1f,
+    cap: StrokeCap = StrokeCap.Round,
+) {
+    drawPath(path, Color.Black.copy(alpha = 0.3f * strength), style = Stroke(width, cap = cap, join = StrokeJoin.Round))
+    drawPath(path, tint.copy(alpha = 0.16f * strength), style = Stroke(width, cap = cap, join = StrokeJoin.Round))
+    val line = Stroke(width * 0.16f, cap = cap, join = StrokeJoin.Round)
+    translate(-width * 0.24f, -width * 0.24f) {
+        drawPath(path, Color.White.copy(alpha = 0.6f * strength), style = line)
+    }
+    translate(width * 0.28f, width * 0.28f) {
+        drawPath(path, Color.White.copy(alpha = 0.18f * strength), style = line)
+    }
+}
+
+private fun roundedSquare(half: Float, r: Float): Path = roundedRect(0f, 0f, half, half, r)
+
+private fun roundedRect(cx: Float, cy: Float, hw: Float, hh: Float, r: Float): Path = Path().apply {
+    addRoundRect(RoundRect(cx - hw, cy - hh, cx + hw, cy + hh, CornerRadius(r)))
+}
+
+private fun circle(r: Float, cx: Float = 0f, cy: Float = 0f): Path = Path().apply {
+    addOval(Rect(Offset(cx, cy), r))
+}
+
+/** The band between two radii about the middle. */
+private fun ring(outer: Float, inner: Float): Path = Path().apply {
+    fillType = PathFillType.EvenOdd
+    addOval(Rect(Offset.Zero, outer))
+    addOval(Rect(Offset.Zero, inner))
+}
+
+private fun segment(x0: Float, y0: Float, x1: Float, y1: Float): Path = Path().apply {
+    moveTo(x0, y0)
+    lineTo(x1, y1)
+}
+
+/** From a to b to c, the turn at b rounded off by about [r]. */
+private fun corner(ax: Float, ay: Float, bx: Float, by: Float, cx: Float, cy: Float, r: Float): Path {
+    fun toward(fx: Float, fy: Float): Offset {
+        val dx = fx - bx
+        val dy = fy - by
+        val l = max(sqrt(dx * dx + dy * dy), 1e-4f)
+        val cut = min(r, l / 2f)
+        return Offset(bx + dx / l * cut, by + dy / l * cut)
+    }
+    val enter = toward(ax, ay)
+    val leave = toward(cx, cy)
+    return Path().apply {
+        moveTo(ax, ay)
+        lineTo(enter.x, enter.y)
+        quadraticTo(bx, by, leave.x, leave.y)
+        lineTo(cx, cy)
+    }
 }
 
 // --- caption -----------------------------------------------------------------

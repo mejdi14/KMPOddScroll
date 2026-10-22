@@ -231,41 +231,47 @@ private fun DrawScope.liftStack() {
 }
 
 /**
- * The rack in miniature: a row of tape faces stepping up to the right, each
+ * The rack in miniature: a row of clear CD cases stepping up to the right, each
  * covering the one behind, and the one in the middle standing proud of it.
  */
 private fun DrawScope.tapeRack() {
-    val tape = size.minDimension * 0.42f
-    val faceH = tape * 0.719f
-    val slope = tape * 0.177f
-    val stepX = tape * 0.322f * 0.889f
-    val stepY = -tape * 0.322f * 0.458f
-    val originX = size.width / 2f - tape / 2f
-    val originY = size.height / 2f - faceH / 2f + tape * 0.17f
+    val case = size.minDimension * 0.36f
+    val slope = case * 0.177f
+    val stepX = case * 0.322f * 0.889f
+    val stepY = -case * 0.322f * 0.458f
+    val originX = size.width / 2f - case / 2f
+    val originY = size.height / 2f - case / 2f + case * 0.17f
 
     for (i in 4 downTo -4) {
-        val proud = (1f - abs(i).coerceAtMost(1)) * tape * 0.342f
+        val proud = (1f - abs(i).coerceAtMost(1)) * case * 0.342f
         val x = originX + i * stepX
         val y = originY + i * stepY - proud
         val path = Path().apply {
             moveTo(x, y)
-            lineTo(x + tape * 0.984f, y + slope)
-            lineTo(x + tape * 0.984f, y + slope + faceH)
-            lineTo(x, y + faceH)
+            lineTo(x + case * 0.984f, y + slope)
+            lineTo(x + case * 0.984f, y + slope + case)
+            lineTo(x, y + case)
             close()
         }
-        drawPath(path, Color(0xFF1C1C20))
         val lit = if (i == 0) 0.95f else 0.3f + (4 - abs(i)) * 0.08f
-        drawPath(path, Color(0xFFBFBFB6).copy(alpha = lit), style = Stroke(1.5f))
-        // The label, a lighter band across the upper face.
-        val label = Path().apply {
-            moveTo(x + tape * 0.07f, y + slope * 0.07f + faceH * 0.08f)
-            lineTo(x + tape * 0.91f, y + slope * 0.91f + faceH * 0.08f)
-            lineTo(x + tape * 0.91f, y + slope * 0.91f + faceH * 0.74f)
-            lineTo(x + tape * 0.07f, y + slope * 0.07f + faceH * 0.74f)
+        drawPath(path, Color(0xFFDBE6ED).copy(alpha = 0.06f))
+        drawPath(path, Color(0xFFDBE6ED).copy(alpha = lit * 0.8f), style = Stroke(1.5f))
+        // The disc behind the lid, sheared with the face it sits in.
+        val cx = x + case * 0.492f
+        val cy = y + slope * 0.5f + case * 0.5f
+        val r = case * 0.41f
+        val disc = Path().apply {
+            val steps = 32
+            for (k in 0..steps) {
+                val a = k * 2f * PI.toFloat() / steps
+                val px = cos(a) * r * 0.984f
+                val py = sin(a) * r + cos(a) * r * 0.177f
+                if (k == 0) moveTo(cx + px, cy + py) else lineTo(cx + px, cy + py)
+            }
             close()
         }
-        drawPath(label, Color(0xFFBFBFB6).copy(alpha = lit * 0.45f))
+        drawPath(disc, Color(0xFFBFBFB6).copy(alpha = lit * 0.4f))
+        drawPath(disc, Color(0xFFBFBFB6).copy(alpha = lit * 0.7f), style = Stroke(1f))
     }
 }
 

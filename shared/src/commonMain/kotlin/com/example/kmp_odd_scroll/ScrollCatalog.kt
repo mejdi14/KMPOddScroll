@@ -73,7 +73,7 @@ val scrollDemos: List<ScrollDemo> = listOf(
         route = "tape_rack",
         category = "Oblique",
         title = "Tape Rack",
-        subtitle = "A row of cassettes on edge that slides along itself and raises the one in the slot",
+        subtitle = "A row of clear CD cases on edge that slides along itself and raises the one in the slot",
         screen = { TapeRackDemoScreen() },
     ),
     ScrollDemo(

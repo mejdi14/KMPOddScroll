@@ -267,12 +267,21 @@ and no strips anywhere.
 
 ### Tape Rack
 
-A row of cassettes standing on edge, seen from above and to the left, running
-up and to the right across the frame. It slides along its own length, and the
-tape that comes to the slot in the middle rises out of the row, with its title
-let in top left. Drag along the row (or across it — only the part along it
-counts), flick to throw it, scroll to step it a tape, or tap any tape to bring
-it to the slot.
+A row of clear CD jewel cases standing on edge, seen from above and to the
+left, running up and to the right across the frame. It slides along its own
+length, and the case that comes to the slot in the middle rises out of the row,
+with its title let in top left. Drag along the row (or across it — only the
+part along it counts), flick to throw it, scroll to step it a case, or tap any
+case to bring it to the slot.
+
+The case is drawn after Ann Nguyen's WebGL
+[CD case](https://github.com/annnguyentt/vibe-coding/tree/main/cd-case), to its
+millimetres: rails, ribs, hub and hinge as clear rods, each item's picture
+printed on the disc. The plastic is translucent, so the cases behind show
+through the one in front.
+
+The rack itself was measured off a recording of a row of cassettes, which is
+why the numbers below talk in tapes.
 
 Measured off a recording of the reference rather than eyeballed. The top-left
 corner of every tape, pooled over 270 frames, falls on one line with one pitch
@@ -300,16 +309,16 @@ TapeRackScroll(
 
 | Parameter | Default | |
 | --- | --- | --- |
-| `items` | — | tapes in order; the rack repeats, so it has no end |
+| `items` | — | cases in order; the rack repeats, so it has no end |
 | `background` | `#050506` | page colour |
-| `shellColor` | `#1B1B1E` | the tapes' plastic |
+| `shellColor` | `#DBE6ED` | tint of the cases' clear plastic |
 | `contentColor` | `#EDEDE8` | caption text |
-| `captions` | `true` | title and artist of the tape in the slot |
-| `state` | intro of `4` | `rememberTapeRackScrollState(intro)` — tapes slid on first show; `0` opens at rest |
+| `captions` | `true` | title and artist of the case in the slot |
+| `state` | intro of `4` | `rememberTapeRackScrollState(intro)` — cases slid on first show; `0` opens at rest |
 
 `TapeRackScrollState.scrollTo(index)` and `step(by)` drive it from a host's own
-controls, and `slotted` is the tape in the slot. Each tape is drawn once, as the
-camera sees it, into a bitmap that is then only moved — one `drawImage` a tape
+controls, and `slotted` is the case in the slot. Each case is drawn once, as the
+camera sees it, into a bitmap that is then only moved — one `drawImage` a case
 a frame and one gradient for the light, so it needs no shader anywhere.
 
 ### Gallery Wall
@@ -454,7 +463,7 @@ cards of the Edge Distortion gallery; Terrace stacks the same cuts.
 
 Flex Carousel uses museum scans of paintings, also from Unsplash and under the
 same licence, cut 800x600 for its 4:3 cards. Lift Stack uses the same six, cut
-square. Tape Rack prints both the scans and the wide photographs on its labels.
+square. Tape Rack prints both the scans and the wide photographs on its discs.
 
 | File | Scanned by |
 | --- | --- |
