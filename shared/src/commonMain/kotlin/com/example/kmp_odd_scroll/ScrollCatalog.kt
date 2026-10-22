@@ -73,7 +73,7 @@ val scrollDemos: List<ScrollDemo> = listOf(
         route = "cd_rack",
         category = "Oblique",
         title = "CD Rack",
-        subtitle = "A row of clear CD cases on edge that slides along itself and raises the one in the slot",
+        subtitle = "A clear CD case that turns when you drag it and opens when you tap it",
         screen = { CdRackDemoScreen() },
     ),
     ScrollDemo(

@@ -123,19 +123,7 @@ private const val JITTER_ACROSS = 0.018f
  */
 private const val SHADE = 0.15f
 
-/*
- * The case itself, in millimetres from the middle of its face, after Ann
- * Nguyen's clear jewel case (github.com/annnguyentt/vibe-coding, cd-case):
- * 146 square, the hinge down the left, a 120 mm disc printed from 16.2 to 59.1.
- */
-private const val CASE_MM = 146f
-private const val HALF_MM = CASE_MM / 2f
-private const val DISC_R = 60f
-private const val PRINT_IN = 16.2f
-private const val PRINT_OUT = 59.1f
-private const val CLEAR_R = 15f
-private const val DISC_HOLE = 7.5f
-private const val HINGE_X = -HALF_MM + 1f
+/* The case's own measurements are in CaseGeometry.kt, shared with CdCase. */
 
 /** Share of the case's depth, from the face back, taken up by the lid. */
 private const val LID_DEPTH = 0.19f
@@ -764,47 +752,6 @@ private fun DrawScope.rod(
     }
     translate(width * 0.28f, width * 0.28f) {
         drawPath(path, Color.White.copy(alpha = 0.18f * strength), style = line)
-    }
-}
-
-private fun roundedSquare(half: Float, r: Float): Path = roundedRect(0f, 0f, half, half, r)
-
-private fun roundedRect(cx: Float, cy: Float, hw: Float, hh: Float, r: Float): Path = Path().apply {
-    addRoundRect(RoundRect(cx - hw, cy - hh, cx + hw, cy + hh, CornerRadius(r)))
-}
-
-private fun circle(r: Float, cx: Float = 0f, cy: Float = 0f): Path = Path().apply {
-    addOval(Rect(Offset(cx, cy), r))
-}
-
-/** The band between two radii about the middle. */
-private fun ring(outer: Float, inner: Float): Path = Path().apply {
-    fillType = PathFillType.EvenOdd
-    addOval(Rect(Offset.Zero, outer))
-    addOval(Rect(Offset.Zero, inner))
-}
-
-private fun segment(x0: Float, y0: Float, x1: Float, y1: Float): Path = Path().apply {
-    moveTo(x0, y0)
-    lineTo(x1, y1)
-}
-
-/** From a to b to c, the turn at b rounded off by about [r]. */
-private fun corner(ax: Float, ay: Float, bx: Float, by: Float, cx: Float, cy: Float, r: Float): Path {
-    fun toward(fx: Float, fy: Float): Offset {
-        val dx = fx - bx
-        val dy = fy - by
-        val l = max(sqrt(dx * dx + dy * dy), 1e-4f)
-        val cut = min(r, l / 2f)
-        return Offset(bx + dx / l * cut, by + dy / l * cut)
-    }
-    val enter = toward(ax, ay)
-    val leave = toward(cx, cy)
-    return Path().apply {
-        moveTo(ax, ay)
-        lineTo(enter.x, enter.y)
-        quadraticTo(bx, by, leave.x, leave.y)
-        lineTo(cx, cy)
     }
 }
 

@@ -321,6 +321,45 @@ controls, and `slotted` is the case in the slot. Each case is drawn once, as the
 camera sees it, into a bitmap that is then only moved — one `drawImage` a case
 a frame and one gradient for the light, so it needs no shader anywhere.
 
+#### One case: `CdCase`
+
+The demo shows a single case for now, closer to the reference: on its white
+studio wall, idling with a slow sway, the disc turning inside. Drag it to turn
+it (it springs back when let go); tap it to open it — it turns right round as
+the lid swings out to its left on the reference's own hand-keyed curves — and
+tap again to shut it.
+
+It is the reference's geometry and its studio, carried over:
+
+- the camera is a 28° lens far enough back for the case to fill 60% of the
+  height, and every piece of the case — floor, rails and ribs, disc, hub, tab,
+  lid — is flat in its own frame, so each is baked once and drawn through its
+  own exact projection, back to front as the case faces. The walls round its
+  edge and the hinge's knuckles are drawn as the camera sees them each frame,
+  and its shadow falls on the wall behind along the reference's light;
+- on Android 13 and up the plastic and the disc are shaded a pixel at a time in
+  AGSL, after the reference's own shaders: its analytic studio of softboxes and
+  flags, Fresnel at every surface, rods that refract the view through a round
+  section and bend the page and the dark room into it, sheets that throw back
+  the softboxes' glare, and the disc's diffraction rainbow, three orders of the
+  spectrum along its tracks. Elsewhere the same pieces are drawn from a baked
+  look, with the rainbow and the lid's glare worked out per frame for the case's
+  turn.
+
+```kotlin
+CdCase(
+    art = image,
+    modifier = Modifier.fillMaxSize(),
+)
+```
+
+| Parameter | Default | |
+| --- | --- | --- |
+| `art` | — | printed across the disc, its middle square to the disc's width |
+| `background` | white | the backdrop; the plastic is shaded for a pale one |
+| `spin` | `true` | turn the disc inside the case |
+| `state` | — | `rememberCdCaseState()`; `open()`, `close()`, `toggle()` and `isOpen` |
+
 ### Gallery Wall
 
 Paintings hung round the inside of a room — a back wall facing you, side walls
@@ -463,7 +502,8 @@ cards of the Edge Distortion gallery; Terrace stacks the same cuts.
 
 Flex Carousel uses museum scans of paintings, also from Unsplash and under the
 same licence, cut 800x600 for its 4:3 cards. Lift Stack uses the same six, cut
-square. CD Rack prints both the scans and the wide photographs on its discs.
+square. CD Rack prints both the scans and the wide photographs on its discs;
+its single-case demo prints *Night with her Train of Stars*.
 
 | File | Scanned by |
 | --- | --- |
