@@ -353,7 +353,7 @@ out, `case.turnPage(by)` and `case.closeManual()` leaf through its manual, and
 `case.manualPage` is the spread it is open at (`-1` shut). The buttons walk
 `step` — `0` shut, `1` open, `2` cover out, then a step per spread of the
 manual — with `stepForward()`, `stepBack()` and `lastStep` for a host's own.
-Wider than tall, the cover comes to rest beside the case rather than under it.
+Wider than tall, the cover comes to rest to the right of the case rather than under it, and going back reopens the case before the cover goes into its lid.
 
 #### One case: `CdCase`
 

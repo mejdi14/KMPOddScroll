@@ -78,12 +78,12 @@ internal class Camera {
 
     /**
      * Wider than tall, the cover stands beside the case instead of under it:
-     * how far the case goes right and the cover goes left, in millimetres at
+     * how far the case goes left and the cover goes right, in millimetres at
      * the case.
      */
     var pairShift = 0f
         private set
-    var pairLeft = 0f
+    var pairAside = 0f
         private set
 
     /**
@@ -116,7 +116,7 @@ internal class Camera {
         if (aspect > 1f) {
             pairScale = minOf(1f, across * PAIR_FIT / stack, tall * PAIR_FIT / (2f * COVER_HALF))
             pairShift = pairScale * (stack / 2f - HALF_MM)
-            pairLeft = pairScale * (stack / 2f - COVER_HALF)
+            pairAside = pairScale * (stack / 2f - COVER_HALF)
             pairRise = 0f
             pairDrop = 0f
         } else {
@@ -124,7 +124,7 @@ internal class Camera {
             pairRise = pairScale * (stack / 2f - HALF_MM)
             pairDrop = pairScale * (stack / 2f - COVER_HALF)
             pairShift = 0f
-            pairLeft = 0f
+            pairAside = 0f
         }
         readScale = minOf(across * READ_ACROSS / (4f * COVER_HALF), tall * READ_TALL / (2f * COVER_HALF))
         readRise = tall * 0.6f + HALF_MM

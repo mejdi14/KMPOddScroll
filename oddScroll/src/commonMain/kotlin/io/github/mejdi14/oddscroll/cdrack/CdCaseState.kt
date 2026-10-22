@@ -79,7 +79,7 @@ private const val COVER_TURN_T = 1.2f
 private const val COVER_ROOM_FROM = 0.3f
 private const val COVER_ROOM_T = 1.5f
 private const val COVER_OUT_T = COVER_MOVE_FROM + COVER_MOVE_T
-private const val COVER_BACK_T = 1.1f
+private const val COVER_BACK_T = 1.35f
 private const val COVER_BACK_ARC_MM = 22f
 
 /*
@@ -156,7 +156,8 @@ class CdCaseState internal constructor() {
     /** Spreads in the manual behind the cover, none for a single sheet; set by whatever draws the case. */
     internal var manualSpreads by mutableIntStateOf(0)
 
-    private var reopenAfterReturn by mutableStateOf(false)
+    /** The cover going back as it came: the case opens first, then the cover goes into its lid. */
+    private var docking by mutableStateOf(false)
 
     private var t = 0f
     private var phase = Phase.Rest
@@ -224,7 +225,7 @@ class CdCaseState internal constructor() {
      */
     fun inspectCover() {
         if (cover != Cover.In || !hasCover) return
-        reopenAfterReturn = false
+        docking = false
         if (phase == Phase.Opening) {
             inspectAfter = true
             return
@@ -247,6 +248,7 @@ class CdCaseState internal constructor() {
         when (cover) {
             Cover.Leaving -> returnAfter = true
             Cover.Out -> {
+                if (docking) return
                 if (leafFrom != -1 || leafTo != -1) {
                     returnAfterLeaf = true
                     turnTo(-1)
@@ -255,6 +257,19 @@ class CdCaseState internal constructor() {
                 cover = Cover.Returning
                 coverAt = t
                 coverOut = false
+            }
+            else -> Unit
+        }
+    }
+
+    /** Puts the cover back as it came out: the case opens, then the cover goes into the lid. */
+    private fun dockCover() {
+        when (cover) {
+            Cover.Leaving -> docking = true
+            Cover.Out -> {
+                if (phase != Phase.Rest) return
+                docking = true
+                open()
             }
             else -> Unit
         }
@@ -315,8 +330,9 @@ class CdCaseState internal constructor() {
      */
     val step: Int
         get() = when {
+            docking -> 1
             coverOut -> 3 + manualPage
-            isOpen || reopenAfterReturn -> 1
+            isOpen -> 1
             else -> 0
         }
 
@@ -338,17 +354,14 @@ class CdCaseState internal constructor() {
     }
 
     /**
-     * Goes back a step, down to the open case; the cover goes back into the
-     * lid and the case opens again. Does nothing on the shut case.
+     * Goes back a step, the way it came: the cover going back is the case
+     * opening again, then the cover into its lid. Does nothing on the shut case.
      */
     fun stepBack() {
         when (step) {
             0 -> Unit
-            1 -> close()
-            2 -> {
-                if (cover == Cover.Leaving || cover == Cover.Out) reopenAfterReturn = true
-                returnCover()
-            }
+            1 -> if (!docking) close()
+            2 -> dockCover()
             else -> turnPage(-1)
         }
     }
@@ -407,7 +420,13 @@ class CdCaseState internal constructor() {
         if (phase == Phase.Opening && since >= OPEN_T) {
             phase = Phase.Open
             phaseAt = t
-            if (inspectAfter) {
+            if (docking && cover == Cover.Out) {
+                // Open again: the cover can go back into its lid.
+                closeAfter = false
+                cover = Cover.Returning
+                coverAt = t
+                coverOut = false
+            } else if (inspectAfter) {
                 inspectAfter = false
                 inspectCover()
             } else if (closeAfter) {
@@ -427,7 +446,9 @@ class CdCaseState internal constructor() {
                 // Out once it has landed and the case has shut.
                 if (coverSince >= COVER_OUT_T && phase == Phase.Rest) {
                     cover = Cover.Out
-                    if (returnAfter) {
+                    if (docking) {
+                        open()
+                    } else if (returnAfter) {
                         returnAfter = false
                         returnCover()
                     }
@@ -435,10 +456,7 @@ class CdCaseState internal constructor() {
             }
             Cover.Returning -> if (coverSince >= COVER_BACK_T) {
                 cover = Cover.In
-                if (reopenAfterReturn) {
-                    reopenAfterReturn = false
-                    open()
-                }
+                docking = false
             }
             else -> Unit
         }
@@ -499,7 +517,8 @@ class CdCaseState internal constructor() {
         val room = room()
         val s = lerp(1f, camera.openScale, out.spread) * lerp(1f, camera.pairScale, room)
         out.x = HALF_MM * s * out.spread * 0.92f
-        out.x += camera.pairShift * room
+        // Open, the pair is centred and stays so; it moves aside as it shuts.
+        out.x -= camera.pairShift * room * (1f - out.spread)
         out.y += camera.pairRise * room + camera.readRise * read()
         out.z = 0f
         out.scale = s
@@ -528,7 +547,7 @@ class CdCaseState internal constructor() {
         // it; open to be read, in the middle and steadier.
         val read = read()
         val sway = 1f - 0.7f * read
-        rest.x = lerp(-camera.pairLeft, 0f, read)
+        rest.x = lerp(camera.pairAside, 0f, read)
         rest.y = lerp(-camera.pairDrop, 0f, read) + 1.2f * sway * sin(t * 0.95f + 1.3f)
         rest.z = 0f
         rest.pitch = (-0.04f + 0.035f * sin(t * 0.6f + 0.8f)) * sway
