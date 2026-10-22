@@ -573,7 +573,7 @@ Freepik licence that covers it.
 
 ### Game artwork
 
-CD Rack's `ps1_disc_*.jpg` are the disc labels of twenty European PlayStation
+CD Rack's `ps1_disc_*.webp` are the disc labels of twenty European PlayStation
 releases, cut square and scaled to 640 px: community scans from the
 [LaunchBox Games Database](https://gamesdb.launchbox-app.com). The artwork
 belongs to each game's publisher and is shown here only to illustrate the demo,
@@ -581,7 +581,7 @@ so swap it for your own before using this anywhere real.
 
 The `ps1_manual_*.webp` are each game's English instruction booklet pictured
 whole: its `front` and `back` at 720 px squares, and five `spread`s of it lying
-open at 1800 × 900, ten interior pages from the PAL and NTSC scans of
+open at 1440 × 720, ten interior pages from the PAL and NTSC scans of
 [Emu-Land](https://www.emu-land.net/library/manuals/psx), the PS1 RPG manuals
 collection, and Kirkland's VideoGameManual.com scan of Rayman 2 preserved by the
 Wayback Machine. The manuals belong to each game's publisher, under the same
