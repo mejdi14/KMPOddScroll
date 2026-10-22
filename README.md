@@ -282,9 +282,10 @@ Give the case a `manual` and the cover is the front of a booklet: tap it and
 the cover folds open over the spine, the spread coming up into the middle of the
 frame as the case goes up out of it. Swipe it, tap a page or scroll to turn the
 leaves — each turn is one fold of the leaf over the spine, its back mirrored
-onto it, after a sketchbook from another project of mine — and the pages are
-printed on the `manualPaper` spread, multiplied in so the print's white is the
-paper's. `CdRackScrollState.leave()` (the demo wires it to the system's back)
+onto it, after a sketchbook from another project of mine. Each spread is a
+picture of the booklet lying open, a page either side of its middle, and the
+last leaf shuts it on its back, which is also what the cover shows from behind.
+`CdRackScrollState.leave()` (the demo wires it to the system's back)
 shuts the manual if it is open, slides the cover back up into the lid if it is
 out, shuts the case if it is open, turns it back into the rack and brings the
 row in again.
@@ -321,19 +322,25 @@ and one number per frame to 1.1 px, so the rack is a single scalar:
 
 ```kotlin
 CdRackScroll(
-    items = listOf(CdRackItem(disc, "Tekken 3", "Namco", cover = front), /* ... */),
+    items = listOf(
+        CdRackItem(
+            disc, "Tekken 3", "Namco",
+            cover = front,
+            manual = { CdManual(spreads = loadSpreads(), back = loadBack()) },
+        ),
+        /* ... */
+    ),
     modifier = Modifier.fillMaxSize(),
 )
 ```
 
 | Parameter | Default | |
 | --- | --- | --- |
-| `items` | — | cases in order; the rack repeats, so it has no end. Each `CdRackItem` has the disc's `image`, a `title` and `artist`, an optional `cover` slipped in under the lid's glass, and an optional `manual` — a suspending loader for the pages behind the cover, two to a spread, called off the main thread only for the case that is out |
+| `items` | — | cases in order; the rack repeats, so it has no end. Each `CdRackItem` has the disc's `image`, a `title` and `artist`, an optional `cover` slipped in under the lid's glass, and an optional `manual` — a suspending loader for the booklet behind the cover, called off the main thread only for the case that is out: a `CdManual` of its `spreads`, each a 2:1 picture of it lying open on a clear ground, spine down the middle, and its `back` |
 | `background` | white | the backdrop; the plastic is shaded for a pale one |
 | `contentColor` | `#111114` | caption text |
 | `captions` | `true` | title and artist of the case in the slot |
 | `inspectLabel` | `"Inspect"` | the button under an open case that takes its cover out; `null` for none |
-| `manualPaper` | `null` | an open spread on a clear ground, spine down the middle, that manual pages are printed on; `null` for plain paper |
 | `state` | intro of `4` | `rememberCdRackScrollState(intro)` — cases slid on first show; `0` opens at rest |
 
 `CdRackScrollState.scrollTo(index)` and `step(by)` drive it from a host's own
@@ -566,19 +573,16 @@ Freepik licence that covers it.
 
 ### Game artwork
 
-CD Rack's `ps1_disc_*.jpg` and `ps1_cover_*.jpg` are the disc labels and front
-covers of twenty European PlayStation releases, cut square and scaled to 640 and
-720 px. The disc labels are community scans from the
-[LaunchBox Games Database](https://gamesdb.launchbox-app.com); the covers are
-Lee-Loi Chieng's [PAL PS1 Cover Scans](https://archive.org/details/PAL_PS1_CoverScans)
-on the Internet Archive. The artwork belongs to each game's publisher and is
-shown here only to illustrate the demo, so swap it for your own before using
-this anywhere real.
+CD Rack's `ps1_disc_*.jpg` are the disc labels of twenty European PlayStation
+releases, cut square and scaled to 640 px: community scans from the
+[LaunchBox Games Database](https://gamesdb.launchbox-app.com). The artwork
+belongs to each game's publisher and is shown here only to illustrate the demo,
+so swap it for your own before using this anywhere real.
 
-The `ps1_manual_*.jpg` pages are ten interior pages from each game's English
-instruction booklet, scaled to 720 px squares: from the PAL and NTSC scans of
+The `ps1_manual_*.webp` are each game's English instruction booklet pictured
+whole: its `front` and `back` at 720 px squares, and five `spread`s of it lying
+open at 1800 × 900, ten interior pages from the PAL and NTSC scans of
 [Emu-Land](https://www.emu-land.net/library/manuals/psx), the PS1 RPG manuals
 collection, and Kirkland's VideoGameManual.com scan of Rayman 2 preserved by the
 Wayback Machine. The manuals belong to each game's publisher, under the same
-terms as the covers. `ps1_manual_paper.webp`, the blank spread they are printed
-on, is carried over from the sketchbook in my Omma app.
+terms as the disc labels.

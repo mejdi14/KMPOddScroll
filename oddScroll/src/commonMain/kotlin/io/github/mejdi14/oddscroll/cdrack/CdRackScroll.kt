@@ -68,12 +68,22 @@ data class CdRackItem(
     /** Slipped in under the lid's glass, cropped square to fill it; none leaves the lid clear. */
     val cover: ImageBitmap? = null,
     /**
-     * The manual [cover] is the front of: its pages in reading order, two to
-     * a spread, each cropped square. Read in off the main thread while the
-     * case is out, and let go when it goes back; none leaves the cover a
-     * single sheet.
+     * The rest of the booklet [cover] is the front of. Read in off the main
+     * thread while the case is out, and let go when it goes back; none leaves
+     * the cover a single sheet.
      */
-    val manual: (suspend () -> List<ImageBitmap>)? = null,
+    val manual: (suspend () -> CdManual)? = null,
+)
+
+/** A case's booklet behind its cover: its spreads in reading order, and its back. */
+class CdManual(
+    /**
+     * Each a picture of the booklet lying open, its spine down the middle, on
+     * a clear ground: each half is cropped square and turns as a page.
+     */
+    val spreads: List<ImageBitmap>,
+    /** The back of the booklet, cropped square; none leaves it plain paper. */
+    val back: ImageBitmap? = null,
 )
 
 /*
@@ -159,9 +169,6 @@ fun rememberCdRackScrollState(intro: Int = 4): CdRackScrollState =
  * @param inspectLabel the button under an open case that takes its cover
  *   out, or null for none — a host can show its own off
  *   [CdRackScrollState.canInspectCover].
- * @param manualPaper what a manual's pages are printed on: an open spread on
- *   a clear ground, the spine down its middle; none prints them on plain
- *   paper.
  * @param state also sets how far the rack slides when it first appears.
  */
 @Composable
@@ -172,7 +179,6 @@ fun CdRackScroll(
     contentColor: Color = Color(0xFF111114),
     captions: Boolean = true,
     inspectLabel: String? = "Inspect",
-    manualPaper: ImageBitmap? = null,
     state: CdRackScrollState = rememberCdRackScrollState(),
 ) {
     if (items.isEmpty()) {
@@ -213,6 +219,7 @@ fun CdRackScroll(
         for (index in items.indices) {
             withContext(Dispatchers.Default) { rack.scene.setArt(items[index].image) }
             rack.scene.setCover(items[index].cover)
+            rack.scene.setManual(null)
             val layer = graphics.createGraphicsLayer()
             try {
                 layer.record(layerDensity, direction, IntSize(box.width, box.height)) {
@@ -230,7 +237,7 @@ fun CdRackScroll(
 
     // The manual of the case out, read in while it is out.
     LaunchedEffect(rack, state.inspecting) {
-        rack.manual = emptyList()
+        rack.manual = null
         if (!state.inspecting) return@LaunchedEffect
         val load = items[wrapCase(state.chosen, items.size)].manual ?: return@LaunchedEffect
         rack.manual = withContext(Dispatchers.Default) { load() }
@@ -332,7 +339,7 @@ fun CdRackScroll(
             val h = size.height.toInt()
             if (frameSize.width != w || frameSize.height != h) frameSize = IntSize(w, h)
             rack.fit(size.width, size.height)
-            rack.draw(this, state, manualPaper)
+            rack.draw(this, state)
         }
 
         if (captions) Caption(items, state, contentColor)
@@ -400,8 +407,8 @@ private class RackScene(private val items: List<CdRackItem>) {
     private val coverPose = CasePose()
     private val bookPose = BookPose()
 
-    /** The pages of the manual of the case out, once read in. */
-    var manual: List<ImageBitmap> = emptyList()
+    /** The manual of the case out, once read in. */
+    var manual: CdManual? = null
 
     val sprites = arrayOfNulls<ImageBitmap>(items.size)
     var box: SpriteBox? = null
@@ -471,7 +478,7 @@ private class RackScene(private val items: List<CdRackItem>) {
         out[2] = s * w * SPACING_MM * AXIS[2]
     }
 
-    fun draw(scope: DrawScope, state: CdRackScrollState, paper: ImageBitmap?) = with(scope) {
+    fun draw(scope: DrawScope, state: CdRackScrollState) = with(scope) {
         val position = state.position
         val count = items.size
         val focus = state.focus
@@ -490,8 +497,9 @@ private class RackScene(private val items: List<CdRackItem>) {
             scene.setCover(item.cover)
             val covered = item.cover != null
             if (state.case.hasCover != covered) state.case.hasCover = covered
-            scene.setManual(manual, paper)
-            state.case.manualSpreads = if (covered) (manual.size + 1) / 2 else 0
+            val manual = manual
+            scene.setManual(manual)
+            state.case.manualSpreads = if (covered && manual != null) manual.spreads.size else 0
         }
         val loose = if (chosen != NONE && state.case.coverPose(coverPose, livePose, liveCamera)) coverPose else null
         val book = if (loose != null && state.case.bookPose(bookPose)) bookPose else null
