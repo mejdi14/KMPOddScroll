@@ -37,6 +37,21 @@ internal class Camera {
     var distance = 1f
         private set
 
+    private var baseFocal = 1f
+    private var baseDistance = 1f
+
+    /**
+     * How far the camera has dollied out, keeping what stands at the origin the
+     * same size: the lens lengthens as it backs away, so depth flattens out —
+     * at a large zoom the view is all but orthographic.
+     */
+    var zoom = 1f
+        set(value) {
+            field = value
+            focal = baseFocal * value
+            distance = baseDistance * value
+        }
+
     /** How small the opened case is drawn, so lid and tray both fit across. */
     var openScale = 1f
         private set
@@ -50,11 +65,12 @@ internal class Camera {
         height = h
         val tanHalf = tan(FOV_DEGREES / 2f / 180f * kotlin.math.PI.toFloat())
         val aspect = w / max(h, 1f)
-        focal = h / 2f / tanHalf
+        baseFocal = h / 2f / tanHalf
         val fitH = CASE_MM / FIT / 2f / tanHalf
         val fitW = CASE_MM * 1.3f / 2f / (tanHalf * aspect)
-        distance = max(fitH, fitW)
-        val across = 2f * distance * tanHalf * aspect
+        baseDistance = max(fitH, fitW)
+        zoom = zoom
+        val across = 2f * baseDistance * tanHalf * aspect
         openScale = minOf(1.04f, across / (CASE_MM * 2.25f))
     }
 

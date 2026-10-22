@@ -2,6 +2,7 @@ package io.github.mejdi14.oddscroll.cdrack
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github.mejdi14.oddscroll.internal.clamped
 import io.github.mejdi14.oddscroll.internal.cubicBezierEase
@@ -51,6 +52,19 @@ private const val SAMPLES = 5
 private const val WINDOW = 0.1f
 
 /**
+ * Taking a case out of the rack, in seconds: the rest of the row leaves over
+ * the first part, and the case turns to face you and comes forward over the
+ * second, the two overlapping. Putting it back runs the same backwards.
+ */
+internal const val EXIT_SECONDS = 0.65f
+internal const val COME_FROM = 0.38f
+internal const val COME_SECONDS = 1.05f
+internal const val FOCUS_SECONDS = COME_FROM + COME_SECONDS
+
+/** No case chosen. */
+internal const val NONE = Int.MIN_VALUE
+
+/**
  * Where the rack has slid to, in tapes.
  *
  * The rack is one number: tape `i` stands `i - position` pitches up the row
@@ -70,6 +84,34 @@ class CdRackScrollState internal constructor(intro: Int) {
     /** The tape nearest the slot, unwrapped. Changes only as one passes it. */
     var slotted by mutableIntStateOf(0)
         private set
+
+    /**
+     * Whether a case has been taken out of the rack to look at — the rest of
+     * the row gone, the case turned to face you, there to drag round and open.
+     * [leave] puts it back.
+     */
+    var inspecting by mutableStateOf(false)
+        private set
+
+    /** The case taken out, unwrapped, while it is out or on its way out or back. */
+    internal var chosen = NONE
+        private set
+
+    /** Seconds into taking it out: 0 in the rack, [FOCUS_SECONDS] all the way out. */
+    internal var focus = 0f
+        private set
+
+    /** The case once it is out: its turn, its lid. */
+    internal val case = CdCaseState()
+
+    /** Tapped, and on its way to the slot to be taken out from there. */
+    private var wanted = NONE
+
+    /** Asked to go back while open: shutting first. */
+    private var leaving = false
+
+    /** The rack takes no input while a case is out, or going or coming. */
+    internal val racked: Boolean get() = !inspecting && focus <= 0f
 
     private var dragging = false
     private var moving = false
@@ -92,19 +134,42 @@ class CdRackScrollState internal constructor(intro: Int) {
 
     /** Slides tape [index] into the slot. Unwrapped, so it can go either way round. */
     fun scrollTo(index: Int) {
-        if (dragging) return
+        if (dragging || !racked) return
         aim(index, speed)
     }
 
     /** Slides the rack on by [by] tapes from wherever it is heading. */
     fun step(by: Int) {
-        if (by == 0 || dragging) return
+        if (by == 0 || dragging || !racked) return
         aim((if (moving) target else position.roundToInt()) + by, speed)
+    }
+
+    /**
+     * Takes case [index] out to look at: it slides to the slot if it is not
+     * there, then the rest of the row clears away and it turns to face you.
+     */
+    fun inspect(index: Int) {
+        if (!racked || dragging) return
+        wanted = index
+        if (moving || index.toFloat() != position) aim(index, speed)
+    }
+
+    /** Puts the case back in the rack, shutting it first if it is open. */
+    fun leave() {
+        if (!inspecting) return
+        if (!case.shut) {
+            case.close()
+            leaving = true
+            return
+        }
+        inspecting = false
     }
 
     // --- input ---------------------------------------------------------------
 
     internal fun onDragStart(seconds: Float) {
+        if (!racked) return
+        wanted = NONE
         dragging = true
         moving = false
         speed = 0f
@@ -165,6 +230,20 @@ class CdRackScrollState internal constructor(intro: Int) {
         if (!dragging) speed = if (dt > 0f) (position - before) / dt else 0f
         val nearest = position.roundToInt()
         if (nearest != slotted) slotted = nearest
+
+        // Taking a case out, once it has come to rest in the slot.
+        if (wanted != NONE && !moving && !dragging && position == wanted.toFloat()) {
+            chosen = wanted
+            wanted = NONE
+            inspecting = true
+        }
+        if (chosen != NONE) case.advance(dt, spinning = true)
+        if (leaving && case.shut) {
+            leaving = false
+            inspecting = false
+        }
+        focus = if (inspecting) minOf(focus + dt, FOCUS_SECONDS) else maxOf(focus - dt, 0f)
+        if (!inspecting && focus <= 0f) chosen = NONE
     }
 
     // --- throw ---------------------------------------------------------------

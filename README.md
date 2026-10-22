@@ -271,17 +271,26 @@ A row of clear CD jewel cases standing on edge, seen from above and to the
 left, running up and to the right across the frame. It slides along its own
 length, and the case that comes to the slot in the middle rises out of the row,
 with its title let in top left. Drag along the row (or across it — only the
-part along it counts), flick to throw it, scroll to step it a case, or tap any
-case to bring it to the slot.
+part along it counts), flick to throw it, or scroll to step it a case.
 
-The case is drawn after Ann Nguyen's WebGL
-[CD case](https://github.com/annnguyentt/vibe-coding/tree/main/cd-case), to its
-millimetres: rails, ribs, hub and hinge as clear rods, each item's picture
-printed on the disc. The plastic is translucent, so the cases behind show
-through the one in front.
+Tap a case to take it out: it comes to the slot, the rest of the row clears
+off the screen either way, and it turns to face you and comes forward — the
+single case below, to drag round and tap open. `CdRackScrollState.leave()`
+(the demo wires it to the system's back) shuts it if it is open, turns it back
+into the rack and brings the row in again.
 
-The rack itself was measured off a recording of a row of cassettes, which is
-why the numbers below talk in tapes.
+Every case is the 3D case of `CdCase`, drawn after Ann Nguyen's WebGL
+[CD case](https://github.com/annnguyentt/vibe-coding/tree/main/cd-case). The
+rack's three measured angles turn out to be one turn of it, exactly — tipped
+back 0.310 rad and turned 0.534 rad left, the cases standing face to face along
+their own axis, 71.9 mm apart — seen through a camera dollied 24 times out
+with its lens lengthened to match, which flattens the row to the reference's
+orthographic look. So each case is drawn once at that turn, shaders and all,
+and then only moved; the one taken out is drawn live, while the camera comes
+back in.
+
+The rack was measured off a recording of a row of cassettes, which is why the
+numbers below talk in tapes.
 
 Measured off a recording of the reference rather than eyeballed. The top-left
 corner of every tape, pooled over 270 frames, falls on one line with one pitch
@@ -310,21 +319,19 @@ CdRackScroll(
 | Parameter | Default | |
 | --- | --- | --- |
 | `items` | — | cases in order; the rack repeats, so it has no end |
-| `background` | `#050506` | page colour |
-| `shellColor` | `#DBE6ED` | tint of the cases' clear plastic |
-| `contentColor` | `#EDEDE8` | caption text |
+| `background` | white | the backdrop; the plastic is shaded for a pale one |
+| `contentColor` | `#111114` | caption text |
 | `captions` | `true` | title and artist of the case in the slot |
 | `state` | intro of `4` | `rememberCdRackScrollState(intro)` — cases slid on first show; `0` opens at rest |
 
 `CdRackScrollState.scrollTo(index)` and `step(by)` drive it from a host's own
-controls, and `slotted` is the case in the slot. Each case is drawn once, as the
-camera sees it, into a bitmap that is then only moved — one `drawImage` a case
-a frame and one gradient for the light, so it needs no shader anywhere.
+controls, `inspect(index)` takes a case out, `leave()` puts it back, `slotted`
+is the case in the slot and `inspecting` whether one is out.
 
 #### One case: `CdCase`
 
-The demo shows a single case for now, closer to the reference: on its white
-studio wall, idling with a slow sway, the disc turning inside. Drag it to turn
+The case the rack takes out, on its own: on its white studio wall, idling with
+a slow sway, the disc turning inside. Drag it to turn
 it (it springs back when let go); tap it to open it — it turns right round as
 the lid swings out to its left on the reference's own hand-keyed curves — and
 tap again to shut it.
@@ -502,8 +509,7 @@ cards of the Edge Distortion gallery; Terrace stacks the same cuts.
 
 Flex Carousel uses museum scans of paintings, also from Unsplash and under the
 same licence, cut 800x600 for its 4:3 cards. Lift Stack uses the same six, cut
-square. CD Rack prints both the scans and the wide photographs on its discs;
-its single-case demo prints *Night with her Train of Stars*.
+square. CD Rack prints both the scans and the wide photographs on its discs.
 
 | File | Scanned by |
 | --- | --- |

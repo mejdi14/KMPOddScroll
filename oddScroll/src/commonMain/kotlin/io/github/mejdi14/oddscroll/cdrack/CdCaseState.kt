@@ -67,6 +67,8 @@ private val closeRoll = monotone(0f to 0f, 0.8f to -0.05f, 1.95f to 0f)
 internal class CasePose {
     var x = 0f
     var y = 0f
+    var z = 0f
+    var scale = 1f
     var yaw = 0f
     var pitch = 0f
     var roll = 0f
@@ -134,6 +136,9 @@ class CdCaseState internal constructor() {
     fun toggle() {
         if (phase == Phase.Opening || phase == Phase.Open) close() else open()
     }
+
+    /** Shut and still: not opening, open or closing. */
+    internal val shut: Boolean get() = phase == Phase.Rest
 
     // --- input -----------------------------------------------------------------
 
@@ -237,6 +242,8 @@ class CdCaseState internal constructor() {
         // lid swung out to its left.
         val s = lerp(1f, openScale, out.spread)
         out.x = HALF_MM * s * out.spread * 0.92f
+        out.z = 0f
+        out.scale = s
         out.spin = spin
     }
 }
