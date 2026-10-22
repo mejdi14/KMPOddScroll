@@ -340,7 +340,8 @@ CdRackScroll(
 | `background` | white | the backdrop; the plastic is shaded for a pale one |
 | `contentColor` | `#111114` | caption text |
 | `captions` | `true` | title and artist of the case in the slot |
-| `inspectLabel` | `"Inspect"` | the button under an open case that takes its cover out; `null` for none |
+| `inspectLabel` | `"Inspect"` | the forward button's label on the open case, which takes its cover out; `null` for no step buttons at all |
+| `backLabel`, `openLabel`, `nextLabel` | `"Back"`, `"Open"`, `"Next"` | the other labels of the Back and forward buttons that walk the case out through its steps |
 | `state` | intro of `4` | `rememberCdRackScrollState(intro)` — cases slid on first show; `0` opens at rest |
 
 `CdRackScrollState.scrollTo(index)` and `step(by)` drive it from a host's own
@@ -349,7 +350,10 @@ is the case in the slot and `inspecting` whether one is out. `canInspectCover`
 is true while the case out is open with its cover in, and `inspectCover()`
 takes the cover out — for a host that brings its own button. With the cover
 out, `case.turnPage(by)` and `case.closeManual()` leaf through its manual, and
-`case.manualPage` is the spread it is open at (`-1` shut).
+`case.manualPage` is the spread it is open at (`-1` shut). The buttons walk
+`step` — `0` shut, `1` open, `2` cover out, then a step per spread of the
+manual — with `stepForward()`, `stepBack()` and `lastStep` for a host's own.
+Wider than tall, the cover comes to rest beside the case rather than under it.
 
 #### One case: `CdCase`
 

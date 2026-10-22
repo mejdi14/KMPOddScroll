@@ -24,7 +24,7 @@ private const val PAIR_GAP = 16f
 
 /** The open manual fills at most this much of the width, and of the height. */
 private const val READ_ACROSS = 0.92f
-private const val READ_TALL = 0.8f
+private const val READ_TALL = 0.74f
 
 /** The light the backdrop's shadows fall from. */
 internal val LIGHT = normalized(-0.3f, 0.48f, 1f)
@@ -77,6 +77,16 @@ internal class Camera {
         private set
 
     /**
+     * Wider than tall, the cover stands beside the case instead of under it:
+     * how far the case goes right and the cover goes left, in millimetres at
+     * the case.
+     */
+    var pairShift = 0f
+        private set
+    var pairLeft = 0f
+        private set
+
+    /**
      * The manual open in the middle of the frame: how large it is drawn so
      * the spread fits, and how far up the case goes to clear the frame for it.
      */
@@ -103,9 +113,19 @@ internal class Camera {
         openScale = minOf(1.04f, across / (CASE_MM * 2.25f))
         val tall = 2f * baseDistance * tanHalf
         val stack = CASE_MM + PAIR_GAP + 2f * COVER_HALF
-        pairScale = minOf(1f, tall * PAIR_FIT / stack)
-        pairRise = pairScale * (stack / 2f - HALF_MM)
-        pairDrop = pairScale * (stack / 2f - COVER_HALF)
+        if (aspect > 1f) {
+            pairScale = minOf(1f, across * PAIR_FIT / stack, tall * PAIR_FIT / (2f * COVER_HALF))
+            pairShift = pairScale * (stack / 2f - HALF_MM)
+            pairLeft = pairScale * (stack / 2f - COVER_HALF)
+            pairRise = 0f
+            pairDrop = 0f
+        } else {
+            pairScale = minOf(1f, tall * PAIR_FIT / stack)
+            pairRise = pairScale * (stack / 2f - HALF_MM)
+            pairDrop = pairScale * (stack / 2f - COVER_HALF)
+            pairShift = 0f
+            pairLeft = 0f
+        }
         readScale = minOf(across * READ_ACROSS / (4f * COVER_HALF), tall * READ_TALL / (2f * COVER_HALF))
         readRise = tall * 0.6f + HALF_MM
     }

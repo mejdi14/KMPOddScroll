@@ -171,6 +171,24 @@ class CdRackScrollState internal constructor(intro: Int) {
     }
 
     /**
+     * Where the case out is in its run of steps — 0 shut, 1 open, 2 its cover
+     * out, then each spread of the cover's manual — and the last of them.
+     */
+    val step: Int get() = case.step
+    val lastStep: Int get() = case.lastStep
+
+    /** Goes on a step: opens the case, takes its cover out, turns the manual a leaf on. */
+    fun stepForward() {
+        if (inspecting && focus >= FOCUS_SECONDS) case.stepForward()
+    }
+
+    /** Goes back a step; from the shut case, [leave]s it. */
+    fun stepBack() {
+        if (!inspecting || focus < FOCUS_SECONDS) return
+        if (case.step == 0) leave() else case.stepBack()
+    }
+
+    /**
      * Puts the case back in the rack, shutting it first if it is open; with
      * its cover out, puts that back first, and with the cover's manual open,
      * shuts that before anything.

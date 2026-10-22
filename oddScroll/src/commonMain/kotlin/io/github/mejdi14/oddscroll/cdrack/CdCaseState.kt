@@ -67,8 +67,8 @@ private val closeRoll = monotone(0f to 0f, 0.8f to -0.05f, 1.95f to 0f)
 
 /*
  * Taking the cover out, in seconds: it lifts off the open lid, then turns
- * over and comes down under the case, while the case shuts and rises to make
- * room. Putting it back slides it up into the shut lid, face on.
+ * over and comes down beside or under the case, which moves over, still open,
+ * to make room; it shuts once the cover has cleared it. Putting it back slides it up into the shut lid, face on.
  */
 private const val COVER_LIFT_T = 0.45f
 private const val COVER_LIFT_MM = 36f
@@ -76,7 +76,7 @@ private const val COVER_MOVE_FROM = 0.2f
 private const val COVER_MOVE_T = 1.35f
 private const val COVER_TURN_FROM = 0.3f
 private const val COVER_TURN_T = 1.2f
-private const val COVER_SHUT_AT = 0.3f
+private const val COVER_ROOM_FROM = 0.3f
 private const val COVER_ROOM_T = 1.5f
 private const val COVER_OUT_T = COVER_MOVE_FROM + COVER_MOVE_T
 private const val COVER_BACK_T = 1.1f
@@ -154,7 +154,9 @@ class CdCaseState internal constructor() {
     internal var hasCover by mutableStateOf(true)
 
     /** Spreads in the manual behind the cover, none for a single sheet; set by whatever draws the case. */
-    internal var manualSpreads = 0
+    internal var manualSpreads by mutableIntStateOf(0)
+
+    private var reopenAfterReturn by mutableStateOf(false)
 
     private var t = 0f
     private var phase = Phase.Rest
@@ -217,11 +219,12 @@ class CdCaseState internal constructor() {
 
     /**
      * Takes the cover out of the open lid: it turns over and comes to rest
-     * under the case, which shuts and rises to make room. Asked while the
+     * beside or under the case, which shuts and moves over to make room. Asked while the
      * case is still opening, it waits until it is open.
      */
     fun inspectCover() {
         if (cover != Cover.In || !hasCover) return
+        reopenAfterReturn = false
         if (phase == Phase.Opening) {
             inspectAfter = true
             return
@@ -305,6 +308,51 @@ class CdCaseState internal constructor() {
         return lerp(open(leafFrom), open(leafTo), leafTurn())
     }
 
+    /**
+     * Where the case is in its run of steps: 0 shut, 1 open, 2 the cover out,
+     * then the cover's manual from 3 — open at its first spread — to the one
+     * it is shut on its back at. The step it is heading for.
+     */
+    val step: Int
+        get() = when {
+            coverOut -> 3 + manualPage
+            isOpen || reopenAfterReturn -> 1
+            else -> 0
+        }
+
+    /** The last step there is to reach: the case alone, with its cover, or with its manual too. */
+    val lastStep: Int
+        get() = when {
+            !hasCover -> 1
+            manualSpreads <= 0 -> 2
+            else -> manualSpreads + 3
+        }
+
+    /** Goes on a step: opens the shut case, takes the cover out, then turns the manual a leaf on. */
+    fun stepForward() {
+        when (step) {
+            0 -> open()
+            1 -> inspectCover()
+            else -> turnPage(1)
+        }
+    }
+
+    /**
+     * Goes back a step, down to the open case; the cover goes back into the
+     * lid and the case opens again. Does nothing on the shut case.
+     */
+    fun stepBack() {
+        when (step) {
+            0 -> Unit
+            1 -> close()
+            2 -> {
+                if (cover == Cover.Leaving || cover == Cover.Out) reopenAfterReturn = true
+                returnCover()
+            }
+            else -> turnPage(-1)
+        }
+    }
+
     /** The cover is out of the lid, or on its way out or back. */
     internal val coverLoose: Boolean get() = cover != Cover.In
 
@@ -374,8 +422,9 @@ class CdCaseState internal constructor() {
         val coverSince = t - coverAt
         when (cover) {
             Cover.Leaving -> {
-                if (coverSince >= COVER_SHUT_AT && phase == Phase.Open) close()
-                // Out once it has landed and the case has shut over it.
+                // The case shuts only once the cover has cleared it.
+                if (coverSince >= COVER_OUT_T && phase == Phase.Open) close()
+                // Out once it has landed and the case has shut.
                 if (coverSince >= COVER_OUT_T && phase == Phase.Rest) {
                     cover = Cover.Out
                     if (returnAfter) {
@@ -384,7 +433,13 @@ class CdCaseState internal constructor() {
                     }
                 }
             }
-            Cover.Returning -> if (coverSince >= COVER_BACK_T) cover = Cover.In
+            Cover.Returning -> if (coverSince >= COVER_BACK_T) {
+                cover = Cover.In
+                if (reopenAfterReturn) {
+                    reopenAfterReturn = false
+                    open()
+                }
+            }
             else -> Unit
         }
 
@@ -444,6 +499,7 @@ class CdCaseState internal constructor() {
         val room = room()
         val s = lerp(1f, camera.openScale, out.spread) * lerp(1f, camera.pairScale, room)
         out.x = HALF_MM * s * out.spread * 0.92f
+        out.x += camera.pairShift * room
         out.y += camera.pairRise * room + camera.readRise * read()
         out.z = 0f
         out.scale = s
@@ -456,7 +512,7 @@ class CdCaseState internal constructor() {
         val since = t - coverAt
         return when (cover) {
             Cover.In -> 0f
-            Cover.Leaving -> inOutCubic(((since - COVER_SHUT_AT) / COVER_ROOM_T).clamped(0f, 1f))
+            Cover.Leaving -> inOutCubic(((since - COVER_ROOM_FROM) / COVER_ROOM_T).clamped(0f, 1f))
             Cover.Out -> 1f
             Cover.Returning -> 1f - inOutCubic((since / COVER_BACK_T).clamped(0f, 1f))
         }
@@ -472,7 +528,7 @@ class CdCaseState internal constructor() {
         // it; open to be read, in the middle and steadier.
         val read = read()
         val sway = 1f - 0.7f * read
-        rest.x = 0f
+        rest.x = lerp(-camera.pairLeft, 0f, read)
         rest.y = lerp(-camera.pairDrop, 0f, read) + 1.2f * sway * sin(t * 0.95f + 1.3f)
         rest.z = 0f
         rest.pitch = (-0.04f + 0.035f * sin(t * 0.6f + 0.8f)) * sway

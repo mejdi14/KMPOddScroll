@@ -11,6 +11,8 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,6 +23,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -148,8 +151,9 @@ fun rememberCdRackScrollState(intro: Int = 4): CdRackScrollState =
  * the middle of the frame rises out of the row. Tap a case and it comes to the
  * slot, the rest of the row clears off the screen, and it turns to face you:
  * drag it round, tap it to open it. Open, [inspectLabel] takes its cover out:
- * the cover turns over and comes to rest under the case, which shuts and
- * rises to make room. With a [CdRackItem.manual] behind it, the cover is a
+ * the cover turns over and comes to rest under the case — beside it, wider
+ * than tall — which shuts once the cover has cleared it and moves over to
+ * make room. With a [CdRackItem.manual] behind it, the cover is a
  * booklet: tap it and it folds open over its spine, coming up into the middle
  * as the case goes up out of the way; swipe it, tap a page or scroll to turn
  * its leaves. [CdRackScrollState.leave] — the system's back, say — shuts the
@@ -166,9 +170,16 @@ fun rememberCdRackScrollState(intro: Int = 4): CdRackScrollState =
  * @param background the backdrop; the clear plastic is shaded for a pale one.
  * @param contentColor caption text.
  * @param captions say what the case in the slot is, top left.
- * @param inspectLabel the button under an open case that takes its cover
- *   out, or null for none — a host can show its own off
- *   [CdRackScrollState.canInspectCover].
+ * Under the case, Back and a forward button walk it through its steps — shut,
+ * open, its cover out, then each spread of the manual.
+ *
+ * @param inspectLabel the forward button's label on the open case, which takes
+ *   its cover out; null for no buttons at all — a host can walk the steps
+ *   itself off [CdRackScrollState.step], [CdRackScrollState.stepForward] and
+ *   [CdRackScrollState.stepBack].
+ * @param backLabel the back button's label.
+ * @param openLabel the forward button's label on the shut case.
+ * @param nextLabel the forward button's label from the cover on.
  * @param state also sets how far the rack slides when it first appears.
  */
 @Composable
@@ -179,6 +190,9 @@ fun CdRackScroll(
     contentColor: Color = Color(0xFF111114),
     captions: Boolean = true,
     inspectLabel: String? = "Inspect",
+    backLabel: String = "Back",
+    openLabel: String = "Open",
+    nextLabel: String = "Next",
     state: CdRackScrollState = rememberCdRackScrollState(),
 ) {
     if (items.isEmpty()) {
@@ -344,28 +358,65 @@ fun CdRackScroll(
 
         if (captions) Caption(items, state, contentColor)
         if (inspectLabel != null) {
-            InspectButton(
-                label = inspectLabel,
+            StepButtons(
+                back = backLabel,
                 state = state,
+                forward = { step ->
+                    when (step) {
+                        0 -> openLabel
+                        1 -> inspectLabel
+                        else -> nextLabel
+                    }
+                },
                 background = background,
                 contentColor = contentColor,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 48.dp),
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp),
             )
         }
     }
 }
 
 @Composable
-private fun InspectButton(
-    label: String,
+private fun StepButtons(
+    back: String,
+    forward: (Int) -> String,
     state: CdRackScrollState,
     background: Color,
     contentColor: Color,
     modifier: Modifier,
 ) {
-    val shown = state.canInspectCover
-    val reveal by animateFloatAsState(if (shown) 1f else 0f, tween(if (shown) 450 else 200))
+    val shown = state.inspecting
+    // The case takes its time coming out; the buttons arrive once it has.
+    val reveal by animateFloatAsState(
+        if (shown) 1f else 0f,
+        tween(if (shown) 450 else 200, delayMillis = if (shown) (FOCUS_SECONDS * 1000f).toInt() else 0),
+    )
+    val step = state.step
+    val more = step < state.lastStep
+    Row(
+        modifier.graphicsLayer {
+            alpha = reveal
+            translationY = (1f - reveal) * 10.dp.toPx()
+        },
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        StepButton(back, true, shown, background, contentColor) { state.stepBack() }
+        StepButton(forward(step), more, shown, background, contentColor) { state.stepForward() }
+    }
+}
+
+@Composable
+private fun StepButton(
+    label: String,
+    enabled: Boolean,
+    shown: Boolean,
+    background: Color,
+    contentColor: Color,
+    onTap: () -> Unit,
+) {
     val shape = RoundedCornerShape(50)
+    val alpha by animateFloatAsState(if (enabled) 1f else 0.3f, tween(200))
+    val tap by rememberUpdatedState(onTap)
     BasicText(
         text = label.uppercase(),
         style = TextStyle(
@@ -374,16 +425,13 @@ private fun InspectButton(
             fontWeight = FontWeight.Medium,
             letterSpacing = 1.4.sp,
         ),
-        modifier = modifier
-            .graphicsLayer {
-                alpha = reveal
-                translationY = (1f - reveal) * 10.dp.toPx()
-            }
+        modifier = Modifier
+            .graphicsLayer { this.alpha = alpha }
             // Only while it shows, or it would take taps meant for the case.
-            .then(if (shown) Modifier.pointerInput(state) { detectTapGestures { state.inspectCover() } } else Modifier)
+            .then(if (shown && enabled) Modifier.pointerInput(Unit) { detectTapGestures { tap() } } else Modifier)
             .background(background.copy(alpha = 0.9f), shape)
             .border(1.dp, contentColor.copy(alpha = 0.35f), shape)
-            .padding(horizontal = 26.dp, vertical = 12.dp),
+            .padding(horizontal = 24.dp, vertical = 11.dp),
     )
 }
 
