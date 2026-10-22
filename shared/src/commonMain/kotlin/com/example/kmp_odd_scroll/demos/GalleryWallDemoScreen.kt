@@ -87,7 +87,7 @@ fun GalleryWallDemoScreen() {
         modifier = Modifier.fillMaxSize(),
         background = palette.page,
         contentColor = palette.ink,
-        frame = GalleryWallFrame(),
+        frame = GalleryWallFrame(carving = 1f),
         state = state,
     )
 }

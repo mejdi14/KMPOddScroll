@@ -31,6 +31,8 @@ import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathOperation
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -109,6 +111,13 @@ data class GalleryWallFrame(
     val grain: Float = 1f,
     /** How far the painting sits back from the face, up to [depth]; 0 for flush. */
     val recess: Float = 0.015f,
+    /**
+     * Hand carving cut into the moulding, 0 to 1: a rope twist round the outer
+     * edge, egg and dart along the face, bead and reel at the sight edge and a
+     * rosette over each mitre, every piece a little off true the way a gouge
+     * leaves it. 0 for a plain moulding.
+     */
+    val carving: Float = 0f,
     /**
      * A pane over the painting, flush with the face. It throws back the wall a
      * little square on and more and more as the wall turns away, and the lit
@@ -1520,6 +1529,8 @@ private fun DrawScope.drawShadow(w: Float, h: Float, reach: Float) {
 private fun DrawScope.drawFrame(frame: GalleryWallFrame, w: Float, h: Float, border: Float, unit: Float, seed: Int) {
     val mould = min(frame.width * unit, border)
     val stops = PROFILE.map { (at, by) -> at to light(by) }.toTypedArray()
+    // Fades out where the moulding is too few pixels across to hold a cut.
+    val carving = frame.carving.coerceIn(0f, 1f) * ((mould - CARVING_MIN) / CARVING_MIN).coerceIn(0f, 1f)
     for (side in 0..3) {
         val path = Path()
         val (outerA, outerB, innerB, innerA) = when (side) {
@@ -1544,6 +1555,7 @@ private fun DrawScope.drawFrame(frame: GalleryWallFrame, w: Float, h: Float, bor
                 }
             }) {
                 drawWood(frame.color, frame.grain, length, mould, unit, FACE_GRAIN, Random(seed * 8 + side))
+                if (carving > 0f) drawCarving(length, mould, STICK_LIGHT[side], carving, Random(seed * 8 + side + CARVING_SEED))
                 drawRect(Brush.verticalGradient(*stops, startY = 0f, endY = mould), size = Size(length, mould))
             }
         }
@@ -1558,6 +1570,219 @@ private fun DrawScope.drawFrame(frame: GalleryWallFrame, w: Float, h: Float, bor
     drawLine(joint, Offset(w, h), Offset(w - mould, h - mould), seam)
     drawLine(joint, Offset(0f, h), Offset(mould, h - mould), seam)
     drawRect(joint, topLeft = Offset(mould, mould), size = Size(w - 2f * mould, h - 2f * mould), style = Stroke(seam))
+
+    // A rosette over each mitre, carved after the frame was joined, so it hides the seam.
+    if (carving > 0f) {
+        val at = ROSETTE_AT * mould
+        listOf(Offset(at, at), Offset(w - at, at), Offset(w - at, h - at), Offset(at, h - at)).forEachIndexed { k, centre ->
+            drawRosette(centre, ROSETTE_SIZE * mould, mould, frame.color, carving, Random(seed * 8 + k + CARVING_SEED + 4))
+        }
+    }
+}
+
+// --- the carving -------------------------------------------------------------
+
+/** Towards the light from the upper left, in each stick's own frame — top, right, bottom, left — and on the frame. */
+private val STICK_LIGHT = listOf(Offset(-1f, -1f), Offset(-1f, 1f), Offset(1f, 1f), Offset(1f, -1f)).map { it / sqrt(2f) }
+private val FRAME_LIGHT = Offset(-1f, -1f) / sqrt(2f)
+
+/** Keeps the carving's cuts apart from the grain's. */
+private const val CARVING_SEED = 0x5eed
+
+/** Below this many pixels across the moulding, the carving fades out. */
+private const val CARVING_MIN = 10f
+
+/** The rosettes' centres in from the corners, and their size, in shares of the moulding — on the flat face. */
+private const val ROSETTE_AT = 0.45f
+private const val ROSETTE_SIZE = 0.22f
+
+/*
+ * Where each run of carving sits across the moulding, outer edge to inner, in
+ * shares of its width — on the rounded outer edge, the flat face and the bead
+ * of [PROFILE].
+ */
+private const val ROPE_FROM = 0.03f
+private const val ROPE_TO = 0.17f
+private const val EGG_FROM = 0.27f
+private const val EGG_TO = 0.63f
+private const val BEAD_AT = 0.80f
+
+/**
+ * A closed curve round [centre], [rx] by [ry] turned [tilt] radians, never
+ * quite true: each of its [points] wanders up to [wobble] of the way in or out.
+ */
+private fun lump(centre: Offset, rx: Float, ry: Float, tilt: Float, wobble: Float, random: Random, points: Int = 12): Path {
+    val c = cos(tilt)
+    val s = sin(tilt)
+    val corners = List(points) { k ->
+        val a = k * TAU / points
+        val r = 1f + random.between(-wobble, wobble)
+        val x = rx * r * cos(a)
+        val y = ry * r * sin(a)
+        centre + Offset(x * c - y * s, x * s + y * c)
+    }
+    // Through the midpoints, with the points themselves as handles, so it stays smooth.
+    val path = Path()
+    val start = (corners.last() + corners[0]) / 2f
+    path.moveTo(start.x, start.y)
+    for (k in 0 until points) {
+        val handle = corners[k]
+        val end = (handle + corners[(k + 1) % points]) / 2f
+        path.quadraticTo(handle.x, handle.y, end.x, end.y)
+    }
+    path.close()
+    return path
+}
+
+/**
+ * Lights a carved [shape], [r] round [centre], from [toward]: one [raised]
+ * catches the light on its near side, darkens on its far one and throws a
+ * shadow [lift] past it; one cut in is the other way round, and dark at the
+ * bottom.
+ */
+private fun DrawScope.carve(shape: Path, centre: Offset, r: Float, toward: Offset, lift: Float, raised: Boolean, strength: Float, edge: Float) {
+    val near = centre + toward * r
+    val far = centre - toward * r
+    if (raised) {
+        val cast = Path().apply { addPath(shape, -toward * lift) }
+        drawPath(Path.combine(PathOperation.Difference, cast, shape), Color.Black.copy(alpha = 0.38f * strength))
+    } else {
+        drawPath(shape, Color.Black.copy(alpha = 0.2f * strength))
+    }
+    val lit = SHEEN.copy(alpha = 0.55f * strength)
+    val dark = Color.Black.copy(alpha = 0.5f * strength)
+    val (a, b) = if (raised) lit to dark else dark to lit
+    drawPath(
+        shape,
+        Brush.linearGradient(
+            0f to a.copy(alpha = a.alpha * 0.5f), 0.5f to a.copy(alpha = 0f),
+            0.5f to b.copy(alpha = 0f), 1f to b.copy(alpha = b.alpha * 0.6f),
+            start = near, end = far,
+        ),
+    )
+    drawPath(shape, Brush.linearGradient(listOf(a, b), near, far), style = Stroke(edge))
+}
+
+/**
+ * The carving along one stick, [length] along by [mould] wide, x along it and
+ * y in from the outer edge, lit from [toward]. Each run draws on its own
+ * [Random], so a run that fits one more piece at another size leaves the
+ * others as they were.
+ */
+private fun DrawScope.drawCarving(length: Float, mould: Float, toward: Offset, strength: Float, random: Random) {
+    val edge = max(0.5f, 0.016f * mould)
+    val lift = 0.035f * mould
+
+    // A rope twist round the outer edge: slanting cuts between the strands.
+    val rope = Random(random.nextInt())
+    val twist = length / max(1, (length / (0.075f * mould)).roundToInt())
+    var x = 0f
+    while (x <= length) {
+        val from = x + rope.between(-0.08f, 0.08f) * twist
+        val lean = 0.09f * mould * rope.between(0.85f, 1.15f)
+        val cut = Path().apply {
+            moveTo(from, ROPE_FROM * mould)
+            quadraticTo(from + 0.3f * lean, (ROPE_FROM + ROPE_TO) / 2f * mould, from + lean, ROPE_TO * mould)
+        }
+        drawPath(cut, Color.Black.copy(alpha = 0.5f * strength), style = Stroke(0.02f * mould, cap = StrokeCap.Round))
+        val wall = Path().apply { addPath(cut, -toward * 0.012f * mould) }
+        drawPath(wall, SHEEN.copy(alpha = 0.35f * strength), style = Stroke(0.008f * mould, cap = StrokeCap.Round))
+        x += twist
+    }
+
+    // Egg and dart along the flat face, stopping short of the rosettes.
+    val eggs = Random(random.nextInt())
+    val band = (EGG_TO - EGG_FROM) * mould
+    val mid = (EGG_FROM + EGG_TO) / 2f * mould
+    val end = (ROSETTE_AT + ROSETTE_SIZE) * mould + 0.08f * mould
+    val span = length - 2f * end
+    if (span > band) {
+        val count = max(1, (span / (0.4f * mould)).roundToInt())
+        val pitch = span / count
+        for (i in 0 until count) {
+            val centre = Offset(end + (i + 0.5f) * pitch + eggs.between(-0.03f, 0.03f) * pitch, mid + eggs.between(-0.03f, 0.03f) * band)
+            val tilt = eggs.between(-0.07f, 0.07f)
+            val size = eggs.between(0.94f, 1.06f)
+            val shell = lump(centre, 0.38f * pitch * size, 0.48f * band * size, tilt, 0.04f, eggs)
+            carve(shell, centre, 0.48f * band, toward, lift, raised = false, strength, edge)
+            val egg = lump(centre + Offset(0f, 0.03f * band), 0.27f * pitch * size, 0.37f * band * size, tilt, 0.05f, eggs)
+            carve(egg, centre, 0.37f * band, toward, lift, raised = true, strength, edge)
+        }
+        for (i in 0..count) {
+            val at = end + i * pitch + eggs.between(-0.02f, 0.02f) * pitch
+            val lean = eggs.between(-0.04f, 0.04f) * pitch
+            val half = 0.07f * pitch * eggs.between(0.85f, 1.15f)
+            val top = mid - 0.46f * band
+            val bottom = mid + 0.46f * band
+            val dart = Path().apply {
+                moveTo(at, top)
+                quadraticTo(at + half, mid, at + half + lean, mid + 0.15f * band)
+                lineTo(at + lean, bottom)
+                lineTo(at - half + lean, mid + 0.15f * band)
+                quadraticTo(at - half, mid, at, top)
+                close()
+            }
+            carve(dart, Offset(at, mid), 0.46f * band, toward, lift, raised = true, strength, edge)
+        }
+    }
+
+    // Bead and reel along the bead at the sight edge: a long bead, then two discs.
+    val beads = Random(random.nextInt())
+    val across = 0.035f * mould
+    val beadAt = BEAD_AT * mould
+    val step = length / max(1, (length / (0.16f * mould)).roundToInt())
+    x = 0f
+    while (x <= length) {
+        val bead = Offset(x + beads.between(-0.04f, 0.04f) * step, beadAt)
+        carve(lump(bead, 0.05f * mould, across, beads.between(-0.05f, 0.05f), 0.05f, beads, 10), bead, 0.05f * mould, toward, lift * 0.6f, raised = true, strength, edge)
+        for (disc in 0..1) {
+            val reel = Offset(x + (0.085f + 0.026f * disc) * mould, beadAt)
+            carve(lump(reel, 0.009f * mould, across * 0.95f, 0f, 0.06f, beads, 8), reel, across, toward, lift * 0.6f, raised = true, strength, edge)
+        }
+        x += step
+    }
+}
+
+/**
+ * A rosette [r] across round [centre], set in a sunk round over the mitre:
+ * eight leaves round a button, each cut a little differently.
+ */
+private fun DrawScope.drawRosette(centre: Offset, r: Float, mould: Float, wood: Color, strength: Float, random: Random) {
+    val edge = max(0.5f, 0.016f * mould)
+    val lift = 0.035f * mould
+    val solid = 0.9f * strength
+    val well = lump(centre, r, r, 0f, 0.03f, random, 16)
+    drawPath(well, shade(wood, -0.3f).copy(alpha = solid))
+    carve(well, centre, r, FRAME_LIGHT, lift, raised = false, strength, edge)
+
+    val leaves = 8
+    val turn = random.nextFloat() * TAU / leaves
+    repeat(leaves) { k ->
+        val angle = turn + k * TAU / leaves + random.between(-0.08f, 0.08f)
+        val along = Offset(cos(angle), sin(angle))
+        val side = Offset(-along.y, along.x)
+        val reach = r * random.between(0.78f, 0.9f)
+        val inner = centre + along * (0.2f * r)
+        val tip = centre + along * reach
+        val belly = centre + along * (0.62f * reach)
+        val leaf = Path().apply {
+            moveTo(inner.x, inner.y)
+            val left = belly + side * (0.4f * r * random.between(0.85f, 1.1f))
+            val right = belly - side * (0.4f * r * random.between(0.85f, 1.1f))
+            quadraticTo(left.x, left.y, tip.x, tip.y)
+            quadraticTo(right.x, right.y, inner.x, inner.y)
+            close()
+        }
+        drawPath(leaf, shade(wood, random.between(-0.05f, 0.05f)).copy(alpha = solid))
+        val heart = centre + along * (0.5f * reach)
+        carve(leaf, heart, 0.4f * reach, FRAME_LIGHT, lift, raised = true, strength, edge)
+        // The vein, a single nick down the middle.
+        val vein = centre + along * (0.78f * reach)
+        drawLine(Color.Black.copy(alpha = 0.4f * strength), inner + along * (0.1f * r), vein, edge, cap = StrokeCap.Round)
+    }
+    val button = lump(centre, 0.24f * r, 0.24f * r, 0f, 0.05f, random, 10)
+    drawPath(button, shade(wood, 0.04f).copy(alpha = solid))
+    carve(button, centre, 0.24f * r, FRAME_LIGHT, lift, raised = true, strength, edge)
 }
 
 /**
