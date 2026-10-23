@@ -11,13 +11,17 @@ import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.layer.GraphicsLayer
+import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import io.github.mejdi14.oddscroll.internal.clamped
 import io.github.mejdi14.oddscroll.internal.lerp
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.max
@@ -32,6 +36,9 @@ private const val MAX_PPM = 8.75f
 
 /** The largest the print is kept for the shader to sample. */
 private const val ART_PX = 1024
+
+/** The sparks are found at a half of the frame's pixels across, as the reference finds them. */
+private const val SPARK_DOWN = 2f
 
 /**
  * A drawing of one case, any pose, through any camera. Its pieces are baked
@@ -61,6 +68,9 @@ internal class CaseScene {
 
     /** How wide the loose cover stands, in covers: two with its manual open. */
     private var footprint = 1f
+
+    /** Drawing the sparks for [stars]: the rods' sparks, and all that is opaque in black. */
+    private var sparking = false
 
     /** The spine's two ends and a point right of it on screen, as last drawn. */
     private val spineHull = FloatArray(6)
@@ -161,6 +171,38 @@ internal class CaseScene {
             if (coverLoose) shadow(loose, 0f, coverShadow, shadow, widen = footprint)
         }
 
+        pieces()
+        rememberHull()
+    }
+
+    /**
+     * The reference's four-point stars over the case [draw] has just drawn:
+     * the case drawn again into [layer], a [SPARK_DOWN]th the size, as the
+     * sparks its rods catch of the studio's lamps — the disc, the cover and
+     * the manual black in front of them — and the shader's stars made of
+     * them laid over it at [strength]. Nothing without a shader.
+     */
+    fun stars(scope: DrawScope, layer: GraphicsLayer, strength: Float = 1f) = with(scope) {
+        val glass = shader ?: return@with
+        if (art == null || strength <= 0f || size.width <= 0f || size.height <= 0f) return@with
+        val w = ceil(size.width / SPARK_DOWN).toInt()
+        val h = ceil(size.height / SPARK_DOWN).toInt()
+        layer.renderEffect = glass.stars(strength)
+        layer.record(this, layoutDirection, IntSize(w, h)) {
+            scale(1f / SPARK_DOWN, Offset.Zero) {
+                sparking = true
+                try {
+                    pieces()
+                } finally {
+                    sparking = false
+                }
+            }
+        }
+        scale(SPARK_DOWN, Offset.Zero) { drawLayer(layer) }
+    }
+
+    /** Tray, lid and the cover out of it, back to front. */
+    private fun DrawScope.pieces() {
         // Back half first: whichever of tray and lid is further from the
         // camera, by the middle of each.
         tray.apply(0f, 0f, -2f, v)
@@ -175,8 +217,8 @@ internal class CaseScene {
             drawTray()
         }
         // Out of the lid, the cover is in front of the case all the way.
+        val manual = book
         if (manual != null) drawBook(manual) else if (coverLoose) insert(loose, 0f, facing(loose))
-        rememberHull()
     }
 
     // --- placing -----------------------------------------------------------------
@@ -272,7 +314,7 @@ internal class CaseScene {
                 frame.toWorld(toWorld)
                 val brush = glass.glass(
                     bitmap, layer.left, layer.top, mmPerPx, layer.z, eye, toWorld,
-                    layer.thickness, layer.overDisc,
+                    layer.thickness, layer.overDisc, if (sparking) SPARK_DOWN else 0f,
                 )
                 drawRect(brush, size = Size(bitmap.width.toFloat(), bitmap.height.toFloat()))
             } else {
@@ -309,15 +351,19 @@ internal class CaseScene {
     /** The booklet's back across the cover, its left edge at [left]; plain paper with none. */
     private fun DrawScope.back(left: Float) {
         val image = manual?.back
-        if (image != null) {
+        if (image != null && !sparking) {
             coverPrint(image, left)
         } else {
-            drawRect(PAPER, Offset(left, -COVER_HALF), Size(2f * COVER_HALF, 2f * COVER_HALF))
+            drawRect(if (sparking) Color.Black else PAPER, Offset(left, -COVER_HALF), Size(2f * COVER_HALF, 2f * COVER_HALF))
         }
     }
 
     /** [image]'s middle square across the cover, its left edge at [left]. */
     private fun DrawScope.coverPrint(image: ImageBitmap, left: Float) {
+        if (sparking) {
+            drawRect(Color.Black, Offset(left, -COVER_HALF), Size(2f * COVER_HALF, 2f * COVER_HALF))
+            return
+        }
         val square = discSquare(image)
         val k = 2f * COVER_HALF / square.width
         withTransform({
@@ -399,6 +445,10 @@ internal class CaseScene {
 
     /** [side] of the spine of [spread], a square either side of its middle, its left edge at [left]. */
     private fun DrawScope.page(spread: ImageBitmap, side: Int, left: Float) {
+        if (sparking) {
+            drawRect(Color.Black, Offset(left, -COVER_HALF), Size(2f * COVER_HALF, 2f * COVER_HALF))
+            return
+        }
         val half = minOf(spread.width / 2, spread.height)
         val k = 2f * COVER_HALF / half
         withTransform({
@@ -434,6 +484,10 @@ internal class CaseScene {
 
     private fun DrawScope.drawDisc(front: Boolean) {
         disc.plane(camera, DISC_Z, matrix, plane)
+        if (sparking) {
+            withTransform({ transform(matrix) }) { drawCircle(Color.Black, radius = DISC_R, center = Offset.Zero) }
+            return
+        }
         val glass = shader
         val square = square
         if (glass != null && square != null) {
@@ -596,6 +650,8 @@ internal class CaseScene {
      * and drawn fainter, first.
      */
     private fun DrawScope.walls(frame: Pose, z0: Float, z1: Float, front: Boolean) {
+        // Drawn in plain colours, and no spark is taken off them.
+        if (sparking) return
         val o = wallOutline
         val count = o.size / 4
         for (i in 0 until count) {
@@ -643,6 +699,7 @@ internal class CaseScene {
      * band, dark at its two edges, pale down the middle, lit along one side.
      */
     private fun DrawScope.knuckles(frame: Pose, knuckles: List<Knuckle>) {
+        if (sparking) return
         for (k in knuckles) {
             frame.apply(HINGE_X, k.from, HINGE_Z, world, 0)
             frame.apply(HINGE_X, k.to, HINGE_Z, world, 3)

@@ -376,7 +376,10 @@ It is the reference's geometry and its studio, carried over:
   flags, Fresnel at every surface, rods that refract the view through a round
   section and bend the page and the dark room into it, sheets that throw back
   the softboxes' glare, and the disc's diffraction rainbow, three orders of the
-  spectrum along its tracks. Elsewhere the same pieces are drawn from a baked
+  spectrum along its tracks. The rods' sparks of the studio's small lamps are
+  found at half resolution, and the brightest of them, the ones no neighbour
+  outshines, are streaked across and down into the reference's four-point stars,
+  a pale blue over the white. Elsewhere the same pieces are drawn from a baked
   look, with the rainbow and the lid's glare worked out per frame for the case's
   turn.
 

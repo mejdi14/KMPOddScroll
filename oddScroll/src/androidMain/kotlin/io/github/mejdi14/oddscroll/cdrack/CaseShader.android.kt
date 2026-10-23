@@ -2,6 +2,7 @@ package io.github.mejdi14.oddscroll.cdrack
 
 import android.graphics.Bitmap
 import android.graphics.BitmapShader
+import android.graphics.RenderEffect
 import android.graphics.RuntimeShader
 import android.graphics.Shader
 import android.os.Build
@@ -10,7 +11,16 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.asImageBitmap
+
+/**
+ * A spark is drawn into its layer as a fraction of this: past it, the
+ * star it throws is as large as it gets.
+ */
+private const val SPARK = """
+const float SPARK_RANGE = 32.0;
+"""
 
 /*
  * The reference's shaders, carried over to AGSL. Its studio is analytic — a
@@ -18,7 +28,7 @@ import androidx.compose.ui.graphics.asImageBitmap
  * is evaluated here as it stands, in world space, rather than baked to a cube
  * map. World is the camera's own frame: y up, z towards the viewer.
  */
-private const val STUDIO = """
+private const val STUDIO = SPARK + """
 const float IOR = 1.59;
 const float ABSORB = 0.00327;
 const float3 KEY = float3(-0.625, 0.218, 0.75);
@@ -82,6 +92,36 @@ float3 studio(float3 d) {
     return mix(room(d), float3(1.0), backdrop(d));
 }
 
+/*
+ * The reference's small lamps, hung in the studio apart from its softboxes:
+ * too small to show in the room, and what the rods' sparks are of. A lamp
+ * is kept to its own little disc while that is wider than what a pixel sees
+ * of the room, [spread]; once the pixel sees more, its light is spread into
+ * a soft spot as wide, all of it kept, or a glint on a rod's rolled edge
+ * would fall between pixels.
+ */
+const float LAMP = 12000.0;
+const float LAMP_R = 0.01;
+
+float lamp(float2 p, float2 at, float spread) {
+    float s = max(spread, LAMP_R * 0.55);
+    float2 q = p - at;
+    return min(1.0, 0.28 * LAMP_R * LAMP_R / (s * s)) * exp(-dot(q, q) / (2.0 * s * s));
+}
+
+/** How much lamp light comes in along [d], the mean of its colour, as the reference keeps it beside the room. */
+float lamps(float3 d, float spread) {
+    d = normalize(d);
+    float2 p = d.xy / max(abs(d.z), 0.08);
+    if (d.z > 0.0) {
+        float c = 1.123 * lamp(p, float2(-0.42, 0.98), spread) + 0.97 * lamp(p, float2(0.62, 0.72), spread)
+            + 0.867 * (lamp(p, float2(-0.95, -0.5), spread) + lamp(p, float2(0.85, -0.7), spread));
+        return c * smoothstep(0.0, 0.2, d.z) * LAMP;
+    }
+    float c = 0.173 * (lamp(p, float2(-0.62, 0.58), spread) + lamp(p, float2(0.66, -0.6), spread));
+    return c * smoothstep(0.0, 0.2, -d.z) * LAMP;
+}
+
 float3 glare(float3 d) {
     return max(studio(d) - float3(0.45), float3(0.0));
 }
@@ -133,6 +173,12 @@ half4 sheet(float3 N, float3 V, float thickness, float k) {
  * crosses again, three times over, as the reference's rods do. What the rod
  * throws back off its surface is the studio, by Fresnel. A sheet reflects the
  * studio's glare and takes a little of what lies behind it.
+ *
+ * With [sparks] set, the layer is drawn for the stars instead: how much of
+ * the studio's lamps the rod catches, off its surface and through it, as a
+ * grey out of [SPARK_RANGE]. The sheets give none, and let what is behind
+ * them through. [sparks] is how many of the map's pixels one of that layer's
+ * spans, so a lamp is spread over as much of the room as the pixel sees.
  */
 private const val GLASS = STUDIO + """
 uniform shader height;
@@ -141,6 +187,7 @@ uniform float3 eye;
 uniform float3x3 toWorld;
 uniform float thickness;
 uniform float overDisc;
+uniform float sparks;
 
 /*
  * The studio's room is all but black away from its softboxes, and a rod
@@ -158,11 +205,17 @@ float distanceAt(float2 xy) {
     return c.a > 0.004 ? (c.r / c.a - 0.5) * 8.0 : -4.0;
 }
 
+/** How much of what lies behind the case a ray leaving the rod along [way] lands on, rather than the room. */
+float behind(float3 way, float3 I) {
+    if (way.z > -0.05) return 0.0;
+    float bend = acos(clamp(dot(way, I), -1.0, 1.0));
+    return 1.0 - smoothstep(0.04, 0.13, bend);
+}
+
 float3 outside(float3 way, float3 I, float3 seen, float matter) {
     float3 env = room(way);
-    if (way.z > -0.05) return env;
-    float bend = acos(clamp(dot(way, I), -1.0, 1.0));
-    float w = 1.0 - smoothstep(0.04, 0.13, bend);
+    float w = behind(way, I);
+    if (w <= 0.0) return env;
     float3 page = mix(env, seen, 0.25);
     return mix(env, mix(page, seen, matter), w);
 }
@@ -180,7 +233,8 @@ half4 main(float2 xy) {
 
     float d = (m.r - 0.5) * 8.0;
     float rodCover = clamp(d / frame.z + 0.5, 0.0, 1.0);
-    half4 plate = m.g > 0.004
+    bool sparking = sparks > 0.0;
+    half4 plate = m.g > 0.004 && !sparking
         ? sheet(normalize(toWorld * float3(0.0, 0.0, side)), V, thickness, m.g * cover)
         : half4(0.0);
     if (rodCover <= 0.0) return plate;
@@ -201,7 +255,11 @@ half4 main(float2 xy) {
 
     float F = fresnel(max(dot(N, V), 0.0), IOR);
     float3 R = reflect(I, N);
-    float3 refl = mix(room(R), float3(1.0), backdrop(R));
+    // How far the reflection swings across a pixel: on the flat face hardly
+    // at all, on the rolled edge twice as fast as the face turns.
+    float upright = max(sqrt(max(1.0 - off * off, 0.0)), 0.2);
+    float spread = off > 0.0 ? 2.0 * frame.z * max(sparks, 1.0) / (rc * upright) : 0.0;
+    float3 refl = sparking ? float3(0.0) : mix(room(R), float3(1.0), backdrop(R));
 
     // The rod's section: across it, and out of the layer.
     float3 g = N - nz * dot(N, nz);
@@ -215,6 +273,7 @@ half4 main(float2 xy) {
 
     float3 dir = refract(I, N, 1.0 / IOR);
     float3 acc = float3(0.0);
+    float lit = 0.0;
     float thr = 1.0;
     for (int i = 0; i < 3; i++) {
         float2 d2 = float2(dot(dir, g), dot(dir, nz));
@@ -230,9 +289,17 @@ half4 main(float2 xy) {
         bool trapped = dot(leave, leave) < 0.000001;
         float F2 = trapped ? 1.0 : fresnel(abs(dot(leave, Ne)), IOR);
         float3 way = trapped ? normalize(dir - Ne * dot(dir, Ne)) : leave;
-        acc += thr * (1.0 - F2) * outside(way, I, seen, onDisc);
+        if (sparking) {
+            lit += thr * (1.0 - F2) * lamps(way, spread) * (1.0 - behind(way, I));
+        } else {
+            acc += thr * (1.0 - F2) * outside(way, I, seen, onDisc);
+        }
         thr *= F2;
         dir = reflect(dir, Ne);
+    }
+    if (sparking) {
+        float spark = lamps(R, spread) * F + lit * (1.0 - F);
+        return half4(half3(clamp(spark / SPARK_RANGE, 0.0, 1.0)), 1.0) * half(rodCover * cover);
     }
     acc += thr * 0.6 * room(dir);
 
@@ -338,6 +405,77 @@ half4 main(float2 xy) {
 """
 
 /**
+ * The reference's sparks, picked out of the layer the rods drew them into:
+ * a pixel past the threshold that none of its eight neighbours outdoes, by
+ * as much as it stands above the ring four pixels round it — so a glint
+ * throws a star and a broad highlight does not. Out of eight, as a grey.
+ */
+private const val BRIGHT = SPARK + """
+uniform shader mask;
+
+const float THRESHOLD = 2.0;
+
+float sparkAt(float2 xy) {
+    return float(mask.eval(xy).r) * SPARK_RANGE;
+}
+
+half4 main(float2 xy) {
+    float s = sparkAt(xy);
+    if (s <= THRESHOLD) return half4(0.0, 0.0, 0.0, 1.0);
+    float peak = 0.0;
+    float ring = 0.0;
+    for (int k = 0; k < 8; k++) {
+        float a = float(k) * 0.7853982;
+        float2 o = float2(cos(a), sin(a));
+        peak = max(peak, sparkAt(xy + floor(o * 1.42 + 0.5)));
+        ring += sparkAt(xy + o * 4.0);
+    }
+    if (s < peak) return half4(0.0, 0.0, 0.0, 1.0);
+    float seed = min(max(s - ring * 0.25 - THRESHOLD, 0.0), 8.0) / 8.0;
+    return half4(half3(seed), 1.0);
+}
+"""
+
+/**
+ * Each spark streaked ten steps of one and a half pixels each way, across
+ * and down, falling off by 0.7 a step — the reference's four points — and
+ * laid over the case as it does: the frame tinted towards a pale blue as
+ * the star covers it, and the star's own light added on top.
+ */
+private const val STARS = """
+uniform shader bright;
+uniform float strength;
+
+const float FALLOFF = 0.7;
+const float STEP = 1.5;
+const float3 BLUE = float3(0.68, 0.81, 1.0);
+const float3 TINT = float3(0.91, 0.95, 1.0);
+
+float seedAt(float2 xy) {
+    return float(bright.eval(xy).r);
+}
+
+half4 main(float2 xy) {
+    float c = 2.0 * seedAt(xy);
+    float total = 1.0;
+    float w = 1.0;
+    for (int i = 1; i <= 10; i++) {
+        w *= FALLOFF;
+        float o = STEP * float(i);
+        c += (seedAt(xy + float2(o, 0.0)) + seedAt(xy - float2(o, 0.0)) + seedAt(xy + float2(0.0, o)) + seedAt(xy - float2(0.0, o))) * w;
+        total += 2.0 * w;
+    }
+    // Back out of eighths, three times the mean as the reference has it, and
+    // its 1.6 for the two passes summed.
+    float stars = c / total * 3.0 * 8.0 * 1.6 * strength;
+    float k = 0.6 * clamp(stars, 0.0, 1.0);
+    float g = clamp(stars * 0.5, 0.0, 1.0);
+    float a = 1.0 - (1.0 - k) * (1.0 - g);
+    return half4(half3(BLUE * k * (1.0 - g) + TINT * g), half(a));
+}
+"""
+
+/**
  * AGSL arrived in 33; below that, and if either shader fails to compile, the
  * case is drawn from its baked look in common code.
  */
@@ -360,6 +498,8 @@ private class AgslCase : CaseShader {
     private val glassBrush = ShaderBrush(glass)
     private val disc = RuntimeShader(DISC)
     private val discBrush = ShaderBrush(disc)
+    private val bright = RuntimeShader(BRIGHT)
+    private val stars = RuntimeShader(STARS)
     private val maps = HashMap<ImageBitmap, BitmapShader>()
 
     override fun heightMap(pixels: IntArray, width: Int, height: Int): ImageBitmap =
@@ -375,6 +515,7 @@ private class AgslCase : CaseShader {
         toWorld: FloatArray,
         thickness: Float,
         overDisc: Boolean,
+        sparks: Float,
     ): Brush {
         glass.setInputShader("height", map(height, Shader.TileMode.DECAL))
         glass.setFloatUniform("frame", left, top, mmPerPx, z)
@@ -382,7 +523,16 @@ private class AgslCase : CaseShader {
         glass.setFloatUniform("toWorld", toWorld)
         glass.setFloatUniform("thickness", thickness)
         glass.setFloatUniform("overDisc", if (overDisc) 1f else 0f)
+        glass.setFloatUniform("sparks", sparks)
         return glassBrush
+    }
+
+    override fun stars(strength: Float): androidx.compose.ui.graphics.RenderEffect {
+        stars.setFloatUniform("strength", strength)
+        return RenderEffect.createChainEffect(
+            RenderEffect.createRuntimeShaderEffect(stars, "bright"),
+            RenderEffect.createRuntimeShaderEffect(bright, "mask"),
+        ).asComposeRenderEffect()
     }
 
     override fun disc(art: ImageBitmap, eye: FloatArray, toWorld: FloatArray): Brush {

@@ -33,6 +33,8 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.layer.GraphicsLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -201,6 +203,7 @@ fun CdRackScroll(
     }
 
     val rack = remember(items) { RackScene(items) }
+    val stars = rememberGraphicsLayer()
     var frameSize by remember { mutableStateOf(IntSize.Zero) }
     val graphics = LocalGraphicsContext.current
     val layerDensity = LocalDensity.current
@@ -353,7 +356,7 @@ fun CdRackScroll(
             val h = size.height.toInt()
             if (frameSize.width != w || frameSize.height != h) frameSize = IntSize(w, h)
             rack.fit(size.width, size.height)
-            rack.draw(this, state)
+            rack.draw(this, state, stars)
         }
 
         if (captions) Caption(items, state, contentColor)
@@ -526,7 +529,8 @@ private class RackScene(private val items: List<CdRackItem>) {
         out[2] = s * w * SPACING_MM * AXIS[2]
     }
 
-    fun draw(scope: DrawScope, state: CdRackScrollState) = with(scope) {
+    /** The rack, and the case out of it with [stars] over it. */
+    fun draw(scope: DrawScope, state: CdRackScrollState, stars: GraphicsLayer) = with(scope) {
         val position = state.position
         val count = items.size
         val focus = state.focus
@@ -575,6 +579,9 @@ private class RackScene(private val items: List<CdRackItem>) {
             // does not step.
             translate(x, y) { drawImage(sprite) }
         }
+        // The rack's cases are drawn without them; the one out comes into
+        // its stars as it comes out.
+        if (chosen != NONE) scene.stars(this, stars, strength = come)
     }
 
     /**

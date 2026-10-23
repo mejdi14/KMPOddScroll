@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntOffset
@@ -56,8 +57,9 @@ private const val TAP_SLOP = 6f
  * through its own exact projection, back to front as the case faces; the
  * walls round its edge and the knuckles of the hinge are drawn as the camera
  * sees them each frame. On Android 13 and up the glass and the disc are lit a
- * pixel at a time, after the reference's own shaders; elsewhere they are
- * drawn from a look baked once.
+ * pixel at a time, after the reference's own shaders, and the sparks the rods
+ * catch of the studio's lamps throw its four-point stars; elsewhere the case
+ * is drawn from a look baked once.
  *
  * @param art printed across the disc, its middle square to the disc's width.
  * @param cover slipped in under the lid's glass, its middle square filling
@@ -79,6 +81,7 @@ fun CdCase(
     val camera = remember { Camera() }
     val pose = remember { CasePose() }
     val coverPose = remember { CasePose() }
+    val stars = rememberGraphicsLayer()
     val spinning = rememberUpdatedState(spin)
 
     LaunchedEffect(state) {
@@ -138,6 +141,7 @@ fun CdCase(
             scene.setCover(cover)
             val loose = if (state.coverPose(coverPose, pose, camera)) coverPose else null
             scene.draw(this, camera, pose, cover = loose)
+            scene.stars(this, stars)
         }
     }
 }
