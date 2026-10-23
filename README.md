@@ -276,8 +276,9 @@ part along it counts), flick to throw it, or scroll to step it a case.
 Tap a case to take it out: it comes to the slot, the rest of the row clears
 off the screen either way, and it turns to face you and comes forward — the
 single case below, to drag round and tap open. Open, an Inspect button at the
-bottom takes its cover out: the paper lifts off the lid, turns over to its
-printed side and comes down under the case, which shuts and rises to make room.
+bottom takes its cover out: the paper lifts off the lid, then turns over to its
+printed side and comes down under the case, which rises to make room as it
+goes and shuts once the cover is clear.
 Give the case a `manual` and the cover is the front of a booklet: tap it and
 the cover folds open over the spine, the spread coming up into the middle of the
 frame as the case goes up out of it. Swipe it, tap a page or scroll to turn the
@@ -353,7 +354,7 @@ out, `case.turnPage(by)` and `case.closeManual()` leaf through its manual, and
 `case.manualPage` is the spread it is open at (`-1` shut). The buttons walk
 `step` — `0` shut, `1` open, `2` cover out, then a step per spread of the
 manual — with `stepForward()`, `stepBack()` and `lastStep` for a host's own.
-Wider than tall, the cover comes to rest to the right of the case rather than under it, and going back reopens the case before the cover goes into its lid.
+Wider than tall, the cover comes to rest to the right of the case rather than under it, the open case moving left as the cover moves right so its lid shuts clear of it. Back from the cover out plays the whole thing in reverse.
 
 #### One case: `CdCase`
 

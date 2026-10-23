@@ -85,6 +85,8 @@ internal class Camera {
         private set
     var pairAside = 0f
         private set
+    var beside = false
+        private set
 
     /**
      * The manual open in the middle of the frame: how large it is drawn so
@@ -113,7 +115,8 @@ internal class Camera {
         openScale = minOf(1.04f, across / (CASE_MM * 2.25f))
         val tall = 2f * baseDistance * tanHalf
         val stack = CASE_MM + PAIR_GAP + 2f * COVER_HALF
-        if (aspect > 1f) {
+        beside = aspect > 1f
+        if (beside) {
             pairScale = minOf(1f, across * PAIR_FIT / stack, tall * PAIR_FIT / (2f * COVER_HALF))
             pairShift = pairScale * (stack / 2f - HALF_MM)
             pairAside = pairScale * (stack / 2f - COVER_HALF)
