@@ -135,8 +135,15 @@ private const val RACK_ZOOM = 24f
 private const val LIFT_FLAT = 0.077f
 private const val LIFT_GONE = 1.002f
 
-/** Cases leave the rack nearest first, this many seconds apart a place. */
-private const val EXIT_STAGGER = 0.03f
+/**
+ * Cases leave the rack nearest first, this many seconds apart a place, up to
+ * this many places out; past it they are off the frame anyway.
+ */
+private const val EXIT_STAGGER = 0.035f
+private const val EXIT_STAGGER_PLACES = 8
+
+/** A leaving case has faded out by this far along its way off. */
+private const val EXIT_FADE = 0.8f
 
 private const val TAP_SLOP = 8f
 
@@ -565,10 +572,17 @@ private class RackScene(private val items: List<CdRackItem>) {
             val sprite = sprites[wrapCase(i, count)] ?: continue
             val b = box ?: continue
             var w = i - position
+            var alpha = 1f
             if (chosen != NONE) {
-                val delay = EXIT_STAGGER * abs(i - chosen)
-                val gone = inOutCubic(((focus - delay) / EXIT_SECONDS).clamped(0f, 1f))
-                w += sign(i - chosen.toFloat()) * reach * gone
+                // Each goes only as far as takes it off the frame, so the
+                // near ones drift rather than fly, and fades as it goes.
+                val apart = abs(i - chosen)
+                val delay = EXIT_STAGGER * min(apart, EXIT_STAGGER_PLACES)
+                val along = ((focus - delay) / EXIT_SECONDS).clamped(0f, 1f)
+                val off = max(reach / 2f + 2f - apart, 0f)
+                w += sign(i - chosen.toFloat()) * off * inOutCubic(along)
+                alpha = 1f - smoothstep(0.1f, EXIT_FADE, along)
+                if (alpha <= 0f) continue
             }
             centre(w, point)
             if (!rackCamera.project(point[0], point[1], point[2], screen)) continue
@@ -577,7 +591,7 @@ private class RackScene(private val items: List<CdRackItem>) {
             if (x > size.width || y > size.height || x + b.width < 0f || y + b.height < 0f) continue
             // Translated rather than offset by whole pixels, so a slow slide
             // does not step.
-            translate(x, y) { drawImage(sprite) }
+            translate(x, y) { drawImage(sprite, alpha = alpha) }
         }
         // The rack's cases are drawn without them; the one out comes into
         // its stars as it comes out.

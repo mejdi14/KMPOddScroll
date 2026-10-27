@@ -26,6 +26,9 @@ private const val PAIR_GAP = 16f
 private const val READ_ACROSS = 0.92f
 private const val READ_TALL = 0.74f
 
+/** Past the frame, how far the case's soft shadow goes up out of it too. */
+private const val SHADOW_CLEAR = 16f
+
 /** The light the backdrop's shadows fall from. */
 internal val LIGHT = normalized(-0.3f, 0.48f, 1f)
 
@@ -130,7 +133,11 @@ internal class Camera {
             pairAside = 0f
         }
         readScale = minOf(across * READ_ACROSS / (4f * COVER_HALF), tall * READ_TALL / (2f * COVER_HALF))
-        readRise = tall * 0.6f + HALF_MM
+        // Clear of the frame, shadow and all: the shadow falls this far below
+        // the case on the backdrop, where the frame stands taller.
+        val wall = tall / 2f * (baseDistance - BACKDROP_Z) / baseDistance
+        val drop = LIGHT[1] / LIGHT[2] * (HINGE_Z - BACKDROP_Z)
+        readRise = wall + HALF_MM + drop + SHADOW_CLEAR
     }
 
     /** Screen x, y of a world point into [out] at [at]; false if it is behind the lens. */
