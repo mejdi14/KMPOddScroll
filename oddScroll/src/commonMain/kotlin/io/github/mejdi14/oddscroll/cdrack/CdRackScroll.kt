@@ -133,9 +133,10 @@ private const val LIFT_GONE = 1.002f
 
 /**
  * Cases leave the rack nearest first, this many seconds apart a place, up to
- * this many places out; past it they are off the frame anyway.
+ * this many places out; past it they are off the frame anyway. The last of
+ * them has to be gone by [FOCUS_SECONDS], where the clock stops.
  */
-private const val EXIT_STAGGER = 0.035f
+private const val EXIT_STAGGER = 0.06f
 private const val EXIT_STAGGER_PLACES = 8
 
 private const val TAP_SLOP = 8f
@@ -202,7 +203,12 @@ fun CdRackScroll(
         return
     }
 
-    val rack = remember(items) { RackScene(items) }
+    // Kept for as long as the pictures are the same: a host that builds its
+    // list afresh each composition, with new loader lambdas and all, would
+    // otherwise throw the baked rack away every time it recomposes — as it
+    // does the moment a case comes out.
+    val rack = remember(items.map { it.image }, items.map { it.cover }) { RackScene(items) }
+    rack.items = items
     val stars = rememberGraphicsLayer()
     var frameSize by remember { mutableStateOf(IntSize.Zero) }
     val graphics = LocalGraphicsContext.current
@@ -455,7 +461,7 @@ private class SpriteBox(val left: Int, val top: Int, val width: Int, val height:
  * The rack and the case taken out of it: a camera dollied far out for the row,
  * one for the case that comes back in, each case's drawing at the rack's turn.
  */
-private class RackScene(private val items: List<CdRackItem>) {
+private class RackScene(var items: List<CdRackItem>) {
     val scene = CaseScene()
     val rackCamera = Camera().also { it.zoom = RACK_ZOOM }
     private val liveCamera = Camera()
