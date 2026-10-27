@@ -20,7 +20,6 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -45,8 +44,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import io.github.mejdi14.oddscroll.internal.SplitBy
-import io.github.mejdi14.oddscroll.internal.SplitText
 import io.github.mejdi14.oddscroll.internal.clamped
 import io.github.mejdi14.oddscroll.internal.inOutCubic
 import io.github.mejdi14.oddscroll.internal.lerp
@@ -257,6 +254,15 @@ fun CdRackScroll(
             }
         }
         rack.ready = true
+    }
+
+    // The disc of the case tapped, baked off the main thread while it slides
+    // to the slot; it is taken out once this is done.
+    LaunchedEffect(rack, state.wanted) {
+        val wanted = state.wanted
+        if (wanted == NONE) return@LaunchedEffect
+        withContext(Dispatchers.Default) { rack.scene.setArt(items[wrapCase(wanted, items.size)].image) }
+        state.primed = wanted
     }
 
     // The manual of the case out, read in while it is out.
@@ -677,35 +683,28 @@ private fun BoxScope.Caption(
     val item = items[wrapCase(state.slotted, items.size)]
     if (item.title.isEmpty() && item.artist.isEmpty()) return
 
-    key(state.slotted) {
-        Column(
-            Modifier
-                .align(Alignment.TopStart)
-                .padding(start = 24.dp, top = 36.dp, end = 24.dp),
-        ) {
-            SplitText(
-                text = item.title.uppercase(),
-                style = TextStyle(
-                    color = contentColor,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    letterSpacing = 1.4.sp,
-                ),
-                splitBy = SplitBy.Chars,
-                rise = 6.dp,
-            )
-            SplitText(
-                text = item.artist.uppercase(),
-                style = TextStyle(
-                    color = contentColor.copy(alpha = 0.45f),
-                    fontSize = 11.sp,
-                    letterSpacing = 1.2.sp,
-                ),
-                modifier = Modifier.padding(top = 4.dp),
-                splitBy = SplitBy.Chars,
-                rise = 6.dp,
-                startDelay = 120,
-            )
-        }
+    Column(
+        Modifier
+            .align(Alignment.TopStart)
+            .padding(start = 24.dp, top = 36.dp, end = 24.dp),
+    ) {
+        BasicText(
+            text = item.title.uppercase(),
+            style = TextStyle(
+                color = contentColor,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                letterSpacing = 1.4.sp,
+            ),
+        )
+        BasicText(
+            text = item.artist.uppercase(),
+            style = TextStyle(
+                color = contentColor.copy(alpha = 0.45f),
+                fontSize = 11.sp,
+                letterSpacing = 1.2.sp,
+            ),
+            modifier = Modifier.padding(top = 4.dp),
+        )
     }
 }

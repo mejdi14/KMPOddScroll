@@ -105,7 +105,14 @@ class CdRackScrollState internal constructor(intro: Int) {
     internal val case = CdCaseState()
 
     /** Tapped, and on its way to the slot to be taken out from there. */
-    private var wanted = NONE
+    internal var wanted by mutableIntStateOf(NONE)
+        private set
+
+    /**
+     * The case whose disc is baked for drawing out of the rack; one tapped
+     * waits in the slot for it, so the bake is not done in the frame it leaves.
+     */
+    internal var primed = NONE
 
     /** Asked to go back while open: shutting first. */
     private var leaving = false
@@ -274,7 +281,7 @@ class CdRackScrollState internal constructor(intro: Int) {
         if (nearest != slotted) slotted = nearest
 
         // Taking a case out, once it has come to rest in the slot.
-        if (wanted != NONE && !moving && !dragging && position == wanted.toFloat()) {
+        if (wanted != NONE && primed == wanted && !moving && !dragging && position == wanted.toFloat()) {
             chosen = wanted
             wanted = NONE
             inspecting = true
