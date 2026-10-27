@@ -58,7 +58,6 @@ import kotlin.math.hypot
 import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.sign
 
 /** One case in the rack. */
 data class CdRackItem(
@@ -138,9 +137,6 @@ private const val LIFT_GONE = 1.002f
  */
 private const val EXIT_STAGGER = 0.035f
 private const val EXIT_STAGGER_PLACES = 8
-
-/** A leaving case has faded out by this far along its way off. */
-private const val EXIT_FADE = 0.8f
 
 private const val TAP_SLOP = 8f
 
@@ -496,6 +492,11 @@ private class RackScene(private val items: List<CdRackItem>) {
     private val point = FloatArray(3)
     private val screen = FloatArray(8)
     private val origin = FloatArray(2)
+    private val at = FloatArray(2)
+
+    /** Each side's way off the frame, below the case out and above it: one axis, ±1. */
+    private val exitX = FloatArray(2)
+    private val exitY = FloatArray(2)
 
     fun fit(w: Float, h: Float) {
         if (w == width && h == height) return
@@ -568,6 +569,7 @@ private class RackScene(private val items: List<CdRackItem>) {
         }
         val loose = if (chosen != NONE && state.case.coverPose(coverPose, livePose, liveCamera)) coverPose else null
         val book = if (loose != null && state.case.bookPose(bookPose)) bookPose else null
+        if (chosen != NONE) aimExits(position, chosen, size.width, size.height)
 
         // Back of the row first: each case covers the one behind it.
         for (i in last downTo first) {
@@ -577,31 +579,73 @@ private class RackScene(private val items: List<CdRackItem>) {
             }
             val sprite = sprites[wrapCase(i, count)] ?: continue
             val b = box ?: continue
-            var w = i - position
-            var alpha = 1f
+            if (!spriteAt(i - position)) continue
+            var x = at[0]
+            var y = at[1]
             if (chosen != NONE) {
-                // Each goes only as far as takes it off the frame, so the
-                // near ones drift rather than fly, and fades as it goes.
+                // Each goes straight off its side's edge, only as far as
+                // takes it clear of the frame; coming back runs it in again.
                 val apart = abs(i - chosen)
                 val delay = EXIT_STAGGER * min(apart, EXIT_STAGGER_PLACES)
-                val along = ((focus - delay) / EXIT_SECONDS).clamped(0f, 1f)
-                val off = max(reach / 2f + 2f - apart, 0f)
-                w += sign(i - chosen.toFloat()) * off * inOutCubic(along)
-                alpha = 1f - smoothstep(0.1f, EXIT_FADE, along)
-                if (alpha <= 0f) continue
+                val gone = inOutCubic(((focus - delay) / EXIT_SECONDS).clamped(0f, 1f))
+                val side = if (i > chosen) 1 else 0
+                val off = clearance(side, x, y, size.width, size.height) * gone
+                x += exitX[side] * off
+                y += exitY[side] * off
             }
-            centre(w, point)
-            if (!rackCamera.project(point[0], point[1], point[2], screen)) continue
-            val x = b.left + screen[0] - origin[0]
-            val y = b.top + screen[1] - origin[1]
             if (x > size.width || y > size.height || x + b.width < 0f || y + b.height < 0f) continue
             // Translated rather than offset by whole pixels, so a slow slide
             // does not step.
-            translate(x, y) { drawImage(sprite, alpha = alpha) }
+            translate(x, y) { drawImage(sprite) }
         }
         // The rack's cases are drawn without them; the one out comes into
         // its stars as it comes out.
         if (chosen != NONE) scene.stars(this, stars, strength = come)
+    }
+
+    /** The top-left of the sprite of a case [w] places from the slot, into [at]. */
+    private fun spriteAt(w: Float): Boolean {
+        val b = box ?: return false
+        centre(w, point)
+        if (!rackCamera.project(point[0], point[1], point[2], screen)) return false
+        at[0] = b.left + screen[0] - origin[0]
+        at[1] = b.top + screen[1] - origin[1]
+        return true
+    }
+
+    /**
+     * Which way each side of the row leaves the frame, below the case taken
+     * out and above it: straight off whichever of its two edges is nearer the
+     * case next to it, so a whole side goes the one way and none cross.
+     */
+    private fun aimExits(position: Float, chosen: Int, w: Float, h: Float) {
+        val b = box ?: return
+        if (!spriteAt(chosen - position)) return
+        val cx = at[0]
+        val cy = at[1]
+        for (side in 0..1) {
+            exitX[side] = 0f
+            exitY[side] = 0f
+            if (!spriteAt(chosen + (if (side == 1) 1 else -1) - position)) continue
+            val towardX = if (at[0] >= cx) 1f else -1f
+            val towardY = if (at[1] >= cy) 1f else -1f
+            val across = if (towardX > 0f) w - at[0] else at[0] + b.width
+            val upDown = if (towardY > 0f) h - at[1] else at[1] + b.height
+            if (across <= upDown) exitX[side] = towardX else exitY[side] = towardY
+        }
+    }
+
+    /** How far a sprite at [x], [y] goes along its [side]'s exit to be clear of the frame. */
+    private fun clearance(side: Int, x: Float, y: Float, w: Float, h: Float): Float {
+        val b = box ?: return 0f
+        val off = when {
+            exitX[side] > 0f -> w - x
+            exitX[side] < 0f -> x + b.width
+            exitY[side] > 0f -> h - y
+            exitY[side] < 0f -> y + b.height
+            else -> 0f
+        }
+        return max(off, 0f)
     }
 
     /**
