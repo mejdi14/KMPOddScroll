@@ -56,9 +56,9 @@ private const val WINDOW = 0.1f
  * the first part, and the case turns to face you and comes forward over the
  * second, the two overlapping. Putting it back runs the same backwards.
  */
-internal const val EXIT_SECONDS = 1.8f
-internal const val COME_FROM = 0.9f
-internal const val COME_SECONDS = 1.4f
+internal const val EXIT_SECONDS = 3.6f
+internal const val COME_FROM = 1.8f
+internal const val COME_SECONDS = 2.8f
 internal const val FOCUS_SECONDS = COME_FROM + COME_SECONDS
 
 /** No case chosen. */
