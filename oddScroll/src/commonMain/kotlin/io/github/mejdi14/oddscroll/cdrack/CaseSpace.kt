@@ -22,9 +22,9 @@ private const val FIT = 0.6f
 private const val PAIR_FIT = 0.8f
 private const val PAIR_GAP = 16f
 
-/** The open manual fills at most this much of the width, and of the height. */
-private const val READ_ACROSS = 0.92f
-private const val READ_TALL = 0.74f
+/** The open manual fills at most this much of the width left between the insets, and of the height. */
+private const val READ_ACROSS = 0.96f
+private const val READ_TALL = 0.88f
 
 /** Past the frame, how far the case's soft shadow goes up out of it too. */
 private const val SHADOW_CLEAR = 16f
@@ -101,13 +101,10 @@ internal class Camera {
         private set
 
     /**
-     * Pixels kept clear along the bottom of the frame for the open manual —
-     * its scrubber — and how far up it stands for it,
-     * in millimetres.
+     * Pixels kept clear down either side of the frame for the open manual —
+     * its scrubber on the right, its button on the left.
      */
     var readInset = 0f
-    var readLift = 0f
-        private set
     private var fittedInset = -1f
 
     private val cx get() = width / 2f
@@ -143,9 +140,8 @@ internal class Camera {
             pairShift = 0f
             pairAside = 0f
         }
-        val inset = tall * (readInset / max(h, 1f)).coerceIn(0f, 0.5f)
-        readScale = minOf(across * READ_ACROSS / (4f * COVER_HALF), (tall - inset) * READ_TALL / (2f * COVER_HALF))
-        readLift = inset / 2f
+        val inset = across * (readInset / max(w, 1f)).coerceIn(0f, 0.3f)
+        readScale = minOf((across - 2f * inset) * READ_ACROSS / (4f * COVER_HALF), tall * READ_TALL / (2f * COVER_HALF))
         // Clear of the frame, shadow and all: the shadow falls this far below
         // the case on the backdrop, where the frame stands taller.
         val wall = tall / 2f * (baseDistance - BACKDROP_Z) / baseDistance
@@ -164,13 +160,12 @@ internal class Camera {
 
     /**
      * The open manual at rest in the middle, on screen, into [out]: its
-     * middle's x, its bottom edge's y, and its width.
+     * middle's x and y, and its height.
      */
     fun readBox(out: FloatArray) {
-        val ppm = scaleAt(0f)
         out[0] = cx
-        out[1] = cy - ppm * (readLift - readScale * COVER_HALF)
-        out[2] = ppm * 4f * COVER_HALF * readScale
+        out[1] = cy
+        out[2] = scaleAt(0f) * 2f * COVER_HALF * readScale
     }
 
     /** Screen pixels per world millimetre at depth [z]. */

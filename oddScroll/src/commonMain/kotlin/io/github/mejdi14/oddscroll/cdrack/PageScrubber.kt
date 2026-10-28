@@ -36,11 +36,16 @@ import kotlin.math.roundToInt
  * - the playhead is 3.94 long, centred, a stroke 1.6 times a tick's, and
  *   follows the finger frame for frame: a 7-tick jump in one frame stops dead
  *   in the next, which no smoothing would allow;
- * - the label is a capsule 5.23 tall, its middle 7.77 up from the axis right
- *   over the playhead, as wide as what it says.
+ * - the label is a capsule 5.23 tall, as wide as what it says.
  *
  * Not in the recording, which never lets go: the playhead settling on its
  * spread once the finger is up, or the book is turned some other way.
+ *
+ * The recording's ruler lies along the bottom; this one stands down the right
+ * edge beside the book, so the book keeps the whole height. Its ticks run top
+ * to bottom, "up" from the axis is left toward the book, and the label sits
+ * level with the playhead on that side, its right end just clear of the
+ * swollen ticks.
  *
  * The ruler runs from the booklet shut on its front to shut on its back, the
  * spreads between; each is a page of the label's count.
@@ -56,18 +61,21 @@ private const val HEAD_DOWN = 1.99f
 private const val STROKE = 0.22f
 private const val HEAD_STROKE = STROKE * 1.6f
 private const val PILL_TALL = 5.23f
-private const val PILL_RISE = 7.77f
+private const val PILL_CLEAR = HEAD_UP + 1.1f
 private const val PILL_PAD = 2.4f
+
+/** About as wide as the label gets, "14 / 14", in dp at the full pitch. */
+private const val PILL_WIDE_DP = 60f
 
 /** About as many ticks as the recording's ruler, a whole number to a page. */
 private const val TICKS = 44f
 
-/** The tick pitch, in dp, at most; narrower under a narrow book. */
+/** The tick pitch, in dp, at most; closer beside a short book. */
 private const val PITCH_DP = 4.5f
 
 /**
- * Between the book and the top of the label, between the ticks and the bottom
- * of the frame, in dp; and how far it rises in.
+ * Between the book and the left of the label, between the ticks and the right
+ * edge of the frame, in dp; and how far it slides in.
  */
 private const val GAP_DP = 6f
 private const val FLOOR_DP = 14f
@@ -77,15 +85,16 @@ private const val RISE_DP = 8f
 private const val SETTLE = 0.2f
 
 /**
- * Frame height the scrubber needs under the book, in dp: the gap, the label,
- * the ticks below the axis and the floor.
+ * Frame width the scrubber needs beside the book, in dp: the gap, the label,
+ * the ticks either side of the axis and the floor. About what the Exit button
+ * needs across the other side, so the book stays in the middle.
  */
-internal val SCRUBBER_ROOM_DP = GAP_DP + FLOOR_DP + (PILL_RISE + PILL_TALL / 2f + HEAD_DOWN) * PITCH_DP
+internal const val SCRUBBER_ROOM_DP = GAP_DP + PILL_WIDE_DP + FLOOR_DP + (PILL_CLEAR + HEAD_DOWN) * PITCH_DP
 
 /** The playhead's red, as near as a camera's white balance gives it back. */
 internal val SCRUBBER_HEAD = Color(0xFFE5303F)
 
-/** A ruler of ticks under the open manual, a playhead dragged along it turning to the page under it. */
+/** A ruler of ticks down the right of the open manual, a playhead dragged along it turning to the page beside it. */
 internal class PageScrubber {
 
     /** Its spreads and the front and back either end. */
@@ -99,11 +108,12 @@ internal class PageScrubber {
     var dragging = false
         private set
 
-    // As last laid out, in pixels.
-    private var left = 0f
+    // As last laid out, in pixels: the first tick's y, the axis's x.
+    private var top = 0f
     private var axis = 0f
     private var pitch = 1f
     private var shown = 0f
+    private var pillWide = 0f
 
     private val last: Int get() = (pages - 1) * perPage
 
@@ -120,45 +130,45 @@ internal class PageScrubber {
     }
 
     /**
-     * Along the bottom of a frame [frameBottom] down, under a book [bookWidth]
-     * wide centred on [centreX]; [shown] from 0 to 1 as the book comes up to
+     * Down the right of a frame [frameRight] wide, beside a book [bookHeight]
+     * tall centred on [centreY]; [shown] from 0 to 1 as the book comes up to
      * be read.
      */
-    fun layout(centreX: Float, frameBottom: Float, bookWidth: Float, density: Float, shown: Float) {
-        // Held up under the finger, though the book shuts and goes down.
+    fun layout(frameRight: Float, centreY: Float, bookHeight: Float, density: Float, shown: Float) {
+        // Held out under the finger, though the book shuts and goes down.
         this.shown = if (dragging) 1f else shown
         if (pages < 2) return
-        pitch = min(PITCH_DP * density, bookWidth * 0.9f / last)
-        left = centreX - last * pitch / 2f
-        axis = frameBottom - FLOOR_DP * density - HEAD_DOWN * pitch +
+        pitch = min(PITCH_DP * density, bookHeight * 0.9f / last)
+        top = centreY - last * pitch / 2f
+        axis = frameRight - FLOOR_DP * density - HEAD_DOWN * pitch +
             (1f - this.shown) * RISE_DP * density
     }
 
     /** Whether [x], [y] is on the ruler or its label, while it shows. */
     fun hit(x: Float, y: Float): Boolean =
         shown > 0.5f && pages > 1 &&
-            x >= left - 3f * pitch && x <= left + (last + 3) * pitch &&
-            y >= axis - (PILL_RISE + PILL_TALL / 2f) * pitch && y <= axis + 4f * pitch
+            y >= top - 3f * pitch && y <= top + (last + 3) * pitch &&
+            x >= axis - PILL_CLEAR * pitch - pillWide && x <= axis + 4f * pitch
 
     /**
-     * The finger down on the ruler, at [x]: the playhead comes to it. The
-     * manual's page under it, -1 shut on its front, its count of spreads shut
+     * The finger down on the ruler, at [y]: the playhead comes to it. The
+     * manual's page beside it, -1 shut on its front, its count of spreads shut
      * on its back.
      */
-    fun press(x: Float): Int {
+    fun press(y: Float): Int {
         dragging = true
-        return follow(x)
+        return follow(y)
     }
 
-    /** The finger moved along the ruler to [x]. The manual's page under the playhead. */
-    fun drag(x: Float): Int = follow(x)
+    /** The finger moved along the ruler to [y]. The manual's page at the playhead. */
+    fun drag(y: Float): Int = follow(y)
 
     fun release() {
         dragging = false
     }
 
-    private fun follow(x: Float): Int {
-        at = ((x - left) / pitch).clamped(0f, last.toFloat())
+    private fun follow(y: Float): Int {
+        at = ((y - top) / pitch).clamped(0f, last.toFloat())
         return page - 1
     }
 
@@ -184,16 +194,16 @@ internal class PageScrubber {
             if (alpha <= 0.004f) continue
             // Round caps reach half a stroke past each end.
             val half = TICK_HALF * (1f + SWELL * g) * pitch - stroke / 2f
-            val x = left + k * pitch
-            drawLine(ink, Offset(x, axis - half), Offset(x, axis + half), stroke, StrokeCap.Round, alpha = alpha)
+            val y = top + k * pitch
+            drawLine(ink, Offset(axis - half, y), Offset(axis + half, y), stroke, StrokeCap.Round, alpha = alpha)
         }
 
-        val x = left + at * pitch
+        val y = top + at * pitch
         val head = HEAD_STROKE * pitch
         drawLine(
             SCRUBBER_HEAD,
-            Offset(x, axis - HEAD_UP * pitch + head / 2f),
-            Offset(x, axis + HEAD_DOWN * pitch - head / 2f),
+            Offset(axis - HEAD_UP * pitch + head / 2f, y),
+            Offset(axis + HEAD_DOWN * pitch - head / 2f, y),
             head,
             StrokeCap.Round,
             alpha = shown,
@@ -205,17 +215,18 @@ internal class PageScrubber {
             TextStyle(color = paper, fontSize = (tall * 0.4f).toSp(), fontWeight = FontWeight.SemiBold),
         )
         val wide = text.size.width + 2f * PILL_PAD * pitch
-        val middle = axis - PILL_RISE * pitch
+        pillWide = wide
+        val right = axis - PILL_CLEAR * pitch
         drawRoundRect(
             ink,
-            topLeft = Offset(x - wide / 2f, middle - tall / 2f),
+            topLeft = Offset(right - wide, y - tall / 2f),
             size = Size(wide, tall),
             cornerRadius = CornerRadius(tall / 2f),
             alpha = shown,
         )
         drawText(
             text,
-            topLeft = Offset(x - text.size.width / 2f, middle - text.size.height / 2f),
+            topLeft = Offset(right - wide / 2f - text.size.width / 2f, y - text.size.height / 2f),
             alpha = shown,
         )
     }

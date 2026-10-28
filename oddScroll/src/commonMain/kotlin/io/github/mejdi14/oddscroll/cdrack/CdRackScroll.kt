@@ -11,8 +11,6 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -161,7 +159,7 @@ fun rememberCdRackScrollState(intro: Int = 4): CdRackScrollState =
  * make room. With a [CdRackItem.manual] behind it, the cover is a
  * booklet: tap it and it folds open over its spine, coming up into the middle
  * as the case goes up out of the way; swipe it, tap a page or scroll to turn
- * its leaves, or drag along the ruler under it to run through them.
+ * its leaves, or drag along the ruler down its right to run through them.
  * [CdRackScrollState.leave] — the system's back, say — shuts the
  * manual, puts the cover back, then the case, and brings the row in again.
  *
@@ -176,8 +174,8 @@ fun rememberCdRackScrollState(intro: Int = 4): CdRackScrollState =
  * @param background the backdrop; the clear plastic is shaded for a pale one.
  * @param contentColor caption text.
  * @param captions say what the case in the slot is, top left.
- * Under the case, Back and a forward button walk it through its steps — shut,
- * open, its cover out, then each spread of the manual.
+ * Back on the left and a forward button on the right walk it through its
+ * steps — shut, open, its cover out, then each spread of the manual.
  *
  * @param inspectLabel the forward button's label on the open case, which takes
  *   its cover out; null for no buttons at all — a host can walk the steps
@@ -188,8 +186,8 @@ fun rememberCdRackScrollState(intro: Int = 4): CdRackScrollState =
  *   read with its [pageScrubber], which shuts it.
  * @param openLabel the forward button's label on the shut case.
  * @param nextLabel the forward button's label from the cover on.
- * @param pageScrubber a ruler under the open manual, a tick to a page, whose
- *   playhead the finger drags from spread to spread.
+ * @param pageScrubber a ruler down the right of the open manual, a tick to a
+ *   page, whose playhead the finger drags from spread to spread.
  * @param state also sets how far the rack slides when it first appears.
  */
 @Composable
@@ -300,12 +298,12 @@ fun CdRackScroll(
                         // Out of the rack, the finger turns the case instead,
                         // and on its manual, the manual's leaves.
                         val out = state.inspecting && state.focus >= FOCUS_SECONDS
-                        // Down on the ruler under the manual, the playhead
+                        // Down on the ruler beside the manual, the playhead
                         // comes to the finger and follows it.
                         val scrubbing = pageScrubber && out && state.case.canRead &&
                             rack.scrubber.hit(down.position.x, down.position.y)
                         if (scrubbing) {
-                            state.case.riffleTo(rack.scrubber.press(down.position.x))
+                            state.case.riffleTo(rack.scrubber.press(down.position.y))
                             down.consume()
                         }
                         val leafing = !scrubbing && out && state.case.canRead &&
@@ -318,7 +316,7 @@ fun CdRackScroll(
                             val change = event.changes.firstOrNull { it.id == down.id } ?: break
                             if (!change.pressed) break
                             if (scrubbing) {
-                                state.case.riffleTo(rack.scrubber.drag(change.position.x))
+                                state.case.riffleTo(rack.scrubber.drag(change.position.y))
                                 change.consume()
                                 continue
                             }
@@ -397,8 +395,9 @@ fun CdRackScroll(
             val w = size.width.toInt()
             val h = size.height.toInt()
             if (frameSize.width != w || frameSize.height != h) frameSize = IntSize(w, h)
-            // Room under the open manual for its ruler.
-            val room = if (pageScrubber) SCRUBBER_ROOM_DP else 0f
+            // Room either side of the open manual: its ruler down the right,
+            // Exit on the left.
+            val room = if (pageScrubber || inspectLabel != null) SCRUBBER_ROOM_DP else 0f
             rack.fit(size.width, size.height, room.dp.toPx())
             rack.draw(this, state, stars, riffle)
             if (pageScrubber) rack.drawScrubber(this, state, measurer, contentColor, background)
@@ -420,21 +419,20 @@ fun CdRackScroll(
                 },
                 background = background,
                 contentColor = contentColor,
-                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp),
             )
         }
     }
 }
 
+/** The way back on the left edge, the way on on the right, each sliding in from its own side. */
 @Composable
-private fun StepButtons(
+private fun BoxScope.StepButtons(
     back: String,
     exit: String?,
     forward: (Int) -> String,
     state: CdRackScrollState,
     background: Color,
     contentColor: Color,
-    modifier: Modifier,
 ) {
     val shown = state.inspecting
     // The case takes its time coming out; the buttons arrive once it has.
@@ -444,20 +442,17 @@ private fun StepButtons(
     )
     val step = state.step
     val more = step < state.lastStep
-    Column(
-        modifier.graphicsLayer {
-            alpha = reveal
-            translationX = (1f - reveal) * 10.dp.toPx()
-        },
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        horizontalAlignment = Alignment.End,
-    ) {
-        if (exit != null && state.case.reading) {
-            StepButton(exit, true, shown, background, contentColor) { state.case.closeManual() }
-        } else {
-            StepButton(back, true, shown, background, contentColor) { state.stepBack() }
-            StepButton(forward(step), more, shown, background, contentColor) { state.stepForward() }
-        }
+    fun Modifier.slideIn(from: Float) = graphicsLayer {
+        alpha = reveal
+        translationX = from * (1f - reveal) * 10.dp.toPx()
+    }
+    val start = Modifier.align(Alignment.CenterStart).padding(start = 16.dp).slideIn(-1f)
+    val end = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp).slideIn(1f)
+    if (exit != null && state.case.reading) {
+        StepButton(exit, true, shown, background, contentColor, start) { state.case.closeManual() }
+    } else {
+        StepButton(back, true, shown, background, contentColor, start) { state.stepBack() }
+        StepButton(forward(step), more, shown, background, contentColor, end) { state.stepForward() }
     }
 }
 
@@ -468,6 +463,7 @@ private fun StepButton(
     shown: Boolean,
     background: Color,
     contentColor: Color,
+    modifier: Modifier,
     onTap: () -> Unit,
 ) {
     val shape = RoundedCornerShape(50)
@@ -481,7 +477,7 @@ private fun StepButton(
             fontWeight = FontWeight.Medium,
             letterSpacing = 1.4.sp,
         ),
-        modifier = Modifier
+        modifier = modifier
             .graphicsLayer { this.alpha = alpha }
             // Only while it shows, or it would take taps meant for the case.
             .then(if (shown && enabled) Modifier.pointerInput(Unit) { detectTapGestures { tap() } } else Modifier)
@@ -514,7 +510,7 @@ private class RackScene(var items: List<CdRackItem>) {
     /** The manual of the case out, once read in. */
     var manual: CdManual? = null
 
-    /** The ruler under the manual, open. */
+    /** The ruler down the right of the manual, open. */
     val scrubber = PageScrubber()
     private val readBox = FloatArray(3)
 
@@ -652,12 +648,12 @@ private class RackScene(var items: List<CdRackItem>) {
         if (chosen != NONE) scene.stars(this, stars, strength = come)
     }
 
-    /** The ruler under the manual of the case out, while it is open to be read. */
+    /** The ruler beside the manual of the case out, while it is open to be read. */
     fun drawScrubber(scope: DrawScope, state: CdRackScrollState, measurer: TextMeasurer, ink: Color, paper: Color) {
         val reading = if (state.chosen != NONE) state.case.readingShown else 0f
         scrubber.setSpreads(if (state.chosen != NONE) state.case.manualSpreads else 0)
         liveCamera.readBox(readBox)
-        scrubber.layout(readBox[0], scope.size.height, readBox[2], scope.density, reading)
+        scrubber.layout(scope.size.width, readBox[1], readBox[2], scope.density, reading)
         scrubber.draw(scope, measurer, ink, paper)
     }
 
