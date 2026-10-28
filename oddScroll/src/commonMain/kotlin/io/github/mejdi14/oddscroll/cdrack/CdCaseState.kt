@@ -330,7 +330,9 @@ class CdCaseState internal constructor() {
      * Turns the manual straight to [page]: -1 shuts it on its front, the
      * count of spreads on its back. A leaf away it is one fold; further, it
      * riffles there. Riffling, it heads on to the new page, and back the
-     * other way from the leaf in the air.
+     * other way from the leaf in the air. A finger dragged along the ruler
+     * asks a page at a time, so a fold still turning the way it goes carries
+     * on as a riffle's first leaf rather than landing at once.
      */
     internal fun riffleTo(page: Int) {
         if (!canRead) return
@@ -339,6 +341,16 @@ class CdCaseState internal constructor() {
         manualPage = to
         if (riffling) {
             if ((to - leafTo).sign != (leafTo - leafFrom).sign) riffleFrom = leafTo
+            riffleEnd = to
+            return
+        }
+        if (abs(leafTo - leafFrom) == 1 && (to - leafTo).sign == (leafTo - leafFrom).sign) {
+            // Sped up to a riffle's slowest leaf, as far over as it was.
+            val over = ((t - leafAt) / leafT).clamped(0f, 1f)
+            leafT = RIFFLE_SLOW
+            leafAt = t - over * leafT
+            riffling = true
+            riffleFrom = leafFrom
             riffleEnd = to
             return
         }
