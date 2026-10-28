@@ -143,9 +143,6 @@ private const val EXIT_STAGGER_PLACES = 8
 
 private const val TAP_SLOP = 8f
 
-/** The step buttons' height off the bottom of the frame, in dp, padding and all. */
-private const val BUTTONS_ROOM_DP = 62f
-
 /** A drag across an open manual this long, in dp, turns a leaf. */
 private const val LEAF_SWIPE = 24f
 
@@ -396,8 +393,8 @@ fun CdRackScroll(
             val w = size.width.toInt()
             val h = size.height.toInt()
             if (frameSize.width != w || frameSize.height != h) frameSize = IntSize(w, h)
-            // Room under the open manual for its ruler, and the buttons under that.
-            val room = if (pageScrubber) SCRUBBER_ROOM_DP + (if (inspectLabel != null) BUTTONS_ROOM_DP else 0f) else 0f
+            // Room under the open manual for its ruler.
+            val room = if (pageScrubber) SCRUBBER_ROOM_DP else 0f
             rack.fit(size.width, size.height, room.dp.toPx())
             rack.draw(this, state, stars)
             if (pageScrubber) rack.drawScrubber(this, state, measurer, contentColor, background)
@@ -417,7 +414,7 @@ fun CdRackScroll(
                 },
                 background = background,
                 contentColor = contentColor,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp),
+                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp),
             )
         }
     }
@@ -440,12 +437,13 @@ private fun StepButtons(
     )
     val step = state.step
     val more = step < state.lastStep
-    Row(
+    Column(
         modifier.graphicsLayer {
             alpha = reveal
-            translationY = (1f - reveal) * 10.dp.toPx()
+            translationX = (1f - reveal) * 10.dp.toPx()
         },
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalAlignment = Alignment.End,
     ) {
         StepButton(back, true, shown, background, contentColor) { state.stepBack() }
         StepButton(forward(step), more, shown, background, contentColor) { state.stepForward() }
