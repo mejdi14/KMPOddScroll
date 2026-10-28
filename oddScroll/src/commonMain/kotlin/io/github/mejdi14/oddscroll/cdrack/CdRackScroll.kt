@@ -184,6 +184,8 @@ fun rememberCdRackScrollState(intro: Int = 4): CdRackScrollState =
  *   itself off [CdRackScrollState.step], [CdRackScrollState.stepForward] and
  *   [CdRackScrollState.stepBack].
  * @param backLabel the back button's label.
+ * @param exitLabel the one button's label while the manual is open to be
+ *   read with its [pageScrubber], which shuts it.
  * @param openLabel the forward button's label on the shut case.
  * @param nextLabel the forward button's label from the cover on.
  * @param pageScrubber a ruler under the open manual, a tick to a page, whose
@@ -201,6 +203,7 @@ fun CdRackScroll(
     backLabel: String = "Back",
     openLabel: String = "Open",
     nextLabel: String = "Next",
+    exitLabel: String = "Exit",
     pageScrubber: Boolean = true,
     state: CdRackScrollState = rememberCdRackScrollState(),
 ) {
@@ -301,7 +304,7 @@ fun CdRackScroll(
                         val scrubbing = pageScrubber && out && state.case.canRead &&
                             rack.scrubber.hit(down.position.x, down.position.y)
                         if (scrubbing) {
-                            state.case.openAt(rack.scrubber.press(down.position.x))
+                            state.case.turnStraightTo(rack.scrubber.press(down.position.x))
                             down.consume()
                         }
                         val leafing = !scrubbing && out && state.case.canRead &&
@@ -314,7 +317,7 @@ fun CdRackScroll(
                             val change = event.changes.firstOrNull { it.id == down.id } ?: break
                             if (!change.pressed) break
                             if (scrubbing) {
-                                state.case.openAt(rack.scrubber.drag(change.position.x))
+                                state.case.turnStraightTo(rack.scrubber.drag(change.position.x))
                                 change.consume()
                                 continue
                             }
@@ -404,6 +407,8 @@ fun CdRackScroll(
         if (inspectLabel != null) {
             StepButtons(
                 back = backLabel,
+                // Open to be read, the ruler turns the pages: the one way on is out.
+                exit = if (pageScrubber) exitLabel else null,
                 state = state,
                 forward = { step ->
                     when (step) {
@@ -423,6 +428,7 @@ fun CdRackScroll(
 @Composable
 private fun StepButtons(
     back: String,
+    exit: String?,
     forward: (Int) -> String,
     state: CdRackScrollState,
     background: Color,
@@ -445,8 +451,12 @@ private fun StepButtons(
         verticalArrangement = Arrangement.spacedBy(12.dp),
         horizontalAlignment = Alignment.End,
     ) {
-        StepButton(back, true, shown, background, contentColor) { state.stepBack() }
-        StepButton(forward(step), more, shown, background, contentColor) { state.stepForward() }
+        if (exit != null && state.case.reading) {
+            StepButton(exit, true, shown, background, contentColor) { state.case.closeManual() }
+        } else {
+            StepButton(back, true, shown, background, contentColor) { state.stepBack() }
+            StepButton(forward(step), more, shown, background, contentColor) { state.stepForward() }
+        }
     }
 }
 
@@ -643,10 +653,10 @@ private class RackScene(var items: List<CdRackItem>) {
 
     /** The ruler under the manual of the case out, while it is open to be read. */
     fun drawScrubber(scope: DrawScope, state: CdRackScrollState, measurer: TextMeasurer, ink: Color, paper: Color) {
-        val reading = if (state.chosen != NONE) state.case.reading else 0f
+        val reading = if (state.chosen != NONE) state.case.readingShown else 0f
         scrubber.setSpreads(if (state.chosen != NONE) state.case.manualSpreads else 0)
         liveCamera.readBox(readBox)
-        scrubber.layout(readBox[0], readBox[1], readBox[2], scope.density, reading)
+        scrubber.layout(readBox[0], scope.size.height, readBox[2], scope.density, reading)
         scrubber.draw(scope, measurer, ink, paper)
     }
 

@@ -41,6 +41,9 @@ import kotlin.math.roundToInt
  *
  * Not in the recording, which never lets go: the playhead settling on its
  * spread once the finger is up, or the book is turned some other way.
+ *
+ * The ruler runs from the booklet shut on its front to shut on its back, the
+ * spreads between; each is a page of the label's count.
  */
 private const val TICK_HALF = 1.075f
 private const val SWELL = 0.668f
@@ -56,33 +59,38 @@ private const val PILL_TALL = 5.23f
 private const val PILL_RISE = 7.77f
 private const val PILL_PAD = 2.4f
 
-/** About as many ticks as the recording's ruler, a whole number to a spread. */
+/** About as many ticks as the recording's ruler, a whole number to a page. */
 private const val TICKS = 44f
 
 /** The tick pitch, in dp, at most; narrower under a narrow book. */
-private const val PITCH_DP = 6.5f
+private const val PITCH_DP = 4.5f
 
-/** Between the book and the top of the label, in dp; and how far it rises in. */
-private const val GAP_DP = 12f
-private const val RISE_DP = 10f
+/**
+ * Between the book and the top of the label, between the ticks and the bottom
+ * of the frame, in dp; and how far it rises in.
+ */
+private const val GAP_DP = 6f
+private const val FLOOR_DP = 14f
+private const val RISE_DP = 8f
 
 /** How fast the playhead settles on its spread, a frame at 60Hz. */
 private const val SETTLE = 0.2f
 
 /**
  * Frame height the scrubber needs under the book, in dp: the gap, the label,
- * the ticks below the axis and a gap again.
+ * the ticks below the axis and the floor.
  */
-internal val SCRUBBER_ROOM_DP = 2f * GAP_DP + (PILL_RISE + PILL_TALL / 2f + HEAD_DOWN) * PITCH_DP
+internal val SCRUBBER_ROOM_DP = GAP_DP + FLOOR_DP + (PILL_RISE + PILL_TALL / 2f + HEAD_DOWN) * PITCH_DP
 
 /** The playhead's red, as near as a camera's white balance gives it back. */
 internal val SCRUBBER_HEAD = Color(0xFFE5303F)
 
-/** A ruler of ticks under the open manual, a playhead dragged along it turning to the spread under it. */
+/** A ruler of ticks under the open manual, a playhead dragged along it turning to the page under it. */
 internal class PageScrubber {
 
-    private var spreads = 0
-    private var perSpread = 1
+    /** Its spreads and the front and back either end. */
+    private var pages = 0
+    private var perPage = 1
 
     /** Where the playhead is, in ticks from the first. */
     private var at = 0f
@@ -97,44 +105,52 @@ internal class PageScrubber {
     private var pitch = 1f
     private var shown = 0f
 
-    private val last: Int get() = (spreads - 1) * perSpread
+    private val last: Int get() = (pages - 1) * perPage
 
-    /** The spread under the playhead. */
-    private val spread: Int get() = (at / perSpread).roundToInt()
+    /** The page under the playhead, 0 the front. */
+    private val page: Int get() = (at / perPage).roundToInt()
 
-    fun setSpreads(count: Int) {
-        if (count == spreads) return
-        spreads = count
-        perSpread = if (count > 1) max(1, (TICKS / (count - 1)).roundToInt()) else 1
+    /** A manual of [spreads], none for no ruler. */
+    fun setSpreads(spreads: Int) {
+        val count = if (spreads > 0) spreads + 2 else 0
+        if (count == pages) return
+        pages = count
+        perPage = if (count > 1) max(1, (TICKS / (count - 1)).roundToInt()) else 1
         placed = false
     }
 
     /**
-     * Under a book [bookWidth] wide, centred on [centreX], its bottom edge at
-     * [bookBottom]; [shown] from 0 to 1 as the book comes up to be read.
+     * Along the bottom of a frame [frameBottom] down, under a book [bookWidth]
+     * wide centred on [centreX]; [shown] from 0 to 1 as the book comes up to
+     * be read.
      */
-    fun layout(centreX: Float, bookBottom: Float, bookWidth: Float, density: Float, shown: Float) {
-        this.shown = shown
-        if (spreads < 2) return
+    fun layout(centreX: Float, frameBottom: Float, bookWidth: Float, density: Float, shown: Float) {
+        // Held up under the finger, though the book shuts and goes down.
+        this.shown = if (dragging) 1f else shown
+        if (pages < 2) return
         pitch = min(PITCH_DP * density, bookWidth * 0.9f / last)
         left = centreX - last * pitch / 2f
-        axis = bookBottom + GAP_DP * density + (PILL_RISE + PILL_TALL / 2f) * pitch +
-            (1f - shown) * RISE_DP * density
+        axis = frameBottom - FLOOR_DP * density - HEAD_DOWN * pitch +
+            (1f - this.shown) * RISE_DP * density
     }
 
     /** Whether [x], [y] is on the ruler or its label, while it shows. */
     fun hit(x: Float, y: Float): Boolean =
-        shown > 0.5f && spreads > 1 &&
+        shown > 0.5f && pages > 1 &&
             x >= left - 3f * pitch && x <= left + (last + 3) * pitch &&
             y >= axis - (PILL_RISE + PILL_TALL / 2f) * pitch && y <= axis + 4f * pitch
 
-    /** The finger down on the ruler, at [x]: the playhead comes to it. The spread under it. */
+    /**
+     * The finger down on the ruler, at [x]: the playhead comes to it. The
+     * manual's page under it, -1 shut on its front, its count of spreads shut
+     * on its back.
+     */
     fun press(x: Float): Int {
         dragging = true
         return follow(x)
     }
 
-    /** The finger moved along the ruler to [x]. The spread under the playhead. */
+    /** The finger moved along the ruler to [x]. The manual's page under the playhead. */
     fun drag(x: Float): Int = follow(x)
 
     fun release() {
@@ -143,13 +159,13 @@ internal class PageScrubber {
 
     private fun follow(x: Float): Int {
         at = ((x - left) / pitch).clamped(0f, last.toFloat())
-        return spread
+        return page - 1
     }
 
-    /** With the finger up, the playhead goes to [page], the spread the book is at. */
-    fun advance(deltaMs: Float, page: Int) {
-        if (spreads < 2) return
-        val target = (page.coerceIn(0, spreads - 1) * perSpread).toFloat()
+    /** With the finger up, the playhead goes to [manualPage], -1 to the count of spreads, where the book is. */
+    fun advance(deltaMs: Float, manualPage: Int) {
+        if (pages < 2) return
+        val target = ((manualPage + 1).coerceIn(0, pages - 1) * perPage).toFloat()
         // Hidden, it waits at the spread the book will open on.
         if (!placed || shown <= 0f) {
             at = target
@@ -159,7 +175,7 @@ internal class PageScrubber {
     }
 
     fun draw(scope: DrawScope, measurer: TextMeasurer, ink: Color, paper: Color) = with(scope) {
-        if (shown <= 0f || spreads < 2) return
+        if (shown <= 0f || pages < 2) return
         val stroke = STROKE * pitch
         for (k in 0..last) {
             val g = swell(k - at)
@@ -185,7 +201,7 @@ internal class PageScrubber {
 
         val tall = PILL_TALL * pitch
         val text = measurer.measure(
-            "${spread + 1} / $spreads",
+            "${page + 1} / $pages",
             TextStyle(color = paper, fontSize = (tall * 0.4f).toSp(), fontWeight = FontWeight.SemiBold),
         )
         val wide = text.size.width + 2f * PILL_PAD * pitch

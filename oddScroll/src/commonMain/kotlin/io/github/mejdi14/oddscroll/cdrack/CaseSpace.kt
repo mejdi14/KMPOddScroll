@@ -102,7 +102,7 @@ internal class Camera {
 
     /**
      * Pixels kept clear along the bottom of the frame for the open manual —
-     * its scrubber, the buttons under it — and how far up it stands for them,
+     * its scrubber — and how far up it stands for it,
      * in millimetres.
      */
     var readInset = 0f

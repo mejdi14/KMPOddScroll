@@ -306,13 +306,19 @@ class CdCaseState internal constructor() {
         turnTo((leafTo + by.sign).coerceIn(-1, manualSpreads))
     }
 
-    /** Turns the open manual straight to [spread], in one fold from wherever it is heading. */
-    internal fun openAt(spread: Int) {
-        if (canRead && manualOpen && leafTo < manualSpreads) turnTo(spread.coerceIn(0, manualSpreads - 1))
+    /**
+     * Turns the manual straight to [page], in one fold from wherever it is
+     * heading: -1 shuts it on its front, the count of spreads on its back.
+     */
+    internal fun turnStraightTo(page: Int) {
+        if (canRead) turnTo(page.coerceIn(-1, manualSpreads))
     }
 
+    /** Whether the manual is open at a spread, or turning to one, to be read. */
+    internal val reading: Boolean get() = canRead && manualPage in 0 until manualSpreads
+
     /** How far the manual has come up to be read, from 0 under the case to 1 open in the middle. */
-    internal val reading: Float get() = if (canRead) read() else 0f
+    internal val readingShown: Float get() = if (canRead) read() else 0f
 
     /** Shuts the cover's manual onto its front in one fold, from wherever it is open. */
     fun closeManual() {
