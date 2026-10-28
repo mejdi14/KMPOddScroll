@@ -136,7 +136,7 @@ private const val LIFT_GONE = 1.002f
  * this many places out; past it they are off the frame anyway. The last of
  * them has to be gone by [FOCUS_SECONDS], where the clock stops.
  */
-private const val EXIT_STAGGER = 0.12f
+private const val EXIT_STAGGER = 0.03f
 private const val EXIT_STAGGER_PLACES = 8
 
 private const val TAP_SLOP = 8f
