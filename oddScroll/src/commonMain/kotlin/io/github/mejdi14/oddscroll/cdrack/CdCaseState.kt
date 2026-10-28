@@ -306,6 +306,14 @@ class CdCaseState internal constructor() {
         turnTo((leafTo + by.sign).coerceIn(-1, manualSpreads))
     }
 
+    /** Turns the open manual straight to [spread], in one fold from wherever it is heading. */
+    internal fun openAt(spread: Int) {
+        if (canRead && manualOpen && leafTo < manualSpreads) turnTo(spread.coerceIn(0, manualSpreads - 1))
+    }
+
+    /** How far the manual has come up to be read, from 0 under the case to 1 open in the middle. */
+    internal val reading: Float get() = if (canRead) read() else 0f
+
     /** Shuts the cover's manual onto its front in one fold, from wherever it is open. */
     fun closeManual() {
         if (cover == Cover.Out) turnTo(-1)
@@ -568,7 +576,7 @@ class CdCaseState internal constructor() {
         val read = read()
         val sway = 1f - 0.7f * read
         rest.x = lerp(camera.pairAside, 0f, read)
-        rest.y = lerp(-camera.pairDrop, 0f, read) + 1.2f * sway * sin(t * 0.95f + 1.3f)
+        rest.y = lerp(-camera.pairDrop, camera.readLift, read) + 1.2f * sway * sin(t * 0.95f + 1.3f)
         rest.z = 0f
         rest.pitch = (-0.04f + 0.035f * sin(t * 0.6f + 0.8f)) * sway
         rest.yaw = 0.06f * sway * sin(t * 0.75f + 2.1f)

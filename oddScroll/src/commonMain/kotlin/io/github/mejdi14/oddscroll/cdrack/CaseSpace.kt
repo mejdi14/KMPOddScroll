@@ -100,13 +100,24 @@ internal class Camera {
     var readRise = 0f
         private set
 
+    /**
+     * Pixels kept clear along the bottom of the frame for the open manual —
+     * its scrubber, the buttons under it — and how far up it stands for them,
+     * in millimetres.
+     */
+    var readInset = 0f
+    var readLift = 0f
+        private set
+    private var fittedInset = -1f
+
     private val cx get() = width / 2f
     private val cy get() = height / 2f
 
     fun fit(w: Float, h: Float) {
-        if (w == width && h == height) return
+        if (w == width && h == height && readInset == fittedInset) return
         width = w
         height = h
+        fittedInset = readInset
         val tanHalf = tan(FOV_DEGREES / 2f / 180f * kotlin.math.PI.toFloat())
         val aspect = w / max(h, 1f)
         baseFocal = h / 2f / tanHalf
@@ -132,7 +143,9 @@ internal class Camera {
             pairShift = 0f
             pairAside = 0f
         }
-        readScale = minOf(across * READ_ACROSS / (4f * COVER_HALF), tall * READ_TALL / (2f * COVER_HALF))
+        val inset = tall * (readInset / max(h, 1f)).coerceIn(0f, 0.5f)
+        readScale = minOf(across * READ_ACROSS / (4f * COVER_HALF), (tall - inset) * READ_TALL / (2f * COVER_HALF))
+        readLift = inset / 2f
         // Clear of the frame, shadow and all: the shadow falls this far below
         // the case on the backdrop, where the frame stands taller.
         val wall = tall / 2f * (baseDistance - BACKDROP_Z) / baseDistance
@@ -147,6 +160,17 @@ internal class Camera {
         out[at] = cx + focal * x / w
         out[at + 1] = cy - focal * y / w
         return true
+    }
+
+    /**
+     * The open manual at rest in the middle, on screen, into [out]: its
+     * middle's x, its bottom edge's y, and its width.
+     */
+    fun readBox(out: FloatArray) {
+        val ppm = scaleAt(0f)
+        out[0] = cx
+        out[1] = cy - ppm * (readLift - readScale * COVER_HALF)
+        out[2] = ppm * 4f * COVER_HALF * readScale
     }
 
     /** Screen pixels per world millimetre at depth [z]. */

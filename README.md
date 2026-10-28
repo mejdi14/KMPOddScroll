@@ -286,6 +286,10 @@ leaves — each turn is one fold of the leaf over the spine, its back mirrored
 onto it, after a sketchbook from another project of mine. Each spread is a
 picture of the booklet lying open, a page either side of its middle, and the
 last leaf shuts it on its back, which is also what the cover shows from behind.
+Under the open booklet sits a ruler, a tick to a fraction of a page: drag its
+red playhead and the booklet runs through its spreads under the finger, the
+ticks swelling and darkening around the playhead and the page riding above it
+in a capsule. Its proportions are measured off a recording of a time scrubber.
 `CdRackScrollState.leave()` (the demo wires it to the system's back)
 shuts the manual if it is open, slides the cover back up into the lid if it is
 out, shuts the case if it is open, turns it back into the rack and brings the
@@ -342,6 +346,7 @@ CdRackScroll(
 | `contentColor` | `#111114` | caption text |
 | `captions` | `true` | title and artist of the case in the slot |
 | `inspectLabel` | `"Inspect"` | the forward button's label on the open case, which takes its cover out; `null` for no step buttons at all |
+| `pageScrubber` | `true` | the ruler under the open manual whose playhead drags it from spread to spread; the manual stands higher to make room for it |
 | `backLabel`, `openLabel`, `nextLabel` | `"Back"`, `"Open"`, `"Next"` | the other labels of the Back and forward buttons that walk the case out through its steps |
 | `state` | intro of `4` | `rememberCdRackScrollState(intro)` — cases slid on first show; `0` opens at rest |
 

@@ -40,6 +40,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalGraphicsContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -141,6 +143,9 @@ private const val EXIT_STAGGER_PLACES = 8
 
 private const val TAP_SLOP = 8f
 
+/** The step buttons' height off the bottom of the frame, in dp, padding and all. */
+private const val BUTTONS_ROOM_DP = 62f
+
 /** A drag across an open manual this long, in dp, turns a leaf. */
 private const val LEAF_SWIPE = 24f
 
@@ -159,7 +164,8 @@ fun rememberCdRackScrollState(intro: Int = 4): CdRackScrollState =
  * make room. With a [CdRackItem.manual] behind it, the cover is a
  * booklet: tap it and it folds open over its spine, coming up into the middle
  * as the case goes up out of the way; swipe it, tap a page or scroll to turn
- * its leaves. [CdRackScrollState.leave] — the system's back, say — shuts the
+ * its leaves, or drag along the ruler under it to run through them.
+ * [CdRackScrollState.leave] — the system's back, say — shuts the
  * manual, puts the cover back, then the case, and brings the row in again.
  *
  * Each case is the same 3D case as [CdCase], drawn once at the rack's turn and
@@ -183,6 +189,8 @@ fun rememberCdRackScrollState(intro: Int = 4): CdRackScrollState =
  * @param backLabel the back button's label.
  * @param openLabel the forward button's label on the shut case.
  * @param nextLabel the forward button's label from the cover on.
+ * @param pageScrubber a ruler under the open manual, a tick to a page, whose
+ *   playhead the finger drags from spread to spread.
  * @param state also sets how far the rack slides when it first appears.
  */
 @Composable
@@ -196,6 +204,7 @@ fun CdRackScroll(
     backLabel: String = "Back",
     openLabel: String = "Open",
     nextLabel: String = "Next",
+    pageScrubber: Boolean = true,
     state: CdRackScrollState = rememberCdRackScrollState(),
 ) {
     if (items.isEmpty()) {
@@ -214,14 +223,16 @@ fun CdRackScroll(
     val graphics = LocalGraphicsContext.current
     val layerDensity = LocalDensity.current
     val direction = LocalLayoutDirection.current
+    val measurer = rememberTextMeasurer()
 
-    LaunchedEffect(state) {
+    LaunchedEffect(state, rack) {
         var previous = 0L
         while (true) {
             withFrameNanos { now ->
                 val deltaMs = if (previous == 0L) 16.67f else (now - previous) / 1_000_000f
                 previous = now
                 state.advance(deltaMs.clamped(1f, 50f))
+                rack.scrubber.advance(deltaMs.clamped(1f, 50f), state.case.manualPage)
             }
         }
     }
@@ -288,7 +299,15 @@ fun CdRackScroll(
                         // Out of the rack, the finger turns the case instead,
                         // and on its manual, the manual's leaves.
                         val out = state.inspecting && state.focus >= FOCUS_SECONDS
-                        val leafing = out && state.case.canRead &&
+                        // Down on the ruler under the manual, the playhead
+                        // comes to the finger and follows it.
+                        val scrubbing = pageScrubber && out && state.case.canRead &&
+                            rack.scrubber.hit(down.position.x, down.position.y)
+                        if (scrubbing) {
+                            state.case.openAt(rack.scrubber.press(down.position.x))
+                            down.consume()
+                        }
+                        val leafing = !scrubbing && out && state.case.canRead &&
                             rack.scene.bookSide(down.position.x, down.position.y) != 0
                         var swept = 0f
                         var lastMillis = down.uptimeMillis
@@ -297,6 +316,11 @@ fun CdRackScroll(
                             if (event.type == PointerEventType.Release) break
                             val change = event.changes.firstOrNull { it.id == down.id } ?: break
                             if (!change.pressed) break
+                            if (scrubbing) {
+                                state.case.openAt(rack.scrubber.drag(change.position.x))
+                                change.consume()
+                                continue
+                            }
                             lastMillis = change.uptimeMillis
                             val dx = change.position.x - last.x
                             val dy = change.position.y - last.y
@@ -322,7 +346,9 @@ fun CdRackScroll(
                                 change.consume()
                             }
                         }
-                        if (started) {
+                        if (scrubbing) {
+                            rack.scrubber.release()
+                        } else if (started) {
                             if (leafing) {
                                 // Left turns on, as a page is turned.
                                 if (abs(swept) >= LEAF_SWIPE * density) state.case.turnPage(if (swept < 0f) 1 else -1)
@@ -370,8 +396,11 @@ fun CdRackScroll(
             val w = size.width.toInt()
             val h = size.height.toInt()
             if (frameSize.width != w || frameSize.height != h) frameSize = IntSize(w, h)
-            rack.fit(size.width, size.height)
+            // Room under the open manual for its ruler, and the buttons under that.
+            val room = if (pageScrubber) SCRUBBER_ROOM_DP + (if (inspectLabel != null) BUTTONS_ROOM_DP else 0f) else 0f
+            rack.fit(size.width, size.height, room.dp.toPx())
             rack.draw(this, state, stars)
+            if (pageScrubber) rack.drawScrubber(this, state, measurer, contentColor, background)
         }
 
         if (captions) Caption(items, state, contentColor)
@@ -476,6 +505,10 @@ private class RackScene(var items: List<CdRackItem>) {
     /** The manual of the case out, once read in. */
     var manual: CdManual? = null
 
+    /** The ruler under the manual, open. */
+    val scrubber = PageScrubber()
+    private val readBox = FloatArray(3)
+
     val sprites = arrayOfNulls<ImageBitmap>(items.size)
     var box: SpriteBox? = null
     @kotlin.concurrent.Volatile
@@ -504,12 +537,13 @@ private class RackScene(var items: List<CdRackItem>) {
     private val exitX = FloatArray(2)
     private val exitY = FloatArray(2)
 
-    fun fit(w: Float, h: Float) {
+    fun fit(w: Float, h: Float, readInset: Float = liveCamera.readInset) {
+        liveCamera.readInset = readInset
+        liveCamera.fit(w, h)
         if (w == width && h == height) return
         width = w
         height = h
         rackCamera.fit(w, h)
-        liveCamera.fit(w, h)
         // The face as wide on screen as the reference's tapes.
         val facePx = min(w * 0.4f, h * 0.36f)
         rackScale = facePx / (CASE_MM * FACE_ACROSS * rackCamera.scaleAt(0f))
@@ -607,6 +641,15 @@ private class RackScene(var items: List<CdRackItem>) {
         // The rack's cases are drawn without them; the one out comes into
         // its stars as it comes out.
         if (chosen != NONE) scene.stars(this, stars, strength = come)
+    }
+
+    /** The ruler under the manual of the case out, while it is open to be read. */
+    fun drawScrubber(scope: DrawScope, state: CdRackScrollState, measurer: TextMeasurer, ink: Color, paper: Color) {
+        val reading = if (state.chosen != NONE) state.case.reading else 0f
+        scrubber.setSpreads(if (state.chosen != NONE) state.case.manualSpreads else 0)
+        liveCamera.readBox(readBox)
+        scrubber.layout(readBox[0], readBox[1], readBox[2], scope.density, reading)
+        scrubber.draw(scope, measurer, ink, paper)
     }
 
     /** The top-left of the sprite of a case [w] places from the slot, into [at]. */
