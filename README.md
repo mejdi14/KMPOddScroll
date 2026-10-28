@@ -592,4 +592,5 @@ whole: its `front` and `back` at 720 px squares, and five `spread`s of it lying
 open at 1440 × 720, ten interior pages from the PAL and NTSC scans of
 [Emu-Land](https://www.emu-land.net/library/manuals/psx) and the PS1 RPG manuals
 collection. The manuals belong to each game's publisher, under the same
-terms as the disc labels.
+terms as the disc labels. Metal Gear Solid's is an expanded manual of
+thirteen spreads, twenty-six pages, scaled down the same way.

@@ -46,7 +46,8 @@ import org.jetbrains.compose.resources.imageResource
  * the system's back puts it back before it leaves the demo.
  *
  * The manual is pictured whole: its front and back, and five spreads of it
- * lying open, read in only for the case that is out.
+ * lying open (Metal Gear Solid's runs to thirteen), read in only for the
+ * case that is out.
  * Credits are in the README.
  */
 @OptIn(ExperimentalComposeUiApi::class)
@@ -81,7 +82,7 @@ fun CdRackDemoScreen() {
             title = "Metal Gear Solid",
             artist = "Konami",
             cover = imageResource(Res.drawable.ps1_manual_metal_gear_solid_front),
-            manual = manual("metal_gear_solid"),
+            manual = manual("metal_gear_solid", spreads = 13),
         ),
         CdRackItem(
             image = imageResource(Res.drawable.ps1_disc_crash_bandicoot),
@@ -139,13 +140,13 @@ private const val MANUAL_SPREADS = 5
 
 /** A game's manual behind its front, `ps1_manual_<game>_spread_1` on and its back, decoded when asked for. */
 @OptIn(ExperimentalResourceApi::class)
-private fun manual(game: String): suspend () -> CdManual = {
+private fun manual(game: String, spreads: Int = MANUAL_SPREADS): suspend () -> CdManual = {
     val environment = getSystemResourceEnvironment()
     suspend fun read(name: String): ImageBitmap =
         getDrawableResourceBytes(environment, Res.allDrawableResources.getValue("ps1_manual_${game}_$name"))
             .decodeToImageBitmap()
     CdManual(
-        spreads = (1..MANUAL_SPREADS).map { read("spread_$it") },
+        spreads = (1..spreads).map { read("spread_$it") },
         back = read("back"),
     )
 }
