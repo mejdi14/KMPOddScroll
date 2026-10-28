@@ -219,6 +219,7 @@ fun CdRackScroll(
     val rack = remember(items.map { it.image }, items.map { it.cover }) { RackScene(items) }
     rack.items = items
     val stars = rememberGraphicsLayer()
+    val riffle = rememberGraphicsLayer()
     var frameSize by remember { mutableStateOf(IntSize.Zero) }
     val graphics = LocalGraphicsContext.current
     val layerDensity = LocalDensity.current
@@ -304,7 +305,7 @@ fun CdRackScroll(
                         val scrubbing = pageScrubber && out && state.case.canRead &&
                             rack.scrubber.hit(down.position.x, down.position.y)
                         if (scrubbing) {
-                            state.case.turnStraightTo(rack.scrubber.press(down.position.x))
+                            state.case.riffleTo(rack.scrubber.press(down.position.x))
                             down.consume()
                         }
                         val leafing = !scrubbing && out && state.case.canRead &&
@@ -317,7 +318,7 @@ fun CdRackScroll(
                             val change = event.changes.firstOrNull { it.id == down.id } ?: break
                             if (!change.pressed) break
                             if (scrubbing) {
-                                state.case.turnStraightTo(rack.scrubber.drag(change.position.x))
+                                state.case.riffleTo(rack.scrubber.drag(change.position.x))
                                 change.consume()
                                 continue
                             }
@@ -399,7 +400,7 @@ fun CdRackScroll(
             // Room under the open manual for its ruler.
             val room = if (pageScrubber) SCRUBBER_ROOM_DP else 0f
             rack.fit(size.width, size.height, room.dp.toPx())
-            rack.draw(this, state, stars)
+            rack.draw(this, state, stars, riffle)
             if (pageScrubber) rack.drawScrubber(this, state, measurer, contentColor, background)
         }
 
@@ -591,8 +592,8 @@ private class RackScene(var items: List<CdRackItem>) {
         out[2] = s * w * SPACING_MM * AXIS[2]
     }
 
-    /** The rack, and the case out of it with [stars] over it. */
-    fun draw(scope: DrawScope, state: CdRackScrollState, stars: GraphicsLayer) = with(scope) {
+    /** The rack, and the case out of it with [stars] over it, its manual riffling through [riffle]. */
+    fun draw(scope: DrawScope, state: CdRackScrollState, stars: GraphicsLayer, riffle: GraphicsLayer) = with(scope) {
         val position = state.position
         val count = items.size
         val focus = state.focus
@@ -622,7 +623,7 @@ private class RackScene(var items: List<CdRackItem>) {
         // Back of the row first: each case covers the one behind it.
         for (i in last downTo first) {
             if (i == chosen) {
-                scene.draw(this, liveCamera, livePose, shadow = come, cover = loose, book = book)
+                scene.draw(this, liveCamera, livePose, shadow = come, cover = loose, book = book, riffleLayer = riffle)
                 continue
             }
             val sprite = sprites[wrapCase(i, count)] ?: continue

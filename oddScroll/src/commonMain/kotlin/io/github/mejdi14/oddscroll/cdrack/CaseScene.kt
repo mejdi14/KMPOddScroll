@@ -3,6 +3,7 @@ package io.github.mejdi14.oddscroll.cdrack
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
@@ -10,6 +11,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.withTransform
@@ -71,6 +73,9 @@ internal class CaseScene {
 
     /** Drawing the sparks for [stars]: the rods' sparks, and all that is opaque in black. */
     private var sparking = false
+
+    /** What the manual is drawn into to be blurred as it riffles, this frame. */
+    private var riffleLayer: GraphicsLayer? = null
 
     /** The spine's two ends and a point right of it on screen, as last drawn. */
     private val spineHull = FloatArray(6)
@@ -142,7 +147,8 @@ internal class CaseScene {
     /**
      * Draws the case at [pose] through [camera], its shadow on the backdrop at
      * [shadow] of its strength; with [cover], the cover is out of the lid and
-     * stands there on its own, the front of [book] if it has one.
+     * stands there on its own, the front of [book] if it has one. Riffling,
+     * the book is drawn through [riffleLayer], smeared the way it turns.
      */
     fun draw(
         scope: DrawScope,
@@ -151,6 +157,7 @@ internal class CaseScene {
         shadow: Float = 1f,
         cover: CasePose? = null,
         book: BookPose? = null,
+        riffleLayer: GraphicsLayer? = null,
     ) = with(scope) {
         if (size.width <= 0f || size.height <= 0f) return@with
         this@CaseScene.camera = camera
@@ -162,6 +169,7 @@ internal class CaseScene {
         if (cover != null) placeLoose(cover)
         val manual = if (coverLoose && book != null && book.spreads > 0) book else null
         this@CaseScene.book = manual
+        this@CaseScene.riffleLayer = riffleLayer
         footprint = if (manual == null) 1f else lerp(manual.across(manual.from), manual.across(manual.to), manual.turn)
 
         // The shadows land on the backdrop, behind everything.
@@ -218,7 +226,31 @@ internal class CaseScene {
         }
         // Out of the lid, the cover is in front of the case all the way.
         val manual = book
-        if (manual != null) drawBook(manual) else if (coverLoose) insert(loose, 0f, facing(loose))
+        if (manual != null) riffledBook(manual) else if (coverLoose) insert(loose, 0f, facing(loose))
+    }
+
+    /**
+     * The manual, smeared sideways while it riffles, after the sketchbook's
+     * motion blur: none until a quarter of the run's top speed, then
+     * growing to as wide, against the book, as the sketchbook's widest.
+     */
+    private fun DrawScope.riffledBook(b: BookPose) {
+        val layer = riffleLayer
+        val fast = ((b.riffle - RIFFLE_BLUR_FROM) / (RIFFLE_BLUR_FULL - RIFFLE_BLUR_FROM)).clamped(0f, 1f)
+        // Half a spread across, from the spine as last drawn.
+        val half = sqrt(
+            (spineHull[4] - spineHull[0]) * (spineHull[4] - spineHull[0]) +
+                (spineHull[5] - spineHull[1]) * (spineHull[5] - spineHull[1]),
+        )
+        if (layer == null || sparking || fast <= 0f || !(half > 0f)) {
+            drawBook(b)
+            return
+        }
+        layer.renderEffect = BlurEffect(RIFFLE_BLUR * half * fast, 0f, TileMode.Decal)
+        layer.record(this, layoutDirection, IntSize(ceil(size.width).toInt(), ceil(size.height).toInt())) {
+            drawBook(b)
+        }
+        drawLayer(layer)
     }
 
     // --- placing -----------------------------------------------------------------
@@ -821,6 +853,15 @@ private val WALL_PALE = Color(0xFFF3F5F7)
 
 /** The back of the cover, seen through the lid from behind. */
 private val PAPER = Color(0xFFF2EFE9)
+
+/*
+ * The sketchbook's riffle blurs from a quarter of its top speed, and three
+ * times as much from 0.6 on, the widest a gaussian 14px across a spread
+ * 860px wide: a blur radius of 0.054 of half a spread.
+ */
+private const val RIFFLE_BLUR_FROM = 0.25f
+private const val RIFFLE_BLUR_FULL = 0.6f
+private const val RIFFLE_BLUR = 0.054f
 
 /** How wide the manual stands at [at], in covers: open, a spread is two. */
 private fun BookPose.across(at: Int): Float = if (at in 0 until spreads) 2f else 1f

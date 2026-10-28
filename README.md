@@ -289,7 +289,10 @@ last leaf shuts it on its back, which is also what the cover shows from behind.
 Along the bottom under the open booklet sits a ruler, a tick to a fraction of a
 page, from the front through every spread to the back: drag its red playhead
 and the booklet runs through them under the finger, the ticks swelling and
-darkening around the playhead and the page riding above it in a capsule. While
+darkening around the playhead and the page riding above it in a capsule. A
+jump further than a leaf riffles there, a leaf at a time, slow at either end of
+the run, quickest and motion-blurred in the middle, like the sketchbook's
+opening riffle. While
 the booklet is open the one button is Exit, which shuts it. Its proportions are measured off a recording of a time scrubber.
 `CdRackScrollState.leave()` (the demo wires it to the system's back)
 shuts the manual if it is open, slides the cover back up into the lid if it is

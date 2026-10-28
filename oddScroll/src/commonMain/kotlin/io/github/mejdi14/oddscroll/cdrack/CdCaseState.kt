@@ -9,6 +9,7 @@ import io.github.mejdi14.oddscroll.internal.cubicBezierEase
 import io.github.mejdi14.oddscroll.internal.inOutCubic
 import io.github.mejdi14.oddscroll.internal.lerp
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.sign
 import kotlin.math.sin
@@ -93,6 +94,15 @@ private const val COVER_BACK_ARC_MM = 22f
 private const val LEAF_T = 0.85f
 private val leafEase = cubicBezierEase(0.42f, 0.05f, 0.25f, 1f)
 
+/*
+ * Turned straight to a spread further than a leaf away, it riffles there, a
+ * leaf at a time, after the sketchbook's opening riffle: each leaf lands as
+ * the next lifts, slowest at either end of the run and quickest half way, on
+ * half a sine.
+ */
+private const val RIFFLE_SLOW = 0.2f
+private const val RIFFLE_FAST = 0.05f
+
 /** Where the case is this frame: its turn, the lid's swing, how far it has moved over for being open. */
 internal class CasePose {
     var x = 0f
@@ -113,6 +123,9 @@ internal class BookPose {
     var from = -1
     var to = -1
     var turn = 1f
+
+    /** How fast the leaf is riffling: 0 for none, 1 at the quickest of a run. */
+    var riffle = 0f
 }
 
 private enum class Phase { Rest, Opening, Open, Closing }
@@ -182,7 +195,14 @@ class CdCaseState internal constructor() {
     private var leafFrom = -1
     private var leafTo = -1
     private var leafAt = 0f
+    private var leafT = LEAF_T
     private var returnAfterLeaf = false
+
+    /** A riffle's run: the spread it is going to, the one it set out from, and how fast this leaf is. */
+    private var riffling = false
+    private var riffleEnd = -1
+    private var riffleFrom = -1
+    private var riffleSpeed = 0f
 
     /** The case as last posed, and the cover in its lid as it was when it was taken out. */
     private val last = CasePose()
@@ -307,11 +327,41 @@ class CdCaseState internal constructor() {
     }
 
     /**
-     * Turns the manual straight to [page], in one fold from wherever it is
-     * heading: -1 shuts it on its front, the count of spreads on its back.
+     * Turns the manual straight to [page]: -1 shuts it on its front, the
+     * count of spreads on its back. A leaf away it is one fold; further, it
+     * riffles there. Riffling, it heads on to the new page, and back the
+     * other way from the leaf in the air.
      */
-    internal fun turnStraightTo(page: Int) {
-        if (canRead) turnTo(page.coerceIn(-1, manualSpreads))
+    internal fun riffleTo(page: Int) {
+        if (!canRead) return
+        val to = page.coerceIn(-1, manualSpreads)
+        if (to == riffleEnd) return
+        manualPage = to
+        if (riffling) {
+            if ((to - leafTo).sign != (leafTo - leafFrom).sign) riffleFrom = leafTo
+            riffleEnd = to
+            return
+        }
+        if (abs(to - leafTo) <= 1) {
+            turnTo(to)
+            return
+        }
+        // A fold still turning lands at once, and the run sets out from there.
+        riffling = true
+        riffleFrom = leafTo
+        riffleEnd = to
+        nextLeaf(t)
+    }
+
+    /** Lifts the riffle's next leaf at [at] seconds, as quick as it is far into the run. */
+    private fun nextLeaf(at: Float) {
+        val run = abs(riffleEnd - riffleFrom)
+        val into = if (run <= 1) 1f else abs(leafTo - riffleFrom).toFloat() / (run - 1)
+        riffleSpeed = sin(PI.toFloat() * into.clamped(0f, 1f))
+        leafFrom = leafTo
+        leafTo += (riffleEnd - leafTo).sign
+        leafAt = at
+        leafT = lerp(RIFFLE_SLOW, RIFFLE_FAST, riffleSpeed)
     }
 
     /** Whether the manual is open at a spread, or turning to one, to be read. */
@@ -334,17 +384,22 @@ class CdCaseState internal constructor() {
         }
     }
 
+    /** One fold to [to]; a riffle stops once the leaf in the air lands. */
     private fun turnTo(to: Int) {
+        riffling = false
+        riffleEnd = to
+        manualPage = to
         if (to == leafTo) return
         leafFrom = leafTo
         leafTo = to
         leafAt = t
-        manualPage = to
+        leafT = LEAF_T
+        riffleSpeed = 0f
     }
 
     /** How far over the leaf turning is, eased; 1 with none turning. */
     private fun leafTurn(): Float =
-        if (leafFrom == leafTo) 1f else leafEase(((t - leafAt) / LEAF_T).clamped(0f, 1f))
+        if (leafFrom == leafTo) 1f else leafEase(((t - leafAt) / leafT).clamped(0f, 1f))
 
     /** How far the manual has come up to be read, from 0 under the case to 1 open in the middle. */
     private fun read(): Float {
@@ -491,8 +546,18 @@ class CdCaseState internal constructor() {
             else -> Unit
         }
 
-        if (leafFrom != leafTo && t - leafAt >= LEAF_T) {
+        // Riffling, each leaf lifts as the last lands, on the clock rather
+        // than the frame, so a long frame turns more than one.
+        while (riffling && leafFrom != leafTo && t - leafAt >= leafT) {
+            if (leafTo == riffleEnd) {
+                riffling = false
+                break
+            }
+            nextLeaf(leafAt + leafT)
+        }
+        if (leafFrom != leafTo && t - leafAt >= leafT) {
             leafFrom = leafTo
+            riffleSpeed = 0f
             if (returnAfterLeaf && leafTo == -1) {
                 returnAfterLeaf = false
                 returnCover()
@@ -634,6 +699,7 @@ class CdCaseState internal constructor() {
         out.from = leafFrom
         out.to = leafTo
         out.turn = leafTurn()
+        out.riffle = if (leafFrom == leafTo) 0f else riffleSpeed
         return true
     }
 }
