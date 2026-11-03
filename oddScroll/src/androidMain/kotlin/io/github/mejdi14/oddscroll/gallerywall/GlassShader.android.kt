@@ -17,8 +17,9 @@ import androidx.compose.ui.graphics.asAndroidBitmap
  * https://sitong-zhang.github.io/apple-liquid-glass-guide/ — its Card recipe
  * with the refraction band widened. Changes: one pass in the painting's own
  * pixels rather than a render effect over a backdrop layer, so the pane goes
- * into perspective with the painting; one corner radius; the room thrown back
- * on top.
+ * into perspective with the painting; square corners, the bend still turning
+ * round them; the light split at rest as well as on the move; the room thrown
+ * back on top.
  */
 
 private const val ROUNDED_RECT = """
@@ -44,15 +45,12 @@ float circleMap(float x) {
 }
 """
 
-/** The painting bent in to [bent]: [shift] is the bend itself, [p] the pixel from the pane's middle. */
-private const val PLAIN_BEND = """
-float4 bend(float2 bent, float2 shift, float2 p, float2 halfSize) {
-    return float4(image.eval(bent));
-}
-"""
-
-/** The same, split along the bend into seven colours, most towards the corners. */
-private const val DISPERSIVE_BEND = """
+/**
+ * The painting bent in to [bent], split along the bend into seven colours, most
+ * towards the corners: [shift] is the bend itself, [p] the pixel from the
+ * pane's middle.
+ */
+private const val BEND = """
 float4 bend(float2 bent, float2 shift, float2 p, float2 halfSize) {
     float2 dispersed = shift * ((p.x * p.y) / (halfSize.x * halfSize.y));
     half4 color = half4(0.0);
@@ -96,38 +94,38 @@ float4 bend(float2 bent, float2 shift, float2 p, float2 halfSize) {
 /**
  * Liquid glass, a pixel at a time, in the painting's own pixels.
  *
- * - Round the rounded pane's edge, a band [refraction] wide bends the painting
+ * - Round the square pane's edge, a band [refraction] wide bends the painting
  *   in towards the middle along a quarter circle, by as much as the band is
- *   wide at the very edge. Where the bend reaches past the painting it finds
- *   the bare wall.
+ *   wide at the very edge, and splits it into colours. The bend starts turning
+ *   round each corner [turn] from it, so it does not crease along the
+ *   diagonals. Where it reaches past the painting it finds the bare wall.
  * - All of it through 1.5x vibrancy, then a tenth of white.
  * - Over that, the room it throws back, running between the three amounts
  *   worked out for the piece.
  * - Along the edge, a thin rim lit from the upper left and lower right.
  */
-private fun source(bend: String) = """
+private const val SOURCE = """
 uniform shader image;
 uniform float2 span;
 uniform float3 fresnel;
 uniform float3 wall;
 uniform float4 pane;
-uniform float corner;
+uniform float turn;
 uniform float refraction;
 uniform float edges;
 uniform float rim;
 
 $ROUNDED_RECT
-$bend
+$BEND
 
 half4 main(float2 xy) {
     float2 p = xy - pane.xy;
     float2 halfSize = pane.zw;
-    float sd = sdRoundedRect(p, halfSize, corner);
+    float sd = sdRoundedRect(p, halfSize, 0.0);
     float cover = clamp(0.5 - sd, 0.0, 1.0);
     if (cover <= 0.0) return half4(0.0);
 
-    float gradRadius = min(corner * 1.5, min(halfSize.x, halfSize.y));
-    float2 grad = normalize(gradSdRoundedRect(p, halfSize, gradRadius));
+    float2 grad = normalize(gradSdRoundedRect(p, halfSize, turn));
 
     float4 color;
     if (-sd >= refraction) {
@@ -167,16 +165,14 @@ internal actual fun glassShader(): GlassShader? {
 private const val IMAGES_KEPT = 16
 
 /**
- * One shader for every pane, and one more that splits the light for the pane
- * being dragged. Setting a uniform drops the shader's native instance, so each
- * draw takes its own snapshot and the pieces drawn before it keep theirs.
+ * One shader for every pane. Setting a uniform drops the shader's native
+ * instance, so each draw takes its own snapshot and the pieces drawn before it
+ * keep theirs.
  */
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 private class AgslGlass : GlassShader {
-    private val plain = RuntimeShader(source(PLAIN_BEND))
-    private val dispersive = RuntimeShader(source(DISPERSIVE_BEND))
-    private val plainBrush = ShaderBrush(plain)
-    private val dispersiveBrush = ShaderBrush(dispersive)
+    private val shader = RuntimeShader(SOURCE)
+    private val brush = ShaderBrush(shader)
     private val images = HashMap<ImageBitmap, BitmapShader>()
 
     override fun brush(
@@ -191,23 +187,21 @@ private class AgslGlass : GlassShader {
         centreY: Float,
         halfWidth: Float,
         halfHeight: Float,
-        corner: Float,
+        turn: Float,
         refraction: Float,
         edges: Float,
         rim: Float,
-        dispersion: Boolean,
     ): Brush {
-        val shader = if (dispersion) dispersive else plain
         shader.setInputShader("image", imageShader(image))
         shader.setFloatUniform("span", from, to)
         shader.setFloatUniform("fresnel", near, middle, far)
         shader.setFloatUniform("wall", wall.red, wall.green, wall.blue)
         shader.setFloatUniform("pane", centreX, centreY, halfWidth, halfHeight)
-        shader.setFloatUniform("corner", corner)
+        shader.setFloatUniform("turn", turn)
         shader.setFloatUniform("refraction", refraction)
         shader.setFloatUniform("edges", edges)
         shader.setFloatUniform("rim", rim)
-        return if (dispersion) dispersiveBrush else plainBrush
+        return brush
     }
 
     /** Clear past the bitmap's edges, so the bend finds nothing there rather than its last row smeared. */

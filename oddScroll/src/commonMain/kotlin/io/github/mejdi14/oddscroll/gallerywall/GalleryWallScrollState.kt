@@ -125,10 +125,6 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
     internal var glassY = 0f
         private set
 
-    /** The glass is under the finger, so it splits the light along its edges. */
-    internal var glassHeld = false
-        private set
-
     /** The walk into the room, 0 in the doorway and 1 where the hang is seen from, linear in time. */
     internal var entry = if (walkIn) 0f else 1f
         private set
@@ -167,7 +163,6 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
         // Its middle stays over the painting.
         glassX = (glassX + dx).coerceIn(-hang.widths[i] / 2f, hang.widths[i] / 2f)
         glassY = (glassY + dy).coerceIn(-hang.heights[i] / 2f, hang.heights[i] / 2f)
-        glassHeld = true
         tick++
     }
 
@@ -184,10 +179,6 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
     /** The finger is up; [moved] if it dragged rather than tapped. */
     internal fun release(moved: Boolean) {
         held = false
-        if (glassHeld) {
-            glassHeld = false
-            tick++
-        }
         if (moved && !settled) {
             idleMs = 0f
             settle()
