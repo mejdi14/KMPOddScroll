@@ -326,8 +326,11 @@ fun rememberGalleryWallScrollState(walkIn: Boolean = true): GalleryWallScrollSta
  * the painting in the middle. Up close, [exitLabel] steps back and
  * [inspectLabel] takes the painting out of its frame: the four sticks fly off
  * past the four edges of the screen, and then the glass slides up out of the
- * top. Both go back on as it is stepped away from. The room opens with a walk
- * in from the doorway, unless the state was made without one.
+ * top. Both go back on as it is stepped away from. With them gone, [flipLabel]
+ * turns the bare painting over like a sheet of paper — a crease sweeping in
+ * from the lower left corner, ripples settling behind it — until it lies just
+ * as it did. The room opens with a walk in from the doorway, unless the state
+ * was made without one.
  *
  * @param items paintings, in order; the hang repeats, so it has no end.
  * @param background the wall.
@@ -341,6 +344,9 @@ fun rememberGalleryWallScrollState(walkIn: Boolean = true): GalleryWallScrollSta
  * @param inspectLabel the button, bottom right up close, that takes the frame
  *   and the glass off, or null for none — a host can show its own off
  *   [GalleryWallScrollState.canInspect].
+ * @param flipLabel the button, bottom right once the frame and glass are off,
+ *   that turns the painting over, or null for none — a host can show its own
+ *   off [GalleryWallScrollState.canFlip].
  * @param state also lets a host's own controls move it.
  */
 @Composable
@@ -353,6 +359,7 @@ fun GalleryWallScroll(
     lookLabel: String? = "Take a look",
     exitLabel: String? = "Exit",
     inspectLabel: String? = "Inspect",
+    flipLabel: String? = "Flip",
     state: GalleryWallScrollState = rememberGalleryWallScrollState(),
 ) {
     if (items.isEmpty()) {
@@ -431,7 +438,7 @@ fun GalleryWallScroll(
             room.fit(size.width, size.height)
             art.ensure(room.backPx * BITMAP_SCALE)
             val subject = state.subject
-            room.stroll(state.entry, state.walk, state.apart, state.lift, hang, subject)
+            room.stroll(state.entry, state.walk, state.apart, state.lift, state.fold, hang, subject)
             // The painting up close is drawn again at the size it will end at,
             // and taken apart, as soon as it can be walked up to, so neither
             // the walk nor the inspection starts on a dropped frame.
@@ -458,6 +465,11 @@ fun GalleryWallScroll(
         if (inspectLabel != null) {
             HudButton(inspectLabel, state.canInspect, background, contentColor, Modifier.align(Alignment.BottomEnd).padding(end = 28.dp)) {
                 state.inspect()
+            }
+        }
+        if (flipLabel != null) {
+            HudButton(flipLabel, state.canFlip, background, contentColor, Modifier.align(Alignment.BottomEnd).padding(end = 28.dp)) {
+                state.flip()
             }
         }
     }
@@ -532,6 +544,9 @@ internal class Hang(items: List<GalleryWallItem>, frame: GalleryWallFrame? = nul
 
     fun wrap(index: Int): Int = ((index % count) + count) % count
 
+    /** Painting [index] hangs in a frame, so it comes out of one bare when inspected. */
+    fun framed(index: Int): Boolean = borders[wrap(index)] > 0f
+
     /** The painting whose middle is nearest [position], unwrapped. */
     fun nearest(position: Float): Int {
         val laps = floor((position - starts[0]) / lap).toInt()
@@ -600,6 +615,9 @@ private class Room {
     var label = 1f
     var lift = 0f
 
+    /** How far the bare painting has turned over, linear in time; 0 lying still. */
+    var fold = 0f
+
     /** How far the paintings either side of it have slid away, in card heights. */
     var part = 0f
 
@@ -624,10 +642,10 @@ private class Room {
 
     /**
      * Puts the eye [entry] of the way into the room and [walk] of the way up to
-     * painting [index], whose frame is [apart] of the way off and its glass
-     * [glass] of the way away.
+     * painting [index], whose frame is [apart] of the way off, its glass
+     * [glass] of the way away and the painting itself [fold] of the way over.
      */
-    fun stroll(entry: Float, walk: Float, apart: Float, glass: Float, hang: Hang, index: Int) {
+    fun stroll(entry: Float, walk: Float, apart: Float, glass: Float, fold: Float, hang: Hang, index: Int) {
         val i = hang.wrap(index)
         // Near enough that the painting fills the frame one way or the other.
         val stand = max(
@@ -644,6 +662,7 @@ private class Room {
         val flown = ((apart - CRACK_TO) / (1f - CRACK_TO)).coerceIn(0f, 1f)
         fly = flown * flown
         lift = LIFT_EASE.transform(glass)
+        this.fold = fold
         val away = ((walk - PART_FROM) / (PART_TO - PART_FROM)).coerceIn(0f, 1f)
         part = PART * away * away * (3f - 2f * away)
         val straight = (walk / FLATTEN_TO).coerceIn(0f, 1f)
@@ -864,7 +883,8 @@ private fun DrawScope.drawCard(card: CardArt, left: Float, room: Room, wall: Col
  * The painting walked up to, being inspected, square on: the label and shadow
  * fading, the bare canvas, its glass sliding up off it, and the four sticks of
  * the frame on their way out past the four edges of the screen — each pushed
- * just far enough, from wherever the eye stands, to clear it.
+ * just far enough, from wherever the eye stands, to clear it. With all of that
+ * gone, the canvas can be turned over.
  */
 private fun DrawScope.drawApart(card: CardArt, left: Float, room: Room, wall: Color) {
     val px = card.pxPerUnit
@@ -884,7 +904,7 @@ private fun DrawScope.drawApart(card: CardArt, left: Float, room: Room, wall: Co
     } else {
         null
     }
-    drawSheet(bare, px, card.top, left, sunk, room, glaze = glass)
+    if (room.fold > 0f) drawFold(card, bare, left, sunk, room) else drawSheet(bare, px, card.top, left, sunk, room, glaze = glass)
 
     val sticks = card.sticks ?: return
     val z = DEPTH - card.depth - room.eyeZ
@@ -902,6 +922,34 @@ private fun DrawScope.drawApart(card: CardArt, left: Float, room: Room, wall: Co
         val y = card.top + stick.y / px + when (side) { 0 -> -by; 2 -> by; else -> 0f }
         drawSheet(stick.image, px, y, x, card.depth, room)
     }
+}
+
+private val paper = PaperFold()
+
+/**
+ * The canvas in [bare], [inset] off the wall, turned [Room.fold] of the way
+ * over. Only ever with the eye square on and the glass gone, so the canvas
+ * lies on the screen as a plain rectangle the fold starts and ends on.
+ */
+private fun DrawScope.drawFold(card: CardArt, bare: ImageBitmap, left: Float, inset: Float, room: Room) {
+    val px = card.pxPerUnit
+    val f = room.focal
+    val z = DEPTH - inset - room.eyeZ
+    if (z <= 0.05f) return
+    val o = card.opening.toFloat()
+    paper.draw(
+        scope = this,
+        image = bare,
+        srcLeft = o,
+        srcTop = o,
+        srcWidth = bare.width - 2f * o,
+        srcHeight = bare.height - 2f * o,
+        left = room.cx + f * (left + o / px - room.eyeX) / z,
+        top = room.cy + f * (card.top + o / px - room.eyeY) / z,
+        right = room.cx + f * (left + (bare.width - o) / px - room.eyeX) / z,
+        bottom = room.cy + f * (card.top + (bare.height - o) / px - room.eyeY) / z,
+        progress = room.fold,
+    )
 }
 
 /*

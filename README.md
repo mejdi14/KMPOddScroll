@@ -428,8 +428,13 @@ frame. Once there, Exit (bottom left) steps back and Inspect (bottom right)
 takes the painting apart: the frame cracks along its mitres and each of its
 four sticks flies off past its own edge of the screen while the label fades,
 then the glass slides straight up and out of the top — on Android 13 and up
-its liquid edges bending the painting as they cross it. Stepping back puts the
-glass and the frame back on.
+its liquid edges bending the painting as they cross it. With both gone, Flip
+(bottom right) turns the bare painting over like a sheet of paper: a crease
+sweeps in from the lower left corner with ripples settling behind it, the
+sheet turning about an axis that swings from the diagonal to upright, left
+side first, until it lies just as it did — on Android 13 and up going to
+halftone dots and paper grain as it lifts. Stepping back puts the glass and
+the frame back on.
 
 Measured off a recording of the reference rather than eyeballed. How tall a
 painting stands at each column of the screen is one fixed curve for every
@@ -469,6 +474,7 @@ GalleryWallScroll(
 | `lookLabel` | `"Take a look"` | the button that walks up to a painting; `null` for none |
 | `exitLabel` | `"Exit"` | the button, bottom left up close, that steps back; `null` for none, when a tap anywhere does |
 | `inspectLabel` | `"Inspect"` | the button, bottom right up close, that takes the frame and then the glass off; `null` for none |
+| `flipLabel` | `"Flip"` | the button, bottom right once the frame and glass are off, that turns the painting over; `null` for none |
 | `state` | — | `rememberGalleryWallScrollState()`; `walkIn = false` skips the walk in from the doorway |
 
 `GalleryWallItem.scale` is a painting's height against the tallest (1).
@@ -479,6 +485,9 @@ seconds after the hang comes to rest; `look()` walks up to the painting and
 system back to it with `BackHandler(enabled = state.looking) { state.leave() }`.
 Up close `arrived` is true, and while the frame is still on so is `canInspect`;
 `inspect()` takes it and the glass off, and `inspected` stays true until `leave()`.
+Once both are out of sight `canFlip` turns true and `flip()` turns the painting
+over — one textured mesh a frame, the paper fold carried over from a GL study,
+drawn with `drawVertices` (Android 10 and up; the button stays hidden below).
 Each painting is drawn
 once, label and all, into a bitmap and then through its own exact projection —
 one `drawImage` for each flat stretch of wall it is on and a dozen chords to a

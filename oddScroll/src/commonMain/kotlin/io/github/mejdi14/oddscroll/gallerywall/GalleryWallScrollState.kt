@@ -65,6 +65,9 @@ private const val GLASS_OFF_MS = 800f
 /** Stepping away, the glass and the frame go back on this much faster. */
 private const val BACK_ON = 2f
 
+/** Turning the bare painting over like a sheet of paper, there and back to itself. */
+internal const val FLIP_MS = 1800f
+
 /**
  * Where the hang has slid to along the wall, in card heights.
  *
@@ -113,6 +116,10 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
     /** Up close with the frame still on, so [inspect] will take it and the glass off. */
     val canInspect: Boolean get() = arrived && !inspected
 
+    /** The frame and glass are off and out of sight, so [flip] will turn the painting over. */
+    var canFlip by mutableStateOf(false)
+        private set
+
     internal var hang: Hang? = null
 
     /** A finger is down, so the input has not stopped however still it is. */
@@ -142,6 +149,12 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
     internal var lift = 0f
         private set
 
+    /** How far the bare painting has turned over, 0 to 1, linear in time; 0 lying still. */
+    internal var fold = 0f
+        private set
+
+    private var flipping = false
+
     /** The walk into the room, 0 in the doorway and 1 where the hang is seen from, linear in time. */
     internal var entry = if (walkIn) 0f else 1f
         private set
@@ -170,10 +183,19 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
         inspected = true
     }
 
+    /** Turns the bare painting over like a sheet of paper, once [canFlip]. */
+    fun flip() {
+        if (!canFlip) return
+        flipping = true
+        canFlip = false
+    }
+
     /** Steps back from the painting to the hang, putting its frame and glass back on. */
     fun leave() {
         looking = false
         inspected = false
+        flipping = false
+        fold = 0f
     }
 
     /** [by] is in card heights, along the wall. */
@@ -255,8 +277,20 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
             moved = true
         }
 
+        if (flipping) {
+            fold += deltaMs / FLIP_MS
+            if (fold >= 1f) {
+                // Turned all the way over, it lies just as it did.
+                fold = 0f
+                flipping = false
+            }
+            moved = true
+        }
+
         if (moved) tick++
         val hang = hang ?: return
+        val flippable = inspected && lift >= 1f && !flipping && paperFolds && hang.framed(visited)
+        if (flippable != canFlip) canFlip = flippable
         val nearest = hang.nearest(position)
         if (nearest != centred) centred = nearest
 
