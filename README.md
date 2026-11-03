@@ -419,15 +419,17 @@ you, each with its label on the wall underneath. A painting comes in down the
 right-hand wall, bends round the corner, crosses the back and goes out down the
 left. Drag along it or scroll, and the hang springs after and comes to rest
 with a painting in the middle; tap a painting to bring it to the middle. The
-room opens with a walk in from the doorway. Two seconds after it stops, an
-Inspect button walks you up to the painting in the
-middle — two seconds of a visitor's approach, steps and all — and a tap steps
-back. As the walk starts the painting comes off the wall's curve and hangs
-flat, square on; nearly there, the paintings either side slide away down the
-walls and out of the frame. On Android 13 and up the painting also comes out of its
-frame and loses its label on the way, showing the edges of the liquid glass
-over it, and a drag slides the glass about so its edges bend the painting
-under them.
+room opens with a walk in from the doorway. Two seconds after it stops, a
+Take a look button walks you up to the painting in the
+middle — two seconds of a visitor's approach, steps and all. As the walk starts
+the painting comes off the wall's curve and hangs flat, square on; nearly
+there, the paintings either side slide away down the walls and out of the
+frame. Once there, Exit (bottom left) steps back and Inspect (bottom right)
+takes the painting apart: the frame cracks along its mitres and each of its
+four sticks flies off past its own edge of the screen while the label fades,
+then the glass slides straight up and out of the top — on Android 13 and up
+its liquid edges bending the painting as they cross it. Stepping back puts the
+glass and the frame back on.
 
 Measured off a recording of the reference rather than eyeballed. How tall a
 painting stands at each column of the screen is one fixed curve for every
@@ -463,16 +465,20 @@ GalleryWallScroll(
 | `items` | — | paintings in order; the hang repeats, so it has no end |
 | `background` | `#FFFFFF` | the wall |
 | `contentColor` | `#1A1A1A` | the labels; all but the title are set in it at 45% |
-| `frame` | `null` | `GalleryWallFrame()` hangs each painting in a walnut frame — four mitred sticks, the grain running along each — that stands 4.5cm off the wall (against a metre-tall painting), and with `carving = 1f` hand-carved, every piece a little off true, in one of four `ornament`s: `Classical` (the default) cuts a rope twist round the outer edge, egg and dart along the face, bead and reel at the sight edge and a rosette over each mitre; the baroque ones swell the moulding into a big torus over a deep cove — `Shell` runs acanthus along it towards the middle of each side, with pearls at the sight edge and a scallop shell between C-scrolls over each corner and each middle, `Acanthus` runs the leaves clockwise all the way round, with a spray of leaves round a flower over each corner and bead and reel at the sight edge, and `Gadroon` gadroons the torus, with C-scrolls curling into each corner round a small shell and a fan of leaves at each middle. `gilt = true` lays gold leaf over any of them instead of bare wood (`color` is the gold, best with `grain = 0f`), rubbed through to the red bole on the high edge. A `GalleryWallItem` can carry a `frame` of its own in place of this one, so each painting can hang in a different frame: the edge shows as the wall turns away, and a soft shadow falls behind. The painting sits 1.5cm back inside it, so the inside of the moulding shows round it at an angle, behind glass that throws back more of the wall the further the wall turns away (Fresnel), with the doorway behind you as a soft glow that stays put as the paintings slide under it; `glass = false` leaves it open. On Android 13 and up the glass is liquid glass, an AGSL shader drawn in the painting's own coordinates after Kyant's AndroidLiquidGlass (Apache 2.0): its square-cornered edges run under the moulding, where they bend the painting under them along a quarter circle and split it into colours, with 1.5x vibrancy, a faint white tint and a thin rim lit from the corners, and show once the painting comes out of its frame up close. `null` hangs them flat and bare |
-| `inspectLabel` | `"Inspect"` | the button that walks up to a painting; `null` for none |
+| `frame` | `null` | `GalleryWallFrame()` hangs each painting in a walnut frame — four mitred sticks, the grain running along each — that stands 4.5cm off the wall (against a metre-tall painting), and with `carving = 1f` hand-carved, every piece a little off true, in one of four `ornament`s: `Classical` (the default) cuts a rope twist round the outer edge, egg and dart along the face, bead and reel at the sight edge and a rosette over each mitre; the baroque ones swell the moulding into a big torus over a deep cove — `Shell` runs acanthus along it towards the middle of each side, with pearls at the sight edge and a scallop shell between C-scrolls over each corner and each middle, `Acanthus` runs the leaves clockwise all the way round, with a spray of leaves round a flower over each corner and bead and reel at the sight edge, and `Gadroon` gadroons the torus, with C-scrolls curling into each corner round a small shell and a fan of leaves at each middle. `gilt = true` lays gold leaf over any of them instead of bare wood (`color` is the gold, best with `grain = 0f`), rubbed through to the red bole on the high edge. A `GalleryWallItem` can carry a `frame` of its own in place of this one, so each painting can hang in a different frame: the edge shows as the wall turns away, and a soft shadow falls behind. The painting sits 1.5cm back inside it, so the inside of the moulding shows round it at an angle, behind glass that throws back more of the wall the further the wall turns away (Fresnel), with the doorway behind you as a soft glow that stays put as the paintings slide under it; `glass = false` leaves it open. On Android 13 and up the glass is liquid glass, an AGSL shader drawn in the painting's own coordinates after Kyant's AndroidLiquidGlass (Apache 2.0): its square-cornered edges run under the moulding, where they bend the painting under them along a quarter circle and split it into colours, with 1.5x vibrancy, a faint white tint and a thin rim lit from the corners, and show as the glass slides away once the frame is off. `null` hangs them flat and bare |
+| `lookLabel` | `"Take a look"` | the button that walks up to a painting; `null` for none |
+| `exitLabel` | `"Exit"` | the button, bottom left up close, that steps back; `null` for none, when a tap anywhere does |
+| `inspectLabel` | `"Inspect"` | the button, bottom right up close, that takes the frame and then the glass off; `null` for none |
 | `state` | — | `rememberGalleryWallScrollState()`; `walkIn = false` skips the walk in from the doorway |
 
 `GalleryWallItem.scale` is a painting's height against the tallest (1).
 `GalleryWallScrollState.scrollTo(index)` brings a painting to the middle from a
-host's own controls, and `centred` is the one there. `canInspect` turns true two
-seconds after the hang comes to rest; `inspect()` walks up to the painting and
-`leave()` steps back, with `inspecting` true in between — a host can wire the
-system back to it with `BackHandler(enabled = state.inspecting) { state.leave() }`.
+host's own controls, and `centred` is the one there. `canLook` turns true two
+seconds after the hang comes to rest; `look()` walks up to the painting and
+`leave()` steps back, with `looking` true in between — a host can wire the
+system back to it with `BackHandler(enabled = state.looking) { state.leave() }`.
+Up close `arrived` is true, and while the frame is still on so is `canInspect`;
+`inspect()` takes it and the glass off, and `inspected` stays true until `leave()`.
 Each painting is drawn
 once, label and all, into a bitmap and then through its own exact projection —
 one `drawImage` for each flat stretch of wall it is on and a dozen chords to a

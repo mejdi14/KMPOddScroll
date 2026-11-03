@@ -46,7 +46,7 @@ private const val SETTLE_MS = 150f
 private const val FLICK = 0.2f
 
 /** Still this long, with a painting in the middle, before it can be walked up to. */
-private const val INSPECT_AFTER_MS = 2000f
+private const val LOOK_AFTER_MS = 2000f
 
 /** Close enough to the middle to call it there, in card heights — under a pixel. */
 private const val CENTRED = 0.01f
@@ -58,8 +58,12 @@ private const val WALK_OUT_MS = 1400f
 /** Walking into the room when it is first shown. */
 private const val ENTRY_MS = 2400f
 
-/** How fast the glass goes back over the painting once stepped away from, a second. */
-private const val GLASS_HOME = 8f
+/** Inspecting: the frame's four sticks part and fly off, then the glass slides up and away. */
+private const val FRAME_OFF_MS = 1000f
+private const val GLASS_OFF_MS = 800f
+
+/** Stepping away, the glass and the frame go back on this much faster. */
+private const val BACK_ON = 2f
 
 /**
  * Where the hang has slid to along the wall, in card heights.
@@ -89,14 +93,25 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
 
     /**
      * The hang has stood still for two seconds with a painting in the
-     * middle, so [inspect] will walk up to it.
+     * middle, so [look] will walk up to it.
      */
-    var canInspect by mutableStateOf(false)
+    var canLook by mutableStateOf(false)
         private set
 
     /** Walking up to, or standing in front of, a painting; [leave] steps back. */
-    var inspecting by mutableStateOf(false)
+    var looking by mutableStateOf(false)
         private set
+
+    /** Standing in front of the painting walked up to. */
+    var arrived by mutableStateOf(false)
+        private set
+
+    /** Its frame and glass taken off by [inspect]; they go back on when stepped away from. */
+    var inspected by mutableStateOf(false)
+        private set
+
+    /** Up close with the frame still on, so [inspect] will take it and the glass off. */
+    val canInspect: Boolean get() = arrived && !inspected
 
     internal var hang: Hang? = null
 
@@ -113,16 +128,18 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
     private var settled = true
 
     /** The painting walked up to, unwrapped. */
-    private var inspected = 0
+    private var visited = 0
 
     /** The walk up to it, 0 at the hang and 1 in front of it, linear in time. */
     internal var walk = 0f
         private set
 
-    /** Where the glass over the painting walked up to has been slid, in card heights from the painting's middle. */
-    internal var glassX = 0f
+    /** How far the frame has come off the painting walked up to, 0 to 1, linear in time. */
+    internal var apart = 0f
         private set
-    internal var glassY = 0f
+
+    /** How far its glass has slid away once the frame is off, 0 to 1, linear in time. */
+    internal var lift = 0f
         private set
 
     /** The walk into the room, 0 in the doorway and 1 where the hang is seen from, linear in time. */
@@ -130,7 +147,7 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
         private set
 
     /** The painting the walk is towards, or would be: the one in the middle until it starts. */
-    internal val subject: Int get() = if (inspecting || walk > 0f) inspected else centred
+    internal val subject: Int get() = if (looking || walk > 0f) visited else centred
 
     /** Slides painting [index] to the middle. Unwrapped, so it can go either way round. */
     fun scrollTo(index: Int) {
@@ -139,31 +156,24 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
         target = hang.centre(index)
     }
 
-    /** Walks up to the painting in the middle, once [canInspect]. */
+    /** Walks up to the painting in the middle, once [canLook]. */
+    fun look() {
+        if (!canLook) return
+        visited = centred
+        looking = true
+        canLook = false
+    }
+
+    /** Takes the frame off the painting walked up to, then its glass, once [canInspect]. */
     fun inspect() {
         if (!canInspect) return
-        inspected = centred
-        inspecting = true
-        canInspect = false
+        inspected = true
     }
 
-    /** Steps back from the painting to the hang. */
+    /** Steps back from the painting to the hang, putting its frame and glass back on. */
     fun leave() {
-        inspecting = false
-    }
-
-    /**
-     * Slides the glass over the painting walked up to, [dx] and [dy] in card
-     * heights, once there; it goes back over the painting when stepped away from.
-     */
-    internal fun slideGlass(dx: Float, dy: Float) {
-        val hang = hang ?: return
-        if (!inspecting || walk < 1f) return
-        val i = hang.wrap(inspected)
-        // Its middle stays over the painting.
-        glassX = (glassX + dx).coerceIn(-hang.widths[i] / 2f, hang.widths[i] / 2f)
-        glassY = (glassY + dy).coerceIn(-hang.heights[i] / 2f, hang.heights[i] / 2f)
-        tick++
+        looking = false
+        inspected = false
     }
 
     /** [by] is in card heights, along the wall. */
@@ -187,7 +197,7 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
 
     /** Input is about to move the target; false while away from the hang. */
     private fun input(): Boolean {
-        if (inspecting || walk > 0f || entry < 1f) return false
+        if (looking || walk > 0f || entry < 1f) return false
         if (settled) {
             anchor = target
             settled = false
@@ -220,20 +230,28 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
             moved = true
         }
 
-        val goal = if (inspecting) 1f else 0f
+        val goal = if (looking) 1f else 0f
         if (walk != goal) {
-            walk = if (inspecting) min(1f, walk + deltaMs / WALK_IN_MS) else max(0f, walk - deltaMs / WALK_OUT_MS)
+            walk = if (looking) min(1f, walk + deltaMs / WALK_IN_MS) else max(0f, walk - deltaMs / WALK_OUT_MS)
             moved = true
         }
+        val there = looking && walk >= 1f
+        if (there != arrived) arrived = there
 
-        if (!inspecting && (glassX != 0f || glassY != 0f)) {
-            val k = exp(-GLASS_HOME * deltaMs / 1000f)
-            glassX *= k
-            glassY *= k
-            if (abs(glassX) < REST && abs(glassY) < REST) {
-                glassX = 0f
-                glassY = 0f
+        // Off the frame first and then the glass, and back on the other way round.
+        if (inspected) {
+            if (apart < 1f) {
+                apart = min(1f, apart + deltaMs / FRAME_OFF_MS)
+                moved = true
+            } else if (lift < 1f) {
+                lift = min(1f, lift + deltaMs / GLASS_OFF_MS)
+                moved = true
             }
+        } else if (lift > 0f) {
+            lift = max(0f, lift - deltaMs * BACK_ON / GLASS_OFF_MS)
+            moved = true
+        } else if (apart > 0f) {
+            apart = max(0f, apart - deltaMs * BACK_ON / FRAME_OFF_MS)
             moved = true
         }
 
@@ -242,9 +260,9 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
         val nearest = hang.nearest(position)
         if (nearest != centred) centred = nearest
 
-        val ready = !inspecting && walk == 0f && settled && idleMs >= INSPECT_AFTER_MS &&
+        val ready = !looking && walk == 0f && apart == 0f && settled && idleMs >= LOOK_AFTER_MS &&
             abs(position - hang.centre(nearest)) < CENTRED
-        if (ready != canInspect) canInspect = ready
+        if (ready != canLook) canLook = ready
     }
 
     /** One frame of the hang springing after its target; false if it was already there. */

@@ -51,7 +51,7 @@ import org.jetbrains.compose.resources.imageResource
 fun GalleryWallDemoScreen() {
     val palette = LocalPalette.current
     val state = rememberGalleryWallScrollState()
-    BackHandler(enabled = state.inspecting) { state.leave() }
+    BackHandler(enabled = state.looking) { state.leave() }
 
     val sunflowers = imageResource(Res.drawable.museum_sunflowers)
     val boating = imageResource(Res.drawable.museum_boating)

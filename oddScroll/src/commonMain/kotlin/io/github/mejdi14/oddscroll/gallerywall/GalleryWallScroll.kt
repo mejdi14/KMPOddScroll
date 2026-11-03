@@ -19,6 +19,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,6 +40,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
@@ -165,8 +167,8 @@ data class GalleryWallFrame(
      * doorway behind you shows in it as a soft glow that stays put while the
      * paintings slide under it. Where the platform has the shader for it, the
      * pane is liquid glass whose edges, hidden under the moulding, bend
-     * the painting under them: walked up to, the painting comes out of its
-     * frame to show them, and a drag slides the glass about over it.
+     * the painting under them, and show as it slides away once the frame
+     * comes off.
      */
     val glass: Boolean = true,
 )
@@ -268,9 +270,21 @@ private const val SWAY = 0.02f
 /** The head's roll with the sway, in degrees. */
 private const val ROLL = 0.35f
 
-/** Behind liquid glass, the frame and the label come off between these two points of the eased walk. */
-private const val BARE_FROM = 0.5f
-private const val BARE_TO = 0.85f
+/*
+ * Inspecting. The frame cracks along its mitres, its four sticks parting a
+ * little, then each flies off the screen past its own edge, gathering speed;
+ * the label and the shadow fade as they part. With the frame gone the glass
+ * slides straight up and out of the top.
+ */
+
+/** How far the sticks part, in card heights, over this first stretch of their time. */
+private const val CRACK = 0.04f
+private const val CRACK_TO = 0.3f
+
+/** Past the edge of the screen, in card heights, before a stick or the glass is out of it. */
+private const val CLEAR = 0.05f
+
+private val LIFT_EASE = CubicBezierEasing(0.45f, 0f, 0.8f, 0.35f)
 
 /**
  * Nearly there, the paintings either side slide away along the walls, this
@@ -308,19 +322,25 @@ fun rememberGalleryWallScrollState(walkIn: Boolean = true): GalleryWallScrollSta
  *
  * Drag along it, or scroll, and the hang springs after, coming to rest with
  * a painting in the middle; tap a painting to bring it to the middle. Once
- * the hang has stood still for two seconds, [inspectLabel] offers to walk up to
- * the painting in the middle; a tap anywhere steps back. Behind liquid glass
- * the painting comes out of its frame on the way, and a drag slides the glass
- * about over it. The room opens with a walk in from the doorway, unless the
- * state was made without one.
+ * the hang has stood still for two seconds, [lookLabel] offers to walk up to
+ * the painting in the middle. Up close, [exitLabel] steps back and
+ * [inspectLabel] takes the painting out of its frame: the four sticks fly off
+ * past the four edges of the screen, and then the glass slides up out of the
+ * top. Both go back on as it is stepped away from. The room opens with a walk
+ * in from the doorway, unless the state was made without one.
  *
  * @param items paintings, in order; the hang repeats, so it has no end.
  * @param background the wall.
  * @param contentColor the labels.
  * @param frame the frame round each painting that has none of its own, or
  *   null to hang those bare.
- * @param inspectLabel the button that walks up to a painting, or null for
- * none — a host can show its own off [GalleryWallScrollState.canInspect].
+ * @param lookLabel the button that walks up to a painting, or null for none —
+ *   a host can show its own off [GalleryWallScrollState.canLook].
+ * @param exitLabel the button, bottom left up close, that steps back, or null
+ *   for none, when a tap anywhere does.
+ * @param inspectLabel the button, bottom right up close, that takes the frame
+ *   and the glass off, or null for none — a host can show its own off
+ *   [GalleryWallScrollState.canInspect].
  * @param state also lets a host's own controls move it.
  */
 @Composable
@@ -330,6 +350,8 @@ fun GalleryWallScroll(
     background: Color = Color(0xFFFFFFFF),
     contentColor: Color = Color(0xFF1A1A1A),
     frame: GalleryWallFrame? = null,
+    lookLabel: String? = "Take a look",
+    exitLabel: String? = "Exit",
     inspectLabel: String? = "Inspect",
     state: GalleryWallScrollState = rememberGalleryWallScrollState(),
 ) {
@@ -342,7 +364,6 @@ fun GalleryWallScroll(
     val hang = remember(items, frame) { Hang(items, frame) }
     val art = remember(items, contentColor, frame, measurer) { WallArt(items, contentColor, frame, measurer) }
     val room = remember { Room() }
-    val liquid = remember(items, frame) { items.any { (it.frame ?: frame)?.glass == true } } && shadedGlass != null
     SideEffect { state.hang = hang }
 
     LaunchedEffect(state) {
@@ -360,7 +381,7 @@ fun GalleryWallScroll(
         Canvas(
             Modifier
                 .fillMaxSize()
-                .pointerInput(state, liquid) {
+                .pointerInput(state, exitLabel != null) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         state.press()
@@ -373,24 +394,19 @@ fun GalleryWallScroll(
                             val change = event.changes.firstOrNull { it.id == down.id } ?: break
                             if (!change.pressed) break
                             val dx = change.position.x - last.x
-                            val dy = change.position.y - last.y
-                            travel += abs(dx) + abs(dy)
+                            travel += abs(dx) + abs(change.position.y - last.y)
                             last = change.position
                             if (travel > TAP_SLOP) dragging = true
                             if (dragging) {
-                                if (!state.inspecting) {
-                                    // The back wall follows the finger, pixel for pixel.
-                                    state.nudge(-dx / room.backPx)
-                                } else if (liquid) {
-                                    // And up close, the glass does.
-                                    state.slideGlass(dx / room.nearPx, dy / room.nearPx)
-                                }
+                                // The back wall follows the finger, pixel for pixel.
+                                if (!state.looking) state.nudge(-dx / room.backPx)
                                 change.consume()
                             }
                         }
                         state.release(dragging)
-                        if (state.inspecting) {
-                            if (!dragging || !liquid) state.leave()
+                        if (state.looking) {
+                            // Without the button, a tap anywhere steps back.
+                            if (!dragging && exitLabel == null) state.leave()
                         } else if (!dragging) {
                             val hit = room.hit(down.position.x, down.position.y, state.position, hang)
                             if (hit != null) state.scrollTo(hit)
@@ -415,45 +431,48 @@ fun GalleryWallScroll(
             room.fit(size.width, size.height)
             art.ensure(room.backPx * BITMAP_SCALE)
             val subject = state.subject
-            room.stroll(state.entry, state.walk, hang, subject)
+            room.stroll(state.entry, state.walk, state.apart, state.lift, hang, subject)
             // The painting up close is drawn again at the size it will end at,
-            // and out of its frame, as soon as it can be walked up to, so the
-            // walk does not start on a dropped frame.
-            val close = if (state.canInspect || state.walk > 0f) {
-                art.cards[hang.wrap(subject)].bare
-                art.close(hang.wrap(subject), room.closePx).also { it.bare }
+            // and taken apart, as soon as it can be walked up to, so neither
+            // the walk nor the inspection starts on a dropped frame.
+            val close = if (state.canLook || state.walk > 0f) {
+                art.close(hang.wrap(subject), room.closePx).also { it.bare; it.sticks }
             } else {
                 null
             }
             rotate(room.roll, Offset(room.cx, room.cy)) {
-                drawWall(
-                    art, hang, room, state.position, close.takeIf { room.zoom > BITMAP_SCALE }, subject, background,
-                    state.glassX, state.glassY,
-                )
+                drawWall(art, hang, room, state.position, close.takeIf { room.zoom > BITMAP_SCALE }, subject, background)
             }
         }
 
+        if (lookLabel != null) {
+            HudButton(lookLabel, state.canLook, background, contentColor, Modifier.align(Alignment.BottomCenter)) {
+                state.look()
+            }
+        }
+        if (exitLabel != null) {
+            HudButton(exitLabel, state.arrived, background, contentColor, Modifier.align(Alignment.BottomStart).padding(start = 28.dp)) {
+                state.leave()
+            }
+        }
         if (inspectLabel != null) {
-            InspectButton(
-                label = inspectLabel,
-                state = state,
-                background = background,
-                contentColor = contentColor,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 48.dp),
-            )
+            HudButton(inspectLabel, state.canInspect, background, contentColor, Modifier.align(Alignment.BottomEnd).padding(end = 28.dp)) {
+                state.inspect()
+            }
         }
     }
 }
 
 @Composable
-private fun InspectButton(
+private fun HudButton(
     label: String,
-    state: GalleryWallScrollState,
+    shown: Boolean,
     background: Color,
     contentColor: Color,
     modifier: Modifier,
+    onTap: () -> Unit,
 ) {
-    val shown = state.canInspect
+    val tap by rememberUpdatedState(onTap)
     val reveal by animateFloatAsState(if (shown) 1f else 0f, tween(if (shown) 450 else 200))
     val shape = RoundedCornerShape(50)
     BasicText(
@@ -466,12 +485,13 @@ private fun InspectButton(
             letterSpacing = 0.6.sp,
         ),
         modifier = modifier
+            .padding(bottom = 48.dp)
             .graphicsLayer {
                 alpha = reveal
                 translationY = (1f - reveal) * 10.dp.toPx()
             }
             // Only while it shows, or it would take taps meant for the wall.
-            .then(if (shown) Modifier.pointerInput(state) { detectTapGestures { state.inspect() } } else Modifier)
+            .then(if (shown) Modifier.pointerInput(Unit) { detectTapGestures { tap() } } else Modifier)
             .background(background.copy(alpha = 0.9f), shape)
             .border(1.dp, contentColor.copy(alpha = 0.5f), shape)
             .padding(horizontal = 26.dp, vertical = 11.dp),
@@ -569,17 +589,22 @@ private class Room {
      */
     var glare = 1f
 
-    /** How far the painting walked up to has come out of its frame, 0 to 1. */
-    var bare = 0f
+    /**
+     * The painting walked up to, being inspected: its frame off at all, how far
+     * the sticks have cracked apart and then flown, how much of the label and
+     * shadow is left, and how far the glass has slid, each eased, 0 to 1.
+     */
+    var unframed = false
+    var crack = 0f
+    var fly = 0f
+    var label = 1f
+    var lift = 0f
 
     /** How far the paintings either side of it have slid away, in card heights. */
     var part = 0f
 
     /** How far it has come off the wall's curve, 0 to 1. */
     var flat = 0f
-
-    /** Screen pixels to a card height on the back wall, from where the eye is now. */
-    var nearPx = 1f
 
     private val point = FloatArray(2)
 
@@ -597,8 +622,12 @@ private class Room {
         eyeZ = Float.NaN
     }
 
-    /** Puts the eye [entry] of the way into the room and [walk] of the way up to painting [index]. */
-    fun stroll(entry: Float, walk: Float, hang: Hang, index: Int) {
+    /**
+     * Puts the eye [entry] of the way into the room and [walk] of the way up to
+     * painting [index], whose frame is [apart] of the way off and its glass
+     * [glass] of the way away.
+     */
+    fun stroll(entry: Float, walk: Float, apart: Float, glass: Float, hang: Hang, index: Int) {
         val i = hang.wrap(index)
         // Near enough that the painting fills the frame one way or the other.
         val stand = max(
@@ -608,8 +637,13 @@ private class Room {
         closePx = focal / stand * 1.05f
         val eased = WALK_EASE.transform(walk)
         glare = 1f - eased
-        val off = ((eased - BARE_FROM) / (BARE_TO - BARE_FROM)).coerceIn(0f, 1f)
-        bare = off * off * (3f - 2f * off)
+        unframed = apart > 0f
+        val cracked = (apart / CRACK_TO).coerceIn(0f, 1f)
+        crack = cracked * cracked * (3f - 2f * cracked)
+        label = 1f - crack
+        val flown = ((apart - CRACK_TO) / (1f - CRACK_TO)).coerceIn(0f, 1f)
+        fly = flown * flown
+        lift = LIFT_EASE.transform(glass)
         val away = ((walk - PART_FROM) / (PART_TO - PART_FROM)).coerceIn(0f, 1f)
         part = PART * away * away * (3f - 2f * away)
         val straight = (walk / FLATTEN_TO).coerceIn(0f, 1f)
@@ -624,7 +658,6 @@ private class Room {
         if (z == eyeZ) return
         eyeZ = z
         zoom = DEPTH / (DEPTH - z)
-        nearPx = focal / (DEPTH - z)
         // The side walls leave the frame as far ahead of the eye as ever, so
         // further down the room; walked far enough, they are out of it.
         reach = FLAT + ARC + max(0f, DEPTH - CORNER - (sideFrom + z))
@@ -763,8 +796,8 @@ private fun sheetNormal(s: Float, out: FloatArray) {
 
 /**
  * [close], when there is one, stands in for painting [closeIndex] (unwrapped),
- * the one walked up to, whose glass is slid [slideX], [slideY] card heights
- * and from which the rest slide away; [wall] is what the glass throws back.
+ * the one walked up to, which is taken apart and from which the rest slide
+ * away; [wall] is what the glass throws back.
  */
 private fun DrawScope.drawWall(
     art: WallArt,
@@ -774,8 +807,6 @@ private fun DrawScope.drawWall(
     close: CardArt?,
     closeIndex: Int,
     wall: Color,
-    slideX: Float,
-    slideY: Float,
 ) {
     if (size.width <= 0f || size.height <= 0f) return
     val reach = room.reach
@@ -790,11 +821,10 @@ private fun DrawScope.drawWall(
         if (i < closeIndex) left -= room.part else if (i > closeIndex) left += room.part
         val card = if (close != null && subject) close else art.cards[hang.wrap(i)]
         if (left <= reach && left + card.wallWidth >= -reach) {
-            // Only the painting walked up to comes out of its frame.
-            val bare = if (subject && room.bare > 0f) card.bare else null
             if (subject) {
                 flat = room.flat
-                drawCard(card, left, room, wall, bare, if (bare != null) room.bare else 0f, slideX, slideY)
+                // Only the painting walked up to is taken apart.
+                if (room.unframed && card.bare != null) drawApart(card, left, room, wall) else drawCard(card, left, room, wall)
                 flat = 0f
             } else {
                 drawCard(card, left, room, wall)
@@ -819,30 +849,59 @@ private val bends = floatArrayOf(-FLAT - ARC, -FLAT, FLAT, FLAT + ARC)
  * behind it, the painting sunk in the frame and the glass over it, an edge,
  * then the face. The edge goes down after the painting, which it stands in
  * front of; the face over the glass hides the glass's edges.
- *
- * [off] of the way out of its frame, the frame and the label fade and [bare],
- * the painting without them, shows through; its glass is slid [slideX], [slideY].
  */
-private fun DrawScope.drawCard(
-    card: CardArt,
-    left: Float,
-    room: Room,
-    wall: Color,
-    bare: ImageBitmap? = null,
-    off: Float = 0f,
-    slideX: Float = 0f,
-    slideY: Float = 0f,
-) {
+private fun DrawScope.drawCard(card: CardArt, left: Float, room: Room, wall: Color) {
     val px = card.pxPerUnit
-    val on = 1f - off
     val sunk = card.depth - card.recess
-    if (on > 0f) card.wall?.let { drawSheet(it, px, card.top, left, 0f, room, on) }
-    val glass = if (card.glass) pane.aim(card, left, room, wall, bare ?: card.back, slideX, slideY, off) else null
-    if (bare != null) drawSheet(bare, px, card.top, left, sunk, room, glaze = glass.takeIf { on <= 0f })
-    if (on <= 0f) return
-    card.back?.let { drawSheet(it, px, card.top, left, sunk, room, on, glass) }
-    if (card.edges != null) drawEdges(card, card.edges, left, room, on)
-    drawSheet(card.face, px, card.top, left, card.depth, room, on)
+    card.wall?.let { drawSheet(it, px, card.top, left, 0f, room) }
+    val glass = if (card.glass) pane.aim(card, left, room, wall, card.back, 0f, 0f, 0f) else null
+    card.back?.let { drawSheet(it, px, card.top, left, sunk, room, glaze = glass) }
+    if (card.edges != null) drawEdges(card, card.edges, left, room)
+    drawSheet(card.face, px, card.top, left, card.depth, room)
+}
+
+/**
+ * The painting walked up to, being inspected, square on: the label and shadow
+ * fading, the bare canvas, its glass sliding up off it, and the four sticks of
+ * the frame on their way out past the four edges of the screen — each pushed
+ * just far enough, from wherever the eye stands, to clear it.
+ */
+private fun DrawScope.drawApart(card: CardArt, left: Float, room: Room, wall: Color) {
+    val px = card.pxPerUnit
+    val bare = card.bare ?: return
+    val sunk = card.depth - card.recess
+    val f = room.focal
+    val w = card.face.width / px
+    val h = card.face.height / px
+    val border = card.opening / px
+    if (room.label > 0f) card.wall?.let { drawSheet(it, px, card.top, left, 0f, room, room.label) }
+
+    // Straight up, until its bottom edge is over the top of the screen.
+    val glass = if (card.glass) {
+        val z = DEPTH - sunk - room.eyeZ
+        val rise = card.top + h - room.eyeY + room.cy * z / f + CLEAR
+        pane.aim(card, left, room, wall, bare, 0f, -rise * room.lift, room.crack)
+    } else {
+        null
+    }
+    drawSheet(bare, px, card.top, left, sunk, room, glaze = glass)
+
+    val sticks = card.sticks ?: return
+    val z = DEPTH - card.depth - room.eyeZ
+    // Each stick's inner edge, and how far it is to the side of the screen it leaves by.
+    val out = floatArrayOf(
+        card.top + border - room.eyeY + room.cy * z / f,
+        room.eyeX + (size.width - room.cx) * z / f - (left + w - border),
+        room.eyeY + (size.height - room.cy) * z / f - (card.top + h - border),
+        left + border - room.eyeX + room.cx * z / f,
+    )
+    for (side in 0..3) {
+        val by = CRACK * room.crack + max(out[side] + CLEAR - CRACK, 0f) * room.fly
+        val stick = sticks[side]
+        val x = left + stick.x / px + when (side) { 1 -> by; 3 -> -by; else -> 0f }
+        val y = card.top + stick.y / px + when (side) { 0 -> -by; 2 -> by; else -> 0f }
+        drawSheet(stick.image, px, y, x, card.depth, room)
+    }
 }
 
 /*
@@ -1051,10 +1110,13 @@ private fun DrawScope.drawGlass(
         return
     }
 
-    val l = max(glaze.opening, from.toFloat())
-    val r = min(glaze.width - glaze.opening, to.toFloat())
-    val t = glaze.opening
-    val b = glaze.height - glaze.opening
+    // The opening, wherever the pane has been slid to.
+    val dx = glaze.cx - glaze.width / 2f
+    val dy = glaze.cy - glaze.height / 2f
+    val l = max(glaze.opening + dx, from.toFloat())
+    val r = min(glaze.width - glaze.opening + dx, to.toFloat())
+    val t = max(glaze.opening + dy, top.toFloat())
+    val b = min(glaze.height - glaze.opening + dy, bottom.toFloat())
     if (r <= l || b <= t) return
     drawRect(
         Brush.horizontalGradient(
@@ -1113,8 +1175,10 @@ private fun DrawScope.drawSheet(
         y0 = min(y0, floor(glaze.cy - glaze.hh).toInt())
         y1 = max(y1, ceil(glaze.cy + glaze.hh).toInt())
     }
-    val from = max(left + x0 / pxPerUnit, -room.reach)
-    val to = min(left + x1 / pxPerUnit, room.reach)
+    // Laid flat, it is off the walls and can go anywhere across the view.
+    val reach = if (flat >= 1f) Float.MAX_VALUE else room.reach
+    val from = max(left + x0 / pxPerUnit, -reach)
+    val to = min(left + x1 / pxPerUnit, reach)
     if (to <= from) return
     var a = from
     while (a < to) {
@@ -1209,7 +1273,7 @@ private const val PROBE = 1e-3f
  * the wall out to the face. The top and bottom never show: the eye is level
  * with the middles.
  */
-private fun DrawScope.drawEdges(card: CardArt, edges: ImageBitmap, left: Float, room: Room, alpha: Float) {
+private fun DrawScope.drawEdges(card: CardArt, edges: ImageBitmap, left: Float, room: Room) {
     val d = edges.width / 2
     val h = edges.height
     for (side in 0..1) {
@@ -1244,7 +1308,6 @@ private fun DrawScope.drawEdges(card: CardArt, edges: ImageBitmap, left: Float, 
                 srcSize = IntSize(d, h),
                 dstOffset = IntOffset.Zero,
                 dstSize = IntSize(d, h),
-                alpha = alpha,
                 filterQuality = FilterQuality.Medium,
             )
         }
@@ -1308,16 +1371,20 @@ private class CardArt(
     /** The face's opening, in from each side, in its pixels. */
     val opening: Int = 0,
     unframe: (() -> ImageBitmap)? = null,
+    split: (() -> List<Stick>)? = null,
 ) {
     /** How far along the wall it runs, label and shadow included. */
     val wallWidth: Float get() = max(face.width, wall?.width ?: 0) / pxPerUnit
 
-    /**
-     * The canvas out of its frame, behind liquid glass, the size of the face;
-     * drawn the first time it is asked for.
-     */
+    /** The canvas out of its frame, the size of the face; drawn the first time it is asked for. */
     val bare: ImageBitmap? by lazy { unframe?.invoke() }
+
+    /** The face cut along its mitres, top, right, bottom and left; cut the first time asked for. */
+    val sticks: List<Stick>? by lazy { split?.invoke() }
 }
+
+/** One stick of a frame, cut out of the face at [x], [y] in its pixels. */
+private class Stick(val image: ImageBitmap, val x: Int, val y: Int)
 
 /** Every painting drawn once, rebuilt only when they change size on screen. */
 private class WallArt(
@@ -1431,16 +1498,47 @@ private class WallArt(
             recess = recess / pxPerUnit,
             glass = frame.glass,
             opening = border,
-            unframe = if (frame.glass && shadedGlass != null) {
-                { paint(outerW, outerH) { canvas() } }
-            } else {
-                null
-            },
+            unframe = { paint(outerW, outerH) { canvas() } },
+            split = { cut(face, border) },
         )
     }
 }
 
 // --- the frame ---------------------------------------------------------------
+
+/**
+ * The frame [face] cut along its mitres into its four sticks, [border] deep —
+ * top, right, bottom and left, each in a bitmap just its own size.
+ */
+private fun cut(face: ImageBitmap, border: Int): List<Stick> {
+    val w = face.width
+    val h = face.height
+    val b = border.toFloat()
+    // Each stick's place in the face and its outline there, outer edge first.
+    val places = listOf(
+        IntOffset(0, 0) to floatArrayOf(0f, 0f, w.toFloat(), 0f, w - b, b, b, b),
+        IntOffset(w - border, 0) to floatArrayOf(w.toFloat(), 0f, w.toFloat(), h.toFloat(), w - b, h - b, w - b, b),
+        IntOffset(0, h - border) to floatArrayOf(w.toFloat(), h.toFloat(), 0f, h.toFloat(), b, h - b, w - b, h - b),
+        IntOffset(0, 0) to floatArrayOf(0f, h.toFloat(), 0f, 0f, b, b, b, h - b),
+    )
+    return places.mapIndexed { side, (at, q) ->
+        val size = if (side % 2 == 0) IntSize(w, border) else IntSize(border, h)
+        val bitmap = ImageBitmap(size.width.coerceAtLeast(1), size.height.coerceAtLeast(1))
+        CanvasDrawScope().draw(Density(1f), LayoutDirection.Ltr, BitmapCanvas(bitmap), Size(size.width.toFloat(), size.height.toFloat())) {
+            translate(-at.x.toFloat(), -at.y.toFloat()) {
+                val mitre = Path().apply {
+                    moveTo(q[0], q[1])
+                    lineTo(q[2], q[3])
+                    lineTo(q[4], q[5])
+                    lineTo(q[6], q[7])
+                    close()
+                }
+                clipPath(mitre) { drawImage(face) }
+            }
+        }
+        Stick(bitmap, at.x, at.y)
+    }
+}
 
 /*
  * The moulding's profile, outer edge to inner, as light over the wood: a
