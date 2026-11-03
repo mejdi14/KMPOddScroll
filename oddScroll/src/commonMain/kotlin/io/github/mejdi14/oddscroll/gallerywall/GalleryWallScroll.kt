@@ -65,6 +65,7 @@ import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -87,7 +88,7 @@ data class GalleryWallItem(
 )
 
 /**
- * A wooden frame round every painting, and the painting made a thing that
+ * A wooden or [gilt] frame round every painting, and the painting made a thing that
  * hangs off the wall rather than a print pasted to it: the framed face stands
  * [depth] out, its edges show as the wall turns away from the eye, and it
  * throws a soft shadow down and to the right onto the wall behind. The moulding
@@ -118,6 +119,16 @@ data class GalleryWallFrame(
      * leaves it. 0 for a plain moulding.
      */
     val carving: Float = 0f,
+    /**
+     * Gold leaf over a baroque moulding instead of bare wood, [color] the gold:
+     * burnished where it stands proud, rubbed through to the red bole on the
+     * high outer edge, dull down the cove. With [carving], the classical cuts
+     * give way to acanthus leaves running along a swelling torus towards the
+     * middle of each side, a row of pearls at the sight edge, and over each
+     * corner and the middle of each side a cartouche of C-scrolls round a
+     * scallop shell. Wants [grain] 0 and a wider moulding.
+     */
+    val gilt: Boolean = false,
     /**
      * A pane over the painting, flush with the face. It throws back the wall a
      * little square on and more and more as the wall turns away, and the lit
@@ -1431,8 +1442,12 @@ private const val TAU = 2f * PI.toFloat()
 private fun shade(color: Color, by: Float): Color =
     if (by >= 0f) lerp(color, Color.White, by) else lerp(color, Color.Black, -by)
 
-private fun light(by: Float): Color =
-    if (by >= 0f) SHEEN.copy(alpha = by) else Color.Black.copy(alpha = -by)
+private fun light(by: Float, gilt: Boolean = false): Color = when {
+    gilt && by >= 0f -> GILT_SHINE.copy(alpha = by)
+    gilt -> GILT_SHADOW.copy(alpha = -by)
+    by >= 0f -> SHEEN.copy(alpha = by)
+    else -> Color.Black.copy(alpha = -by)
+}
 
 private fun Random.between(from: Float, to: Float): Float = from + nextFloat() * (to - from)
 
@@ -1490,13 +1505,14 @@ private fun DrawScope.drawWood(base: Color, grain: Float, length: Float, across:
 
 /** The frame's left and right outsides, side by side, each [d] across and [h] tall. */
 private fun DrawScope.drawFrameSides(frame: GalleryWallFrame, d: Float, h: Float, unit: Float, seed: Int) {
-    val stops = SIDE_PROFILE.map { (at, by) -> at to light(by) }.toTypedArray()
+    val stops = SIDE_PROFILE.map { (at, by) -> at to light(by, frame.gilt) }.toTypedArray()
     for (side in 0..1) {
         val x = side * d
         // The grain runs up the stick, so draw it lying down and stand it up.
         clipRect(x, 0f, x + d, h) {
             withTransform({ translate(x + d, 0f); rotate(90f, Offset.Zero) }) {
-                drawWood(frame.color, frame.grain, h, d, unit, SIDE_GRAIN, Random(seed * 8 + 4 + side))
+                val random = Random(seed * 8 + 4 + side)
+                if (frame.gilt) drawGilt(frame.color, h, d, unit, random) else drawWood(frame.color, frame.grain, h, d, unit, SIDE_GRAIN, random)
             }
         }
         drawRect(Brush.horizontalGradient(*stops, startX = x, endX = x + d), topLeft = Offset(x, 0f), size = Size(d, h))
@@ -1528,7 +1544,7 @@ private fun DrawScope.drawShadow(w: Float, h: Float, reach: Float) {
  */
 private fun DrawScope.drawFrame(frame: GalleryWallFrame, w: Float, h: Float, border: Float, unit: Float, seed: Int) {
     val mould = min(frame.width * unit, border)
-    val stops = PROFILE.map { (at, by) -> at to light(by) }.toTypedArray()
+    val stops = (if (frame.gilt) GILT_PROFILE else PROFILE).map { (at, by) -> at to light(by, frame.gilt) }.toTypedArray()
     // Fades out where the moulding is too few pixels across to hold a cut.
     val carving = frame.carving.coerceIn(0f, 1f) * ((mould - CARVING_MIN) / CARVING_MIN).coerceIn(0f, 1f)
     for (side in 0..3) {
@@ -1554,9 +1570,20 @@ private fun DrawScope.drawFrame(frame: GalleryWallFrame, w: Float, h: Float, bor
                     3 -> { translate(0f, h); rotate(270f, Offset.Zero) }
                 }
             }) {
-                drawWood(frame.color, frame.grain, length, mould, unit, FACE_GRAIN, Random(seed * 8 + side))
-                if (carving > 0f) drawCarving(length, mould, STICK_LIGHT[side], carving, Random(seed * 8 + side + CARVING_SEED))
+                if (frame.gilt) {
+                    drawGilt(frame.color, length, mould, unit, Random(seed * 8 + side))
+                } else {
+                    drawWood(frame.color, frame.grain, length, mould, unit, FACE_GRAIN, Random(seed * 8 + side))
+                }
+                val cuts = Random(seed * 8 + side + CARVING_SEED)
+                if (carving > 0f && frame.gilt) {
+                    drawBaroque(length, mould, STICK_LIGHT[side], frame.color, carving, cuts)
+                } else if (carving > 0f) {
+                    drawCarving(length, mould, STICK_LIGHT[side], carving, cuts)
+                }
                 drawRect(Brush.verticalGradient(*stops, startY = 0f, endY = mould), size = Size(length, mould))
+                // Stands proud of the moulding, so it keeps its own light.
+                if (carving > 0f && frame.gilt) drawCentrepiece(length, mould, STICK_LIGHT[side], frame.color, carving, cuts)
             }
         }
         if (SIDE_SHADE[side] > 0f) drawPath(path, Color.Black.copy(alpha = SIDE_SHADE[side]))
@@ -1571,8 +1598,18 @@ private fun DrawScope.drawFrame(frame: GalleryWallFrame, w: Float, h: Float, bor
     drawLine(joint, Offset(0f, h), Offset(mould, h - mould), seam)
     drawRect(joint, topLeft = Offset(mould, mould), size = Size(w - 2f * mould, h - 2f * mould), style = Stroke(seam))
 
-    // A rosette over each mitre, carved after the frame was joined, so it hides the seam.
-    if (carving > 0f) {
+    // A cartouche over each mitre on a gilt frame, a rosette on a wooden one,
+    // carved after the frame was joined, so it hides the seam.
+    if (carving > 0f && frame.gilt) {
+        listOf(
+            Triple(Offset(0f, 0f), Offset(1f, 0f), Offset(0f, 1f)),
+            Triple(Offset(w, 0f), Offset(-1f, 0f), Offset(0f, 1f)),
+            Triple(Offset(w, h), Offset(-1f, 0f), Offset(0f, -1f)),
+            Triple(Offset(0f, h), Offset(1f, 0f), Offset(0f, -1f)),
+        ).forEachIndexed { k, (corner, across, down) ->
+            drawCornerpiece(corner, across, down, mould, frame.color, carving, Random(seed * 8 + k + CARVING_SEED + 4))
+        }
+    } else if (carving > 0f) {
         val at = ROSETTE_AT * mould
         listOf(Offset(at, at), Offset(w - at, at), Offset(w - at, h - at), Offset(at, h - at)).forEachIndexed { k, centre ->
             drawRosette(centre, ROSETTE_SIZE * mould, mould, frame.color, carving, Random(seed * 8 + k + CARVING_SEED + 4))
@@ -1783,6 +1820,351 @@ private fun DrawScope.drawRosette(centre: Offset, r: Float, mould: Float, wood: 
     val button = lump(centre, 0.24f * r, 0.24f * r, 0f, 0.05f, random, 10)
     drawPath(button, shade(wood, 0.04f).copy(alpha = solid))
     carve(button, centre, 0.24f * r, FRAME_LIGHT, lift, raised = true, strength, edge)
+}
+
+// --- the gilding -------------------------------------------------------------
+
+/** Gold leaf: the light it throws back, the dark down in its hollows, and the red bole it is laid on. */
+private val GILT_SHINE = Color(0xFFFFF2BF)
+private val GILT_SHADOW = Color(0xFF2B1905)
+private val BOLE = Color(0xFF9A3F1E)
+
+/*
+ * A baroque moulding, outer edge to inner, as light over gold: a lip, a big
+ * torus the acanthus runs along, a deep cove, a matt frieze, a row of pearls
+ * and a slip down to the canvas. Burnished gold throws back far more than a
+ * satin wood, so the swings are wider than [PROFILE]'s.
+ */
+private val GILT_PROFILE = listOf(
+    0.00f to -0.55f,
+    0.04f to 0.35f,
+    0.08f to -0.30f,
+    0.12f to -0.10f,
+    0.24f to 0.40f,
+    0.36f to 0.05f,
+    0.48f to -0.40f,
+    0.53f to -0.50f,
+    0.64f to -0.05f,
+    0.70f to 0.30f,
+    0.72f to -0.05f,
+    0.83f to -0.10f,
+    0.85f to -0.40f,
+    0.88f to 0.35f,
+    0.91f to -0.35f,
+    0.95f to 0.25f,
+    1.00f to -0.50f,
+)
+
+/** One square of gold leaf, in card heights; the seams where they overlap show faintly. */
+private const val GILT_LEAF = 0.08f
+
+/** Places the gold has rubbed through on the high outer edge, and dulled down the cove. */
+private const val RUBS = 14
+private const val GRIME = 10
+
+/** The torus the acanthus runs along, and the row of pearls, in shares of the moulding's width. */
+private const val TORUS_FROM = 0.09f
+private const val TORUS_TO = 0.49f
+private const val PEARL_AT = 0.875f
+
+/*
+ * In moulding widths along a stick: how far from each end the corner cartouche
+ * reaches, how far either side of the middle the centre one does, and each
+ * running leaf's length and spacing.
+ */
+private const val CORNER_REACH = 1.35f
+private const val CENTRE_REACH = 0.7f
+private const val RUN_LEAF = 0.8f
+private const val RUN_PITCH = 0.55f
+
+/** Points down each side of an acanthus leaf. */
+private const val LEAF_POINTS = 28
+
+/**
+ * Gold leaf over one stick, [length] along by [across] wide: laid in
+ * overlapping squares, rubbed through to the bole on the high outer edge and
+ * dulled down the cove. [random] is drawn on the same number of times at any
+ * size, so the gold walked up to wears the same as from across the room.
+ */
+private fun DrawScope.drawGilt(gold: Color, length: Float, across: Float, unit: Float, random: Random) {
+    drawRect(shade(gold, random.between(-0.04f, 0.04f)), size = Size(length, across))
+    val hairline = max(0.5f, 0.0012f * unit)
+    val seams = Random(random.nextInt())
+    val leaf = GILT_LEAF * unit
+    var x = seams.nextFloat() * leaf
+    while (x < length) {
+        val lean = seams.between(-0.15f, 0.15f) * across
+        drawLine(GILT_SHADOW.copy(alpha = seams.between(0.04f, 0.09f)), Offset(x, 0f), Offset(x + lean, across), hairline)
+        x += leaf * seams.between(0.85f, 1.15f)
+    }
+    fun spot(color: Color, centre: Offset, radius: Float) =
+        drawCircle(Brush.radialGradient(listOf(color, color.copy(alpha = 0f)), centre, radius), radius, centre)
+    repeat(RUBS) {
+        val at = Offset(random.nextFloat() * length, across * random.between(0f, 0.3f))
+        spot(BOLE.copy(alpha = random.between(0.12f, 0.3f)), at, across * random.between(0.06f, 0.2f))
+    }
+    repeat(GRIME) {
+        val at = Offset(random.nextFloat() * length, across * random.between(0.45f, 0.75f))
+        spot(GILT_SHADOW.copy(alpha = random.between(0.08f, 0.2f)), at, across * random.between(0.1f, 0.3f))
+    }
+}
+
+/**
+ * Gilds a carved [shape] standing proud, [r] round [centre], lit from
+ * [toward]: a shadow thrown [lift] past it, pale gold on its near side, deep
+ * brown on its far one, and a burnished spot where it faces the light.
+ */
+private fun DrawScope.gild(shape: Path, centre: Offset, r: Float, toward: Offset, lift: Float, gold: Color, strength: Float, edge: Float, random: Random) {
+    val cast = Path().apply { addPath(shape, -toward * lift) }
+    drawPath(Path.combine(PathOperation.Difference, cast, shape), GILT_SHADOW.copy(alpha = 0.55f * strength))
+    drawPath(shape, shade(gold, random.between(-0.05f, 0.05f)).copy(alpha = strength))
+    val near = centre + toward * r
+    val far = centre - toward * r
+    drawPath(
+        shape,
+        Brush.linearGradient(
+            0f to GILT_SHINE.copy(alpha = 0.55f * strength), 0.45f to GILT_SHINE.copy(alpha = 0f),
+            0.55f to GILT_SHADOW.copy(alpha = 0f), 1f to GILT_SHADOW.copy(alpha = 0.7f * strength),
+            start = near, end = far,
+        ),
+    )
+    val spot = centre + toward * (0.45f * r)
+    drawPath(shape, Brush.radialGradient(listOf(GILT_SHINE.copy(alpha = 0.7f * strength), GILT_SHINE.copy(alpha = 0f)), spot, 0.55f * r))
+    drawPath(shape, Brush.linearGradient(listOf(GILT_SHINE.copy(alpha = 0.6f * strength), GILT_SHADOW.copy(alpha = 0.8f * strength)), near, far), style = Stroke(edge))
+}
+
+/** A band down [line], [widths] across at each point. */
+private fun ribbon(line: List<Offset>, widths: List<Float>): Path {
+    val left = ArrayList<Offset>(line.size)
+    val right = ArrayList<Offset>(line.size)
+    for (i in line.indices) {
+        val d = line[min(i + 1, line.lastIndex)] - line[max(i - 1, 0)]
+        val n = Offset(-d.y, d.x) / max(d.getDistance(), 1e-3f)
+        left += line[i] + n * (widths[i] / 2f)
+        right += line[i] - n * (widths[i] / 2f)
+    }
+    val path = Path()
+    path.moveTo(left[0].x, left[0].y)
+    for (k in 1 until left.size) path.lineTo(left[k].x, left[k].y)
+    for (k in right.indices.reversed()) path.lineTo(right[k].x, right[k].y)
+    path.close()
+    return path
+}
+
+/*
+ * The baroque pieces below are laid out in (p, q) moulding widths — p along a
+ * stick, q in from its outer edge — and [place] takes them to pixels, so one
+ * layout serves every corner and both halves of every side, mirrored.
+ */
+
+/**
+ * An acanthus leaf from [from] to [to], [width] across at its widest, its edge
+ * cut into serrated lobes and its tip curled [curl] off the line, with a rib
+ * down the middle and a vein out to each lobe.
+ */
+private fun DrawScope.drawAcanthus(
+    place: (Offset) -> Offset, m: Float, from: Offset, to: Offset, width: Float, curl: Float,
+    gold: Color, toward: Offset, strength: Float, random: Random,
+) {
+    val along = to - from
+    val nrm = Offset(-along.y, along.x) / along.getDistance()
+    val lobes = random.between(3f, 4f)
+    val phase = random.between(-0.2f, 0.2f)
+    val size = random.between(0.92f, 1.06f)
+    val upper = ArrayList<Offset>(LEAF_POINTS + 1)
+    val lower = ArrayList<Offset>(LEAF_POINTS + 1)
+    val rib = ArrayList<Offset>(LEAF_POINTS + 1)
+    for (i in 0..LEAF_POINTS) {
+        val t = i / LEAF_POINTS.toFloat()
+        val spine = from + along * t + nrm * (curl * t * t * t)
+        val swell = sin(PI.toFloat() * t.pow(0.7f))
+        val half = 0.5f * width * size * swell * (0.66f + 0.34f * abs(cos(lobes * PI.toFloat() * t + phase)))
+        upper += place(spine - nrm * half)
+        lower += place(spine + nrm * half)
+        rib += place(spine)
+    }
+    val leaf = Path().apply {
+        moveTo(upper[0].x, upper[0].y)
+        for (k in 1..LEAF_POINTS) lineTo(upper[k].x, upper[k].y)
+        for (k in LEAF_POINTS downTo 0) lineTo(lower[k].x, lower[k].y)
+        close()
+    }
+    val edge = max(0.5f, 0.016f * m)
+    gild(leaf, rib[LEAF_POINTS / 2], 0.5f * width * m, toward, 0.045f * m, gold, strength, edge, random)
+
+    val groove = GILT_SHADOW.copy(alpha = 0.5f * strength)
+    val midrib = Path().apply {
+        moveTo(rib[1].x, rib[1].y)
+        for (k in 2..(LEAF_POINTS * 0.85f).toInt()) lineTo(rib[k].x, rib[k].y)
+    }
+    drawPath(midrib, groove, style = Stroke(1.6f * edge, cap = StrokeCap.Round))
+    drawPath(Path().apply { addPath(midrib, toward * edge) }, GILT_SHINE.copy(alpha = 0.4f * strength), style = Stroke(0.8f * edge, cap = StrokeCap.Round))
+    // A lobe stands out where the serration peaks.
+    var k = 1
+    while (true) {
+        val t = (k - phase / PI.toFloat()) / lobes
+        if (t >= 0.9f) break
+        if (t > 0.1f) {
+            val i = (t * LEAF_POINTS).roundToInt()
+            val root = rib[max(i - 2, 0)]
+            drawLine(groove, root, rib[i] + (upper[i] - rib[i]) * 0.75f, edge, cap = StrokeCap.Round)
+            drawLine(groove, root, rib[i] + (lower[i] - rib[i]) * 0.75f, edge, cap = StrokeCap.Round)
+        }
+        k++
+    }
+}
+
+/**
+ * A C-scroll: a band [width] across from [start], running into a volute round
+ * [eye] that it enters [r] out at angle [a0], winding clockwise in (p, q) for
+ * [sign] 1 and tightening as it goes, a channel down its middle and a boss in
+ * the eye.
+ */
+private fun DrawScope.drawScroll(
+    place: (Offset) -> Offset, m: Float, start: Offset, eye: Offset, r: Float, a0: Float, sign: Float, width: Float,
+    gold: Color, toward: Offset, strength: Float, random: Random,
+) {
+    val entry = eye + Offset(cos(a0), sin(a0)) * r
+    val tangent = Offset(-sin(a0), cos(a0)) * sign
+    val handle = entry - tangent * ((entry - start).getDistance() * 0.5f)
+    val line = ArrayList<Offset>()
+    val widths = ArrayList<Float>()
+    val run = 10
+    for (i in 0 until run) {
+        val t = i / run.toFloat()
+        val u = 1f - t
+        line += place(start * (u * u) + handle * (2f * u * t) + entry * (t * t))
+        widths += width * (1f - 0.2f * t) * m
+    }
+    val turns = 1.15f * random.between(0.95f, 1.05f)
+    val coil = 32
+    for (i in 0..coil) {
+        val s = i / coil.toFloat()
+        val a = a0 + sign * s * turns * TAU
+        line += place(eye + Offset(cos(a), sin(a)) * (r * (1f - 0.7f * s)))
+        widths += width * (0.8f - 0.55f * s) * m
+    }
+    val edge = max(0.5f, 0.016f * m)
+    val lift = 0.045f * m
+    val centre = place(eye)
+    gild(ribbon(line, widths), centre, r * m, toward, lift, gold, strength, edge, random)
+    val channel = Path().apply {
+        moveTo(line[0].x, line[0].y)
+        for (k in 1 until line.size - 4) lineTo(line[k].x, line[k].y)
+    }
+    drawPath(channel, GILT_SHADOW.copy(alpha = 0.4f * strength), style = Stroke(0.25f * width * m, cap = StrokeCap.Round))
+    drawPath(Path().apply { addPath(channel, toward * (0.1f * width * m)) }, GILT_SHINE.copy(alpha = 0.3f * strength), style = Stroke(edge, cap = StrokeCap.Round))
+    val boss = 0.3f * r * m
+    gild(lump(centre, boss, boss, 0f, 0.05f, random, 10), centre, boss, toward, lift, gold, strength, edge, random)
+}
+
+/**
+ * A scallop shell hinged at [hinge] and opening towards [tip]: [ribs] fluted
+ * ribs fanned [spread] radians either side, each ending in a scallop, the
+ * outer ones shorter, and a boss over the hinge.
+ */
+private fun DrawScope.drawShell(
+    place: (Offset) -> Offset, m: Float, hinge: Offset, tip: Offset, spread: Float, ribs: Int,
+    gold: Color, toward: Offset, strength: Float, random: Random,
+) {
+    val h = place(hinge)
+    val reach = (place(tip) - h).getDistance()
+    val out = (place(tip) - h) / reach
+    val side = Offset(-out.y, out.x)
+    fun dir(a: Float) = out * cos(a) + side * sin(a)
+    val step = 2f * spread / ribs
+    val edge = max(0.5f, 0.016f * m)
+    val lift = 0.045f * m
+    for (i in 0 until ribs) {
+        val a = -spread + (i + 0.5f) * step + random.between(-0.04f, 0.04f) * step
+        val len = reach * random.between(0.92f, 1f) * (1f - 0.15f * abs(a) / spread)
+        val half = 0.45f * step
+        val root = h + dir(a) * (0.12f * reach)
+        val left = h + dir(a - half) * (0.9f * len)
+        val right = h + dir(a + half) * (0.9f * len)
+        // Through the crown, so each rib ends in a scallop.
+        val crown = (h + dir(a) * (1.08f * len)) * 2f - (left + right) / 2f
+        val rib = Path().apply {
+            moveTo(root.x, root.y)
+            lineTo(left.x, left.y)
+            quadraticTo(crown.x, crown.y, right.x, right.y)
+            close()
+        }
+        gild(rib, h + dir(a) * (0.6f * len), 0.5f * len, toward, lift, gold, strength, edge, random)
+        drawLine(GILT_SHADOW.copy(alpha = 0.35f * strength), h + dir(a) * (0.25f * len), h + dir(a) * (0.85f * len), edge, cap = StrokeCap.Round)
+    }
+    val boss = lump(h, 0.16f * reach, 0.13f * reach, atan2(out.y, out.x), 0.05f, random, 12)
+    gild(boss, h, 0.16f * reach, toward, lift, gold, strength, edge, random)
+}
+
+/**
+ * The carving along one gilt stick, [length] along by [mould] wide, x along it
+ * and y in from the outer edge, lit from [toward]: acanthus running along the
+ * torus from each end towards the middle, each leaf's tip over the next one's
+ * stalk, and pearls along the sight edge. The ends and the middle are left to
+ * the cartouches. [random] is drawn on a fixed number of times.
+ */
+private fun DrawScope.drawBaroque(length: Float, mould: Float, toward: Offset, gold: Color, strength: Float, random: Random) {
+    val m = mould
+    // The torus is cut back round the leaves, so between them it is deep.
+    drawRect(GILT_SHADOW.copy(alpha = 0.3f * strength), topLeft = Offset(0f, TORUS_FROM * m), size = Size(length, (TORUS_TO - TORUS_FROM) * m))
+
+    val leaves = Random(random.nextInt())
+    val mid = (TORUS_FROM + TORUS_TO) / 2f
+    val span = length / m / 2f - CENTRE_REACH - CORNER_REACH
+    if (span > 0f) {
+        val count = max(1, (span / RUN_PITCH).roundToInt())
+        val pitch = span / count
+        for (end in listOf(1f, -1f)) {
+            val place = { o: Offset -> Offset(if (end > 0f) o.x * m else length - o.x * m, o.y * m) }
+            for (i in count - 1 downTo 0) {
+                val p = CORNER_REACH + i * pitch
+                drawAcanthus(place, m, Offset(p, mid), Offset(p + RUN_LEAF, mid), 0.95f * (TORUS_TO - TORUS_FROM), -0.08f, gold, toward, strength, leaves)
+            }
+        }
+    }
+
+    val pearls = Random(random.nextInt())
+    val r = 0.034f * m
+    val lift = 0.045f * m
+    val step = length / max(1, (length / (0.1f * m)).roundToInt())
+    var x = step / 2f
+    while (x < length) {
+        val c = Offset(x + pearls.between(-0.03f, 0.03f) * step, PEARL_AT * m)
+        val shine = c + toward * (0.35f * r)
+        drawCircle(GILT_SHADOW.copy(alpha = 0.5f * strength), r, c - toward * lift)
+        drawCircle(shade(gold, pearls.between(-0.08f, 0f)).copy(alpha = strength), r, c)
+        drawCircle(Brush.radialGradient(listOf(GILT_SHINE.copy(alpha = 0.85f * strength), GILT_SHINE.copy(alpha = 0f)), shine, 0.65f * r), 0.65f * r, shine)
+        x += step
+    }
+}
+
+/** The cartouche over the middle of a gilt stick: a shell opening outwards between two scrolls, leaves trailing from under them. */
+private fun DrawScope.drawCentrepiece(length: Float, m: Float, toward: Offset, gold: Color, strength: Float, random: Random) {
+    for (side in listOf(1f, -1f)) {
+        val place = { o: Offset -> Offset(length / 2f + side * o.x * m, o.y * m) }
+        drawAcanthus(place, m, Offset(0.3f, 0.62f), Offset(0.95f, 0.68f), 0.22f, 0.06f, gold, toward, strength, random)
+        drawScroll(place, m, Offset(0.1f, 0.2f), Offset(0.5f, 0.32f), 0.13f, -PI.toFloat() / 2f, 1f, 0.09f, gold, toward, strength, random)
+    }
+    val place = { o: Offset -> Offset(length / 2f + o.x * m, o.y * m) }
+    drawShell(place, m, Offset(0f, 0.7f), Offset(0f, 0.12f), 1.1f, 7, gold, toward, strength, random)
+}
+
+/**
+ * The cartouche over a gilt mitre at [corner], [across] and [down] running
+ * along the two sticks from it: a shell opening into the corner, and along
+ * each stick a big C-scroll by the outer edge, a small one by the sight edge
+ * and an acanthus leaf sweeping out from under them.
+ */
+private fun DrawScope.drawCornerpiece(corner: Offset, across: Offset, down: Offset, m: Float, gold: Color, strength: Float, random: Random) {
+    val alongAcross = { o: Offset -> corner + (across * o.x + down * o.y) * m }
+    val alongDown = { o: Offset -> corner + (down * o.x + across * o.y) * m }
+    for (place in listOf(alongAcross, alongDown)) {
+        drawAcanthus(place, m, Offset(0.7f, 0.5f), Offset(1.75f, 0.34f), 0.3f, -0.1f, gold, FRAME_LIGHT, strength, random)
+        drawScroll(place, m, Offset(0.7f, 0.86f), Offset(1.12f, 0.68f), 0.1f, PI.toFloat() / 2f, -1f, 0.07f, gold, FRAME_LIGHT, strength, random)
+        drawScroll(place, m, Offset(0.42f, 0.16f), Offset(1.28f, 0.3f), 0.16f, -PI.toFloat() / 2f, 1f, 0.11f, gold, FRAME_LIGHT, strength, random)
+    }
+    drawShell(alongAcross, m, Offset(0.62f, 0.62f), Offset(0.2f, 0.2f), 1.25f, 9, gold, FRAME_LIGHT, strength, random)
 }
 
 /**
