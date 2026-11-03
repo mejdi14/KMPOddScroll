@@ -582,17 +582,19 @@ square.
 | `art_village.jpg` | [Birmingham Museums Trust](https://unsplash.com/@birminghammuseumstrust) |
 | `art_cypresses.jpg` | [Tofan Teodor](https://unsplash.com/@tofanteodor) |
 
-Gallery Wall hangs fourteen `museum_*.jpg` paintings instead, each cut 1200x800
+Gallery Wall hangs fourteen `museum_*` paintings instead, each cut 1200x800
 (3:2, so every one hangs the same height and one and a half times as wide) from
 a 1,800 px or larger scan on Wikipedia / Wikimedia Commons: *Sunflowers*,
 *Boating*, *Flaming June*, *Water Lilies and Japanese Bridge*, *The Roses of
 Heliogabalus*, *Little Girl in a Blue Armchair*, *The Kiss*, *Almond Blossoms*,
 *Luncheon of the Boating Party*, *The Cliff Walk at Pourville*, *The Birth of
 Venus*, *Poppy Field*, *Lady with a Fan* and *Strolling along the Seashore*. The
-reuse terms of each scan are on its Commons page. `museum_cliff_walk_back.jpg`,
+reuse terms of each scan are on its Commons page. `museum_cliff_walk_back.webp`,
 the back of *The Cliff Walk*, is an illustrated note made for the demo — Monet's
 portrait, notes and a sketch of the cliff in the style of a letter — not a scan
-of anything of his.
+of anything of his. Both sides of that one are WebP, cut to the note's worn,
+ragged outline (mirrored on the front, which it is the back of) with the
+paint rubbed off the front's edges and corners down to the same browned paper.
 
 ### Illustrations
 
