@@ -166,7 +166,8 @@ data class GalleryWallFrame(
      * paintings slide under it. Where the platform has the shader for it, the
      * pane is liquid glass whose rounded edges, hidden under the moulding, bend
      * the painting under them: walked up to, the painting comes out of its
-     * frame to show them, and a drag slides the glass about over it.
+     * frame to show them, and a drag slides the glass about over it, its edges
+     * splitting the light while it moves.
      */
     val glass: Boolean = true,
 )
@@ -428,7 +429,7 @@ fun GalleryWallScroll(
             rotate(room.roll, Offset(room.cx, room.cy)) {
                 drawWall(
                     art, hang, room, state.position, close.takeIf { room.zoom > BITMAP_SCALE }, subject, background,
-                    state.glassX, state.glassY,
+                    state.glassX, state.glassY, state.glassHeld,
                 )
             }
         }
@@ -764,7 +765,8 @@ private fun sheetNormal(s: Float, out: FloatArray) {
 /**
  * [close], when there is one, stands in for painting [closeIndex] (unwrapped),
  * the one walked up to, whose glass is slid [slideX], [slideY] card heights
- * and from which the rest slide away; [wall] is what the glass throws back.
+ * — [held] while it is being dragged — and from which the rest slide away;
+ * [wall] is what the glass throws back.
  */
 private fun DrawScope.drawWall(
     art: WallArt,
@@ -776,6 +778,7 @@ private fun DrawScope.drawWall(
     wall: Color,
     slideX: Float,
     slideY: Float,
+    held: Boolean,
 ) {
     if (size.width <= 0f || size.height <= 0f) return
     val reach = room.reach
@@ -794,7 +797,7 @@ private fun DrawScope.drawWall(
             val bare = if (subject && room.bare > 0f) card.bare else null
             if (subject) {
                 flat = room.flat
-                drawCard(card, left, room, wall, bare, if (bare != null) room.bare else 0f, slideX, slideY)
+                drawCard(card, left, room, wall, bare, if (bare != null) room.bare else 0f, slideX, slideY, held)
                 flat = 0f
             } else {
                 drawCard(card, left, room, wall)
@@ -821,7 +824,8 @@ private val bends = floatArrayOf(-FLAT - ARC, -FLAT, FLAT, FLAT + ARC)
  * front of; the face over the glass hides the glass's edges.
  *
  * [off] of the way out of its frame, the frame and the label fade and [bare],
- * the painting without them, shows through; its glass is slid [slideX], [slideY].
+ * the painting without them, shows through; its glass is slid [slideX], [slideY],
+ * and [held] while that is going on.
  */
 private fun DrawScope.drawCard(
     card: CardArt,
@@ -832,12 +836,13 @@ private fun DrawScope.drawCard(
     off: Float = 0f,
     slideX: Float = 0f,
     slideY: Float = 0f,
+    held: Boolean = false,
 ) {
     val px = card.pxPerUnit
     val on = 1f - off
     val sunk = card.depth - card.recess
     if (on > 0f) card.wall?.let { drawSheet(it, px, card.top, left, 0f, room, on) }
-    val glass = if (card.glass) pane.aim(card, left, room, wall, bare ?: card.back, slideX, slideY, off) else null
+    val glass = if (card.glass) pane.aim(card, left, room, wall, bare ?: card.back, slideX, slideY, off, held) else null
     if (bare != null) drawSheet(bare, px, card.top, left, sunk, room, glaze = glass.takeIf { on <= 0f })
     if (on <= 0f) return
     card.back?.let { drawSheet(it, px, card.top, left, sunk, room, on, glass) }
@@ -866,20 +871,23 @@ private const val GLARE_ALPHA = 0.16f
 private val GLARE = Color(0xFFFFFBF2)
 
 /**
- * The liquid glass's bevel, in card heights, round a square-cornered pane. The
- * pane runs this far under the moulding, so its edge only shows with the frame
- * off.
+ * The band round the liquid glass's edge that bends the painting under it, in
+ * card heights; it bends it in by as much again. The pane runs this far under
+ * the moulding, so its edge only shows with the frame off.
  */
 private const val LIQUID_BEVEL = 0.05f
 
-/** At most this much of the moulding's width, so the bevel stays under it. */
+/** At most this much of the moulding's width, so the band stays under it. */
 private const val LIQUID_UNDER = 0.85f
 
 /**
- * The bevel once out of the frame, in card heights. Nothing hides it then, so
+ * The band once out of the frame, in card heights. Nothing hides it then, so
  * it widens as the frame fades, in over the painting's edge, and bends more.
  */
 private const val LIQUID_WIDE = 0.14f
+
+/** The pane's corner radius against the band, 22dp to 32dp as Apple's own glass has it. */
+private const val LIQUID_ROUND = 22f / 32f
 
 /** The lit rim along the liquid glass's edge, in card heights, and at least this many pixels. */
 private const val LIQUID_RIM = 0.0025f
@@ -900,14 +908,19 @@ private class Glaze {
     /** The painting the liquid glass bends, in the same pixels as the face. */
     var image: ImageBitmap? = null
 
-    /** The liquid pane: its middle, half-sizes and bevel, how much its edges show, and its rim. */
+    /**
+     * The liquid pane: its middle, half-sizes, corners and bending band, how
+     * much its edges show, its rim, and whether it splits the light.
+     */
     var cx = 0f
     var cy = 0f
     var hw = 0f
     var hh = 0f
+    var corner = 0f
     var bevel = 1f
     var edges = 0f
     var rim = 1f
+    var dispersion = false
 
     /** The doorway's glow: its middle, half-sizes and strength — 0 when it is not on this pane. */
     var gx = 0f
@@ -930,6 +943,7 @@ private class Glaze {
         slideX: Float,
         slideY: Float,
         edges: Float,
+        held: Boolean,
     ): Glaze {
         val px = card.pxPerUnit
         this.wall = wall
@@ -945,8 +959,10 @@ private class Glaze {
         hw = width / 2f - opening + hidden
         hh = height / 2f - opening + hidden
         this.bevel = max(min(bevel, min(hw, hh)), 1f)
+        corner = min(this.bevel * LIQUID_ROUND, min(hw, hh))
         this.edges = edges
         rim = max(LIQUID_RIM * px, LIQUID_RIM_MIN)
+        dispersion = held
         glow = 0f
         if (room.glare <= 0f) return this
         val mid = left + card.face.width / px / 2f
@@ -1029,9 +1045,11 @@ private fun DrawScope.drawGlass(
             centreY = glaze.cy,
             halfWidth = glaze.hw,
             halfHeight = glaze.hh,
-            bevel = glaze.bevel,
+            corner = glaze.corner,
+            refraction = glaze.bevel,
             edges = glaze.edges,
             rim = glaze.rim,
+            dispersion = glaze.dispersion,
         )
         drawRect(brush, topLeft = Offset(l, t), size = Size(r - l, b - t))
         return

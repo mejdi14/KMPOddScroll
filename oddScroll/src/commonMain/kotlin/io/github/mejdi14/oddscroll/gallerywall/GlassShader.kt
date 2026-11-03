@@ -17,10 +17,11 @@ internal interface GlassShader {
      * pixels of [image], the bare painting under the glass. The piece runs from
      * column [from] to [to], and [near], [middle] and [far] are how much of the
      * [wall] the glass throws back at its two ends and halfway. The pane is
-     * centred on [centreX], [centreY], [halfWidth] by [halfHeight], square
-     * cornered, with a [bevel] that wide round its edge. [edges] is how much
-     * the bevel shows — the bend it puts in the painting under it, and the
-     * light along it — and [rim] is how wide the lit rim is.
+     * centred on [centreX], [centreY], [halfWidth] by [halfHeight], its corners
+     * rounded [corner], with a band [refraction] wide round its edge that bends
+     * the painting under it. [edges] is how much the lit rim along the edge
+     * shows, and [rim] is how wide it is; [dispersion] splits the bend into
+     * colours, for while the glass is being dragged.
      */
     fun brush(
         image: ImageBitmap,
@@ -34,9 +35,11 @@ internal interface GlassShader {
         centreY: Float,
         halfWidth: Float,
         halfHeight: Float,
-        bevel: Float,
+        corner: Float,
+        refraction: Float,
         edges: Float,
         rim: Float,
+        dispersion: Boolean,
     ): Brush
 }
 
