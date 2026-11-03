@@ -432,9 +432,10 @@ its liquid edges bending the painting as they cross it. With both gone, Flip
 (bottom right) turns the bare painting over like a sheet of paper: a crease
 sweeps in from the lower left corner with ripples settling behind it, the
 sheet turning about an axis that swings from the diagonal to upright, left
-side first, until it lies just as it did — on Android 13 and up going to
-halftone dots and paper grain as it lifts. Stepping back puts the glass and
-the frame back on.
+side first, until it lies with its back showing — the item's `back`, or the
+painting again without one — and on Android 13 and up the paper's grain
+showing as it turns. Flip again turns it back. Stepping back puts the glass
+and the frame back on.
 
 Measured off a recording of the reference rather than eyeballed. How tall a
 painting stands at each column of the screen is one fixed curve for every
@@ -474,10 +475,12 @@ GalleryWallScroll(
 | `lookLabel` | `"Take a look"` | the button that walks up to a painting; `null` for none |
 | `exitLabel` | `"Exit"` | the button, bottom left up close, that steps back; `null` for none, when a tap anywhere does |
 | `inspectLabel` | `"Inspect"` | the button, bottom right up close, that takes the frame and then the glass off; `null` for none |
-| `flipLabel` | `"Flip"` | the button, bottom right once the frame and glass are off, that turns the painting over; `null` for none |
+| `flipLabel` | `"Flip"` | the button, bottom right once the frame and glass are off, that turns the painting over and back; `null` for none |
 | `state` | — | `rememberGalleryWallScrollState()`; `walkIn = false` skips the walk in from the doorway |
 
-`GalleryWallItem.scale` is a painting's height against the tallest (1).
+`GalleryWallItem.scale` is a painting's height against the tallest (1), and
+`GalleryWallItem.back` what is on the back of its canvas when it is turned over,
+stretched to its size.
 `GalleryWallScrollState.scrollTo(index)` brings a painting to the middle from a
 host's own controls, and `centred` is the one there. `canLook` turns true two
 seconds after the hang comes to rest; `look()` walks up to the painting and
@@ -486,7 +489,7 @@ system back to it with `BackHandler(enabled = state.looking) { state.leave() }`.
 Up close `arrived` is true, and while the frame is still on so is `canInspect`;
 `inspect()` takes it and the glass off, and `inspected` stays true until `leave()`.
 Once both are out of sight `canFlip` turns true and `flip()` turns the painting
-over — one textured mesh a frame, the paper fold carried over from a GL study,
+over, or back — one textured mesh a frame, the paper fold carried over from a GL study,
 drawn with `drawVertices` (Android 10 and up; the button stays hidden below).
 Each painting is drawn
 once, label and all, into a bitmap and then through its own exact projection —
@@ -586,7 +589,10 @@ a 1,800 px or larger scan on Wikipedia / Wikimedia Commons: *Sunflowers*,
 Heliogabalus*, *Little Girl in a Blue Armchair*, *The Kiss*, *Almond Blossoms*,
 *Luncheon of the Boating Party*, *The Cliff Walk at Pourville*, *The Birth of
 Venus*, *Poppy Field*, *Lady with a Fan* and *Strolling along the Seashore*. The
-reuse terms of each scan are on its Commons page.
+reuse terms of each scan are on its Commons page. `museum_cliff_walk_back.jpg`,
+the back of *The Cliff Walk*, is an illustrated note made for the demo — Monet's
+portrait, notes and a sketch of the cliff in the style of a letter — not a scan
+of anything of his.
 
 ### Illustrations
 

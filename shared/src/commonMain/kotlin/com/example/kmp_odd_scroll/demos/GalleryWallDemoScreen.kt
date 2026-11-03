@@ -24,6 +24,7 @@ import kmpoddscroll.shared.generated.resources.museum_boating
 import kmpoddscroll.shared.generated.resources.museum_boating_party
 import kmpoddscroll.shared.generated.resources.museum_bridge
 import kmpoddscroll.shared.generated.resources.museum_cliff_walk
+import kmpoddscroll.shared.generated.resources.museum_cliff_walk_back
 import kmpoddscroll.shared.generated.resources.museum_fan
 import kmpoddscroll.shared.generated.resources.museum_june
 import kmpoddscroll.shared.generated.resources.museum_kiss
@@ -41,7 +42,9 @@ import org.jetbrains.compose.resources.imageResource
  * and so on round the room, each in a frame of its own behind glass: gilt in
  * yellow, pale, red, green or antique gold, or carved walnut, mahogany, oak,
  * rosewood or ebonised wood, and carved shell, acanthus, gadroon or classical,
- * no two neighbours alike. Credits are in the README.
+ * no two neighbours alike. The Cliff Walk carries Monet's notes from Pourville
+ * on its back, for when it is taken out and turned over. Credits are in the
+ * README.
  *
  * Back steps away from a painting that has been walked up to before it leaves
  * the room.
@@ -63,6 +66,7 @@ fun GalleryWallDemoScreen() {
     val almond = imageResource(Res.drawable.museum_almond)
     val boatingparty = imageResource(Res.drawable.museum_boating_party)
     val cliffwalk = imageResource(Res.drawable.museum_cliff_walk)
+    val cliffwalkBack = imageResource(Res.drawable.museum_cliff_walk_back)
     val venus = imageResource(Res.drawable.museum_venus)
     val poppies = imageResource(Res.drawable.museum_poppies)
     val fan = imageResource(Res.drawable.museum_fan)
@@ -70,7 +74,7 @@ fun GalleryWallDemoScreen() {
 
     val items = remember(
         sunflowers, boating, june, bridge, roses, armchair, kiss,
-        almond, boatingparty, cliffwalk, venus, poppies, fan, seashore,
+        almond, boatingparty, cliffwalk, cliffwalkBack, venus, poppies, fan, seashore,
     ) {
         listOf(
             GalleryWallItem(sunflowers, "Sunflowers", "Vincent van Gogh", "1888–1889", "Oil on canvas", frame = gilt(YELLOW_GOLD, Shell)),
@@ -82,7 +86,7 @@ fun GalleryWallDemoScreen() {
             GalleryWallItem(kiss, "The Kiss", "Gustav Klimt", "1907–1908", "Oil and gold leaf on canvas", frame = wood(EBONISED, Acanthus)),
             GalleryWallItem(almond, "Almond Blossoms", "Vincent van Gogh", "1890", "Oil on canvas", frame = gilt(ANTIQUE_GOLD, Shell)),
             GalleryWallItem(boatingparty, "Luncheon of the Boating Party", "Pierre-Auguste Renoir", "1881", "Oil on canvas", frame = wood(WALNUT, Gadroon)),
-            GalleryWallItem(cliffwalk, "The Cliff Walk at Pourville", "Claude Monet", "1882", "Oil on canvas", frame = wood(OAK, Classical, width = 0.07f)),
+            GalleryWallItem(cliffwalk, "The Cliff Walk at Pourville", "Claude Monet", "1882", "Oil on canvas", frame = wood(OAK, Classical, width = 0.07f), back = cliffwalkBack),
             GalleryWallItem(venus, "The Birth of Venus", "Sandro Botticelli", "c. 1485", "Tempera on canvas", frame = gilt(PALE_GOLD, Shell, width = 0.115f)),
             GalleryWallItem(poppies, "Poppy Field", "Claude Monet", "1873", "Oil on canvas", frame = gilt(RED_GOLD, Acanthus, width = 0.095f)),
             GalleryWallItem(fan, "Lady with a Fan", "Gustav Klimt", "1917–1918", "Oil on canvas", frame = wood(ROSEWOOD, Gadroon)),

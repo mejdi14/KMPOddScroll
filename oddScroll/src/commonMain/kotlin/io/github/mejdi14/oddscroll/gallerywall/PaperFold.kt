@@ -26,14 +26,12 @@ import kotlin.math.sqrt
  * paper fold study in the AGSL shader playground. A crease sweeps in from the
  * lower left corner with three rings of ripples settling behind it, while the
  * sheet turns over about an axis that swings from the diagonal to upright,
- * its left side first. Its back shows the painting again, so turned all the
- * way over it lies just as it did.
+ * its left side first, until it lies with its back showing.
  *
  * The sheet is a grid worked out on the CPU each frame and drawn as one
- * textured triangle mesh, back to front — one draw, not one per cell. Where
- * the platform has the shader for it, the painting goes to halftone dots as
- * it lifts, the dots drawing in to the middle as it turns, with paper grain
- * over it all.
+ * textured triangle mesh, back to front — one draw, not one per cell — out
+ * of one image holding both of its sides. Where the platform has the shader
+ * for it, paper grain shows over it as it turns.
  */
 
 /** Cells across and down. */
@@ -49,22 +47,16 @@ private const val CAMERA = 5f
 /** How wide the crease's band runs, in widths of the sheet. */
 private const val CREASE = 0.85f
 
-/** How far the halftone runs into the turn before it is gone, and how quickly it comes in. */
-private const val HALFTONE_TO = 0.35f
-private const val HALFTONE_IN = 0.06f
-
-/** Dot cells per pixel of the sheet on screen: the playground's 0.06 of it over a dot of 6.5. */
-private const val DOTS = 0.06f / 6.5f
-
 /** The back of the sheet, multiplied in — a little warmer and duller than the front — at the height of the turn. */
 private val BACK = Color(0.99f, 0.96f, 0.91f)
 
 private const val PI_F = PI.toFloat()
 
 /**
- * A painting being turned over. [draw] takes the painting at [srcLeft],
- * [srcTop], [srcWidth] by [srcHeight] in [image], lying flat on screen from
- * [left], [top] to [right], [bottom], [progress] of the way over.
+ * A painting being turned over. [draw] takes the side facing up at
+ * [frontLeft], [srcTop], [srcWidth] by [srcHeight] in [image] and the side
+ * facing down the same size at [backLeft], lying flat on screen from [left],
+ * [top] to [right], [bottom], [progress] of the way over.
  */
 internal class PaperFold {
     private val side = SEGMENTS + 1
@@ -82,7 +74,8 @@ internal class PaperFold {
     fun draw(
         scope: DrawScope,
         image: ImageBitmap,
-        srcLeft: Float,
+        frontLeft: Float,
+        backLeft: Float,
         srcTop: Float,
         srcWidth: Float,
         srcHeight: Float,
@@ -143,8 +136,8 @@ internal class PaperFold {
                 positions += Offset(sx[k], sy[k])
                 val u = (k % side).toFloat() / SEGMENTS
                 val v = (k / side).toFloat() / SEGMENTS
-                val tu = if (back) 1f - u else u
-                texture += Offset(srcLeft + tu * srcWidth, srcTop + (1f - v) * srcHeight)
+                val tx = if (back) backLeft + (1f - u) * srcWidth else frontLeft + u * srcWidth
+                texture += Offset(tx, srcTop + (1f - v) * srcHeight)
                 val shade = (1f - 0.04f * paper + (sz[k] * 0.12f).clamped(-0.08f, 0.12f)).clamped(0f, 1f)
                 colors += if (back) {
                     Color(
@@ -158,18 +151,10 @@ internal class PaperFold {
             }
         }
 
-        val fading = (1f - raw / HALFTONE_TO).clamped(0f, 1f)
-        val halftone = (smoothstep(0f, 1f, fading) * fading * 1.2f).clamped(0f, 1f) * smoothstep(0f, HALFTONE_IN, raw)
         paint.shader = paperShaded?.shader(
             image = image,
-            left = srcLeft,
-            top = srcTop,
             width = srcWidth,
             height = srcHeight,
-            cellsX = w * DOTS,
-            cellsY = h * DOTS,
-            halftone = halftone,
-            reveal = fading,
             grain = paper,
         ) ?: plainShader(image)
         val vertices = Vertices(VertexMode.Triangles, positions, texture, colors, indices)

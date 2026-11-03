@@ -65,7 +65,7 @@ private const val GLASS_OFF_MS = 800f
 /** Stepping away, the glass and the frame go back on this much faster. */
 private const val BACK_ON = 2f
 
-/** Turning the bare painting over like a sheet of paper, there and back to itself. */
+/** Turning the bare painting over like a sheet of paper, one way or the other. */
 internal const val FLIP_MS = 1800f
 
 /**
@@ -116,7 +116,7 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
     /** Up close with the frame still on, so [inspect] will take it and the glass off. */
     val canInspect: Boolean get() = arrived && !inspected
 
-    /** The frame and glass are off and out of sight, so [flip] will turn the painting over. */
+    /** The frame and glass are off and out of sight, so [flip] will turn the painting over, or back. */
     var canFlip by mutableStateOf(false)
         private set
 
@@ -155,6 +155,10 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
 
     private var flipping = false
 
+    /** The bare painting lies turned over, its back showing, until it is flipped again or stepped away from. */
+    internal var over = false
+        private set
+
     /** The walk into the room, 0 in the doorway and 1 where the hang is seen from, linear in time. */
     internal var entry = if (walkIn) 0f else 1f
         private set
@@ -183,7 +187,7 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
         inspected = true
     }
 
-    /** Turns the bare painting over like a sheet of paper, once [canFlip]. */
+    /** Turns the bare painting over like a sheet of paper to its back, or back again, once [canFlip]. */
     fun flip() {
         if (!canFlip) return
         flipping = true
@@ -196,6 +200,7 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
         inspected = false
         flipping = false
         fold = 0f
+        over = false
     }
 
     /** [by] is in card heights, along the wall. */
@@ -280,8 +285,9 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
         if (flipping) {
             fold += deltaMs / FLIP_MS
             if (fold >= 1f) {
-                // Turned all the way over, it lies just as it did.
+                // Turned all the way over, it lies the other way up.
                 fold = 0f
+                over = !over
                 flipping = false
             }
             moved = true
