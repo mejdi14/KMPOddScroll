@@ -119,6 +119,9 @@ private const val WINDOW = 0.35f
 /** The frame is never nearer than this, in metres, however short the route. */
 private const val WINDOW_MIN = 0.5f
 
+/** This close to the frame, in metres, the eye counts as through it. */
+private const val THROUGH = 4f * NEAR_CLIP
+
 /** The sea's brushwork: how much of it over the painted sea, and how far it drifts, in texture pixels. */
 private const val WATER_STRENGTH = 0.3f
 private const val WATER_DRIFT = 5f
@@ -203,7 +206,6 @@ internal class EnterPainting {
         val water = WATER_STRENGTH * smoothstep(0f, 0.3f, route)
 
         val through = frame(scene, left, top, right, bottom, cx, cy, focal, fx, fy, fz, rx, rz, ux, uy, uz)
-        if (!through && outline.isEmpty) return
         val layers: DrawScope.() -> Unit = {
             for (mesh in meshes) {
                 val layer = mesh.layer
@@ -263,9 +265,11 @@ internal class EnterPainting {
             0f
         }
         val distance = max(WINDOW_MIN, WINDOW * ahead)
-        // How far the eye has come towards it.
+        // How far the eye has come towards it. Within a hair of it, the frame
+        // already fills the view — and any nearer, its corners would all fall
+        // behind the near clip and leave nothing to see through for a frame.
         val gone = (eye[1] - route[1]) * f0y + (eye[2] - route[2]) * f0z
-        if (gone >= distance) return true
+        if (gone >= distance - THROUGH) return true
 
         // The corners clockwise from the top left, in the world, then about the eye as it is now.
         for (k in 0..3) {
@@ -305,7 +309,12 @@ internal class EnterPainting {
             val y = cy - focal * window[3 * k + 1] / window[3 * k + 2]
             if (k == 0) outline.moveTo(x, y) else outline.lineTo(x, y)
         }
-        if (count > 0) outline.close()
+        // Nothing of it left in front of the eye: as good as through.
+        if (count < 3) {
+            outline.reset()
+            return true
+        }
+        outline.close()
         return false
     }
 
