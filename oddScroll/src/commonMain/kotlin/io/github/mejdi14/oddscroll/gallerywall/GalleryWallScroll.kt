@@ -94,6 +94,12 @@ data class GalleryWallItem(
      * stretched to the painting's size; null for the painting again.
      */
     val back: ImageBitmap? = null,
+    /**
+     * How near each part of the scene is, for stepping inside the painting:
+     * white near, black far, any size — what a single-image depth model writes
+     * out. Null guesses it from the painting itself.
+     */
+    val depth: ImageBitmap? = null,
 )
 
 /** What is carved into a [GalleryWallFrame]'s moulding. */
@@ -334,8 +340,11 @@ fun rememberGalleryWallScrollState(walkIn: Boolean = true): GalleryWallScrollSta
  * top. Both go back on as it is stepped away from. With them gone, [flipLabel]
  * turns the bare painting over like a sheet of paper — a crease sweeping in
  * from the lower left corner, ripples settling behind it — to its
- * [GalleryWallItem.back], and again turns it back. The room opens with a walk in from the doorway, unless the state
- * was made without one.
+ * [GalleryWallItem.back], and again turns it back. Up close, framed or bare,
+ * [stepInsideLabel] goes into the painting: it takes on depth, the room fades
+ * to dark round it and the eye goes in, where a drag looks round and a scroll
+ * walks in or back, until [exitLabel] steps back out. The room opens with a
+ * walk in from the doorway, unless the state was made without one.
  *
  * @param items paintings, in order; the hang repeats, so it has no end.
  * @param background the wall.
@@ -352,6 +361,9 @@ fun rememberGalleryWallScrollState(walkIn: Boolean = true): GalleryWallScrollSta
  * @param flipLabel the button, bottom right once the frame and glass are off,
  *   that turns the painting over and back, or null for none — a host can show its own
  *   off [GalleryWallScrollState.canFlip].
+ * @param stepInsideLabel the button, bottom middle up close, that goes into
+ *   the painting, or null for none — a host can show its own off
+ *   [GalleryWallScrollState.canStepInside].
  * @param state also lets a host's own controls move it.
  */
 @Composable
@@ -365,6 +377,7 @@ fun GalleryWallScroll(
     exitLabel: String? = "Exit",
     inspectLabel: String? = "Inspect",
     flipLabel: String? = "Flip",
+    stepInsideLabel: String? = "Step inside",
     state: GalleryWallScrollState = rememberGalleryWallScrollState(),
 ) {
     if (items.isEmpty()) {
@@ -376,6 +389,8 @@ fun GalleryWallScroll(
     val hang = remember(items, frame) { Hang(items, frame) }
     val art = remember(items, contentColor, frame, measurer) { WallArt(items, contentColor, frame, measurer) }
     val room = remember { Room() }
+    val inside = remember { StepInside() }
+    val canvas = remember { FloatArray(4) }
     SideEffect { state.hang = hang }
 
     LaunchedEffect(state) {
@@ -406,12 +421,15 @@ fun GalleryWallScroll(
                             val change = event.changes.firstOrNull { it.id == down.id } ?: break
                             if (!change.pressed) break
                             val dx = change.position.x - last.x
-                            travel += abs(dx) + abs(change.position.y - last.y)
+                            val dy = change.position.y - last.y
+                            travel += abs(dx) + abs(dy)
                             last = change.position
                             if (travel > TAP_SLOP) dragging = true
                             if (dragging) {
-                                // The back wall follows the finger, pixel for pixel.
-                                if (!state.looking) state.nudge(-dx / room.backPx)
+                                // The back wall follows the finger, pixel for
+                                // pixel; inside a painting, the scene does.
+                                if (state.inside) state.lookAround(dx, dy, room.focal)
+                                else if (!state.looking) state.nudge(-dx / room.backPx)
                                 change.consume()
                             }
                         }
@@ -433,7 +451,7 @@ fun GalleryWallScroll(
                             val scroll = event.changes.firstOrNull()?.scrollDelta ?: continue
                             val by = scroll.x + scroll.y
                             if (by == 0f) continue
-                            state.nudge(by * WHEEL_STEP)
+                            if (state.inside) state.walkInside(by) else state.nudge(by * WHEEL_STEP)
                             event.changes.forEach { it.consume() }
                         }
                     }
@@ -452,8 +470,24 @@ fun GalleryWallScroll(
             } else {
                 null
             }
+            val item = items[hang.wrap(subject)]
+            // Its depth is worked out as soon as it can be stepped into, so the step does not start on a dropped frame.
+            if (state.canStepInside || state.stepIn > 0f) inside.prepare(item.image, item.depth)
+            val veil = veil(state.stepIn)
             rotate(room.roll, Offset(room.cx, room.cy)) {
-                drawWall(art, hang, room, state.position, close.takeIf { room.zoom > BITMAP_SCALE }, subject, background)
+                if (veil < 1f) {
+                    drawWall(art, hang, room, state.position, close.takeIf { room.zoom > BITMAP_SCALE }, subject, background)
+                }
+                if (state.stepIn > 0f) {
+                    drawRect(INSIDE_DARK, alpha = veil)
+                    val card = close ?: art.cards[hang.wrap(subject)]
+                    if (canvasOnScreen(card, hang.start(subject) - state.position, room, item, canvas)) {
+                        inside.draw(
+                            this, canvas[0], canvas[1], canvas[2], canvas[3], room.cx, room.cy, room.focal,
+                            state.stepIn, state.yaw, state.pitch, state.wander, state.insideTime,
+                        )
+                    }
+                }
             }
         }
 
@@ -475,6 +509,11 @@ fun GalleryWallScroll(
         if (flipLabel != null) {
             HudButton(flipLabel, state.canFlip, background, contentColor, Modifier.align(Alignment.BottomEnd).padding(end = 28.dp)) {
                 state.flip()
+            }
+        }
+        if (stepInsideLabel != null) {
+            HudButton(stepInsideLabel, state.canStepInside, background, contentColor, Modifier.align(Alignment.BottomCenter)) {
+                state.stepInside()
             }
         }
     }
@@ -972,6 +1011,30 @@ private fun DrawScope.drawFold(card: CardArt, left: Float, inset: Float, room: R
         bottom = room.cy + f * (card.top + (h - o) / px - room.eyeY) / z,
         progress = room.fold,
     )
+}
+
+/** What the room fades to round a painting stepped into. */
+private val INSIDE_DARK = Color(0xFF0A0A0B)
+
+/**
+ * Where the canvas of [item] — out of its frame, sunk where it sits in it —
+ * lies on screen with its left edge [left] along the wall, square on: left,
+ * top, right and bottom into [out]. False if it is behind the eye.
+ */
+private fun canvasOnScreen(card: CardArt, left: Float, room: Room, item: GalleryWallItem, out: FloatArray): Boolean {
+    val z = DEPTH - (card.depth - card.recess) - room.eyeZ
+    if (z <= 0.05f) return false
+    val border = card.opening / card.pxPerUnit
+    val x0 = left + border - room.eyeX
+    val y0 = card.top + border - room.eyeY
+    val h = item.scale
+    val w = h * item.image.width / max(item.image.height, 1).toFloat()
+    val f = room.focal
+    out[0] = room.cx + f * x0 / z
+    out[1] = room.cy + f * y0 / z
+    out[2] = room.cx + f * (x0 + w) / z
+    out[3] = room.cy + f * (y0 + h) / z
+    return true
 }
 
 /*

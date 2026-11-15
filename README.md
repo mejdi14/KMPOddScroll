@@ -437,6 +437,22 @@ painting again without one — and on Android 13 and up the paper's grain
 showing as it turns. Flip again turns it back. Stepping back puts the glass
 and the frame back on.
 
+Up close, framed or bare, Step inside (bottom middle) goes into the painting.
+Every point of it is pushed back along its own line of sight to the depth the
+scene would have — so from where you stand it still looks exactly like the
+flat painting — then the room fades to dark round it and the eye goes in, a
+little forward and a little narrower: the near ground swells past you while
+the distance barely moves. Where the depth jumps, the sheet tears open and the
+dark shows through, the way a point cloud of a single picture does. Inside, a
+drag turns the head and leans it the same way so near things slide across far
+ones, a scroll walks in or back, and the head drifts a little on its own;
+Exit, or the system back, steps back out. The depth comes from the item's
+`depth` map if it has one, or is guessed from the painting — the ground running
+away up the canvas, the distance hazier and bluer than what is near, the sky
+furthest, smoothed within each patch of colour so it jumps along outlines. It
+is one textured triangle mesh a frame, its arrays written in place, so it needs
+Android 10 or later, like Flip.
+
 Measured off a recording of the reference rather than eyeballed. How tall a
 painting stands at each column of the screen is one fixed curve for every
 painting in every frame, bar its own height — 475,000 columns over 640 frames
@@ -476,11 +492,14 @@ GalleryWallScroll(
 | `exitLabel` | `"Exit"` | the button, bottom left up close, that steps back; `null` for none, when a tap anywhere does |
 | `inspectLabel` | `"Inspect"` | the button, bottom right up close, that takes the frame and then the glass off; `null` for none |
 | `flipLabel` | `"Flip"` | the button, bottom right once the frame and glass are off, that turns the painting over and back; `null` for none |
+| `stepInsideLabel` | `"Step inside"` | the button, bottom middle up close, that goes into the painting; `null` for none |
 | `state` | — | `rememberGalleryWallScrollState()`; `walkIn = false` skips the walk in from the doorway |
 
 `GalleryWallItem.scale` is a painting's height against the tallest (1), and
 `GalleryWallItem.back` what is on the back of its canvas when it is turned over,
-stretched to its size.
+stretched to its size, and `GalleryWallItem.depth` a depth map of it for
+stepping inside — white near, black far, any size, what a single-image depth
+model such as Depth Anything writes out.
 `GalleryWallScrollState.scrollTo(index)` brings a painting to the middle from a
 host's own controls, and `centred` is the one there. `canLook` turns true two
 seconds after the hang comes to rest; `look()` walks up to the painting and
@@ -488,6 +507,9 @@ seconds after the hang comes to rest; `look()` walks up to the painting and
 system back to it with `BackHandler(enabled = state.looking) { state.leave() }`.
 Up close `arrived` is true, and while the frame is still on so is `canInspect`;
 `inspect()` takes it and the glass off, and `inspected` stays true until `leave()`.
+`canStepInside` is true up close while the painting lies face up and still;
+`stepInside()` goes into it, `inside` is true until `leave()`, which steps back
+out of the painting first and from it the next time.
 Once both are out of sight `canFlip` turns true and `flip()` turns the painting
 over, or back — one textured mesh a frame, the paper fold carried over from a GL study,
 drawn with `drawVertices` (Android 10 and up; the button stays hidden below).

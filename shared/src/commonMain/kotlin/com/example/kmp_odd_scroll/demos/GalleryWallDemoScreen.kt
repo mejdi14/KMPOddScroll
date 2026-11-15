@@ -46,8 +46,8 @@ import org.jetbrains.compose.resources.imageResource
  * on its back, for when it is taken out and turned over. Credits are in the
  * README.
  *
- * Back steps away from a painting that has been walked up to before it leaves
- * the room.
+ * Back steps out of a painting that has been stepped inside, then away from
+ * one that has been walked up to, before it leaves the room.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
