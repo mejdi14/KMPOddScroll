@@ -481,8 +481,17 @@ off, carries the trees and the second woman and child, and a flat field on the
 right running 190 m to the far tree line and the house, which stand on a band
 at that distance so the field slides under them as you walk. The walk goes 5 m
 up the hill's foot, past the near woman and child; turning left shows the
-poppies carried on along the hill, turning right the field and the tree line
-carried on past the frame.
+poppies carried on along the hill and more of its trees along the crest,
+turning right the field and the tree line carried on past the frame.
+
+What the frame does not show there is quilted rather than stretched: each
+block of it is the piece of the painting that best agrees with what already
+lies round it, cut from rows where the paint is the size it should be at that
+distance, and joined along the line where the two differ least — so the
+brushwork out there is Monet's own, at its own size, and no stroke is blended
+with another. The sky, the ground and the far tree line share one sheet that is
+the painting pixel for pixel inside the frame and runs on evenly in angle
+outside it.
 
 Measured off a recording of the reference rather than eyeballed. How tall a
 painting stands at each column of the screen is one fixed curve for every
@@ -665,7 +674,8 @@ it. *Poppy Field* has the same, `files/museum_poppies_scene.bin` with
 (the hill's trees and the four figures). All of them are cut from the 1200x800
 cut of the painting and its depth map: the painting traced into regions, the
 ground fitted to it, and the paint it does not show carried on from the paint
-round it — none of it is new art.
+round it — pieces of the painting itself, quilted, for *Poppy Field* — none of
+it is new art.
 
 ### Illustrations
 
