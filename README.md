@@ -657,9 +657,15 @@ Venus*, *Poppy Field*, *Lady with a Fan* and *Strolling along the Seashore*. The
 reuse terms of each scan are on its Commons page. `museum_cliff_walk_back.webp`,
 the back of *The Cliff Walk*, is an illustrated note made for the demo — Monet's
 portrait, notes and a sketch of the cliff in the style of a letter — not a scan
-of anything of his. Both sides of that one are WebP, cut to the note's worn,
-ragged outline (mirrored on the front, which it is the back of) with the
-paint rubbed off the front's edges and corners down to the same browned paper. Each painting has a `museum_*_depth.png` beside it, 600x400, white near and
+of anything of his. `museum_poppies_back.webp`, the back of *Poppy Field*, is
+another from Argenteuil in 1873 on the same paper turned end for end: the
+cliff note's ink lifted off it, notes in a hand set to match, a pencil study
+taken off the painting with the poppies in red chalk and the parasol in blue,
+paint tried at the corner, and the portrait, its caption and the signature
+carried over from the first. Both sides of those two are WebP, each cut to its
+note's worn, ragged outline (mirrored on the front, which it is the back of)
+with the paint rubbed off the front's edges and corners down to the same
+browned paper. Each painting has a `museum_*_depth.png` beside it, 600x400, white near and
 black far, for stepping inside it: worked out from the 1200x800 cut by
 [Depth Anything V2 Small](https://huggingface.co/depth-anything/Depth-Anything-V2-Small-hf)
 (Apache 2.0 — the larger Depth Anything V2 models are non-commercial, so keep
