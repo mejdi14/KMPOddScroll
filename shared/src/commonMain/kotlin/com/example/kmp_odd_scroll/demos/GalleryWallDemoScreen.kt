@@ -37,6 +37,10 @@ import kmpoddscroll.shared.generated.resources.museum_fan
 import kmpoddscroll.shared.generated.resources.museum_june
 import kmpoddscroll.shared.generated.resources.museum_kiss
 import kmpoddscroll.shared.generated.resources.museum_poppies
+import kmpoddscroll.shared.generated.resources.museum_poppies_band
+import kmpoddscroll.shared.generated.resources.museum_poppies_cards
+import kmpoddscroll.shared.generated.resources.museum_poppies_far
+import kmpoddscroll.shared.generated.resources.museum_poppies_ground
 import kmpoddscroll.shared.generated.resources.museum_roses
 import kmpoddscroll.shared.generated.resources.museum_seashore
 import kmpoddscroll.shared.generated.resources.museum_sunflowers
@@ -67,10 +71,10 @@ import org.jetbrains.compose.resources.imageResource
  * no two neighbours alike. The Cliff Walk carries Monet's notes from Pourville
  * on its back, for when it is taken out and turned over. Each carries a depth
  * map worked out by Depth Anything V2 Small, for stepping inside it — but for
- * The Cliff Walk, which is rebuilt as a place instead: the coast, the meadow,
- * the figures and the sails laid out round the spot it was painted from, the
- * paint carried on past its edges and in behind its near things, to walk into
- * and look round. Credits are in the README.
+ * The Cliff Walk and Poppy Field, which are rebuilt as places instead: the
+ * coast or the hill and the field, the figures, trees and sails laid out round
+ * the spot each was painted from, the paint carried on past its edges and in
+ * behind its near things, to walk into and look round. Credits are in the README.
  *
  * Back steps out of a painting that has been stepped inside, then away from
  * one that has been walked up to, before it leaves the room.
@@ -127,12 +131,22 @@ fun GalleryWallDemoScreen() {
         }
     }
 
+    // Poppy Field as a place: sky, meadow, the far tree line, the hill's trees and the figures, and how they lie.
+    val poppiesFar = imageResource(Res.drawable.museum_poppies_far)
+    val poppiesGround = imageResource(Res.drawable.museum_poppies_ground)
+    val poppiesBand = imageResource(Res.drawable.museum_poppies_band)
+    val poppiesCards = imageResource(Res.drawable.museum_poppies_cards)
+    val poppiesLayout by produceState<ByteArray?>(null) { value = Res.readBytes("files/museum_poppies_scene.bin") }
+    val poppiesScene = remember(poppiesLayout, poppiesFar, poppiesGround, poppiesBand, poppiesCards) {
+        poppiesLayout?.let { GalleryWallScene(it, listOf(poppiesFar, poppiesGround, poppiesBand, poppiesCards)) }
+    }
+
     val items = remember(
         sunflowers, boating, june, bridge, roses, armchair, kiss,
         almond, boatingparty, cliffwalk, cliffwalkBack, venus, poppies, fan, seashore,
         sunflowersDepth, boatingDepth, juneDepth, bridgeDepth, rosesDepth, armchairDepth, kissDepth,
         almondDepth, boatingpartyDepth, cliffwalkDepth, venusDepth, poppiesDepth, fanDepth, seashoreDepth,
-        cliffwalkScene,
+        cliffwalkScene, poppiesScene,
     ) {
         listOf(
             GalleryWallItem(sunflowers, "Sunflowers", "Vincent van Gogh", "1888–1889", "Oil on canvas", frame = gilt(YELLOW_GOLD, Shell), depth = sunflowersDepth),
@@ -146,7 +160,7 @@ fun GalleryWallDemoScreen() {
             GalleryWallItem(boatingparty, "Luncheon of the Boating Party", "Pierre-Auguste Renoir", "1881", "Oil on canvas", frame = wood(WALNUT, Gadroon), depth = boatingpartyDepth),
             GalleryWallItem(cliffwalk, "The Cliff Walk at Pourville", "Claude Monet", "1882", "Oil on canvas", frame = wood(OAK, Classical, width = 0.07f), back = cliffwalkBack, depth = cliffwalkDepth, scene = cliffwalkScene),
             GalleryWallItem(venus, "The Birth of Venus", "Sandro Botticelli", "c. 1485", "Tempera on canvas", frame = gilt(PALE_GOLD, Shell, width = 0.115f), depth = venusDepth),
-            GalleryWallItem(poppies, "Poppy Field", "Claude Monet", "1873", "Oil on canvas", frame = gilt(RED_GOLD, Acanthus, width = 0.095f), depth = poppiesDepth),
+            GalleryWallItem(poppies, "Poppy Field", "Claude Monet", "1873", "Oil on canvas", frame = gilt(RED_GOLD, Acanthus, width = 0.095f), depth = poppiesDepth, scene = poppiesScene),
             GalleryWallItem(fan, "Lady with a Fan", "Gustav Klimt", "1917–1918", "Oil on canvas", frame = wood(ROSEWOOD, Gadroon), depth = fanDepth),
             GalleryWallItem(seashore, "Strolling along the Seashore", "Joaquín Sorolla", "1909", "Oil on canvas", frame = gilt(YELLOW_GOLD, Classical, width = 0.075f), depth = seashoreDepth),
         )

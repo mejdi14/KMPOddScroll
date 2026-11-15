@@ -457,7 +457,8 @@ is one textured triangle mesh a frame, its arrays written in place, so it needs
 Android 10 or later, like Flip.
 
 A painting can instead be rebuilt as a place, `GalleryWallItem.scene`, and then
-Step inside walks into it. The demo does this for *The Cliff Walk* only. Its
+Step inside walks into it. The demo does this for *The Cliff Walk* and *Poppy
+Field*. *The Cliff Walk*'s
 coast is laid out round the spot it was painted from — a 55° camera tilted 6°
 down to put the horizon at a third of the way down — as a sloping meadow, the
 headland's wall, the rock across the cove as a tapered mass, a flat sea and a
@@ -473,6 +474,15 @@ to sea — and tilts 8° down or 10° up; a scroll walks on or back along the
 route; the sea's brushwork drifts over it once in; Exit walks back out. It is
 one textured mesh per layer, about 33,000 triangles in all, drawn back to
 front.
+
+*Poppy Field* is seen from 2.7 m up — the woman in the foreground has her head
+well below the horizon — over a low poppy hill on the left whose crest, 18 m
+off, carries the trees and the second woman and child, and a flat field on the
+right running 190 m to the far tree line and the house, which stand on a band
+at that distance so the field slides under them as you walk. The walk goes 5 m
+up the hill's foot, past the near woman and child; turning left shows the
+poppies carried on along the hill, turning right the field and the tree line
+carried on past the frame.
 
 Measured off a recording of the reference rather than eyeballed. How tall a
 painting stands at each column of the screen is one fixed curve for every
@@ -650,9 +660,12 @@ hundredth fill the range.
 *The Cliff Walk* also has a scene to walk into: `files/museum_cliff_walk_scene.bin`
 lays it out, and `museum_cliff_walk_far.webp` (sky and sea), `_ground`, `_cliff`,
 `_cards` (figures, sails and grass) and `_strokes` (the sea's brushwork) paint
-it. All of them are cut from the 1200x800 cut of the painting and its depth
-map: the painting traced into regions, the coast fitted to it, and the paint
-it does not show carried on from the paint round it — none of it is new art.
+it. *Poppy Field* has the same, `files/museum_poppies_scene.bin` with
+`museum_poppies_far.webp`, `_ground`, `_band` (the far tree line) and `_cards`
+(the hill's trees and the four figures). All of them are cut from the 1200x800
+cut of the painting and its depth map: the painting traced into regions, the
+ground fitted to it, and the paint it does not show carried on from the paint
+round it — none of it is new art.
 
 ### Illustrations
 
