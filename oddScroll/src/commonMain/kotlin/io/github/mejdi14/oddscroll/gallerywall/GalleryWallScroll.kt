@@ -100,6 +100,12 @@ data class GalleryWallItem(
      * out. Null guesses it from the painting itself.
      */
     val depth: ImageBitmap? = null,
+    /**
+     * The painting rebuilt as a place to walk into, in place of [depth]:
+     * stepping inside walks a route into it, where a drag turns within its
+     * bounds and a scroll walks on or back. Null steps inside on [depth].
+     */
+    val scene: GalleryWallScene? = null,
 )
 
 /** What is carved into a [GalleryWallFrame]'s moulding. */
@@ -390,6 +396,7 @@ fun GalleryWallScroll(
     val art = remember(items, contentColor, frame, measurer) { WallArt(items, contentColor, frame, measurer) }
     val room = remember { Room() }
     val inside = remember { StepInside() }
+    val enter = remember { EnterPainting() }
     val canvas = remember { FloatArray(4) }
     SideEffect { state.hang = hang }
 
@@ -472,7 +479,11 @@ fun GalleryWallScroll(
             }
             val item = items[hang.wrap(subject)]
             // Its depth is worked out as soon as it can be stepped into, so the step does not start on a dropped frame.
-            if (state.canStepInside || state.stepIn > 0f) inside.prepare(item.image, item.depth)
+            val scene = item.scene
+            state.scene = scene
+            if (state.canStepInside || state.stepIn > 0f) {
+                if (scene != null) enter.prepare(scene) else inside.prepare(item.image, item.depth)
+            }
             val veil = veil(state.stepIn)
             rotate(room.roll, Offset(room.cx, room.cy)) {
                 if (veil < 1f) {
@@ -481,7 +492,12 @@ fun GalleryWallScroll(
                 if (state.stepIn > 0f) {
                     drawRect(INSIDE_DARK, alpha = veil)
                     val card = close ?: art.cards[hang.wrap(subject)]
-                    if (canvasOnScreen(card, hang.start(subject) - state.position, room, item, canvas)) {
+                    if (canvasOnScreen(card, hang.start(subject) - state.position, room, item, canvas) && scene != null) {
+                        enter.draw(
+                            this, scene, item.image, canvas[0], canvas[1], canvas[2], canvas[3],
+                            state.stepIn, state.route, state.yaw, state.pitch, state.insideTime,
+                        )
+                    } else if (canvasOnScreen(card, hang.start(subject) - state.position, room, item, canvas)) {
                         inside.draw(
                             this, canvas[0], canvas[1], canvas[2], canvas[3], room.cx, room.cy, room.focal,
                             state.stepIn, state.yaw, state.pitch, state.wander, state.insideTime,

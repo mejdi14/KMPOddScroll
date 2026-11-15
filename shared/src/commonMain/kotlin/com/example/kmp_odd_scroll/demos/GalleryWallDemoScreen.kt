@@ -2,6 +2,8 @@ package com.example.kmp_odd_scroll.demos
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -15,6 +17,7 @@ import io.github.mejdi14.oddscroll.gallerywall.GalleryWallOrnament.Acanthus
 import io.github.mejdi14.oddscroll.gallerywall.GalleryWallOrnament.Classical
 import io.github.mejdi14.oddscroll.gallerywall.GalleryWallOrnament.Gadroon
 import io.github.mejdi14.oddscroll.gallerywall.GalleryWallOrnament.Shell
+import io.github.mejdi14.oddscroll.gallerywall.GalleryWallScene
 import io.github.mejdi14.oddscroll.gallerywall.GalleryWallScroll
 import io.github.mejdi14.oddscroll.gallerywall.rememberGalleryWallScrollState
 import kmpoddscroll.shared.generated.resources.Res
@@ -25,6 +28,11 @@ import kmpoddscroll.shared.generated.resources.museum_boating_party
 import kmpoddscroll.shared.generated.resources.museum_bridge
 import kmpoddscroll.shared.generated.resources.museum_cliff_walk
 import kmpoddscroll.shared.generated.resources.museum_cliff_walk_back
+import kmpoddscroll.shared.generated.resources.museum_cliff_walk_cards
+import kmpoddscroll.shared.generated.resources.museum_cliff_walk_cliff
+import kmpoddscroll.shared.generated.resources.museum_cliff_walk_far
+import kmpoddscroll.shared.generated.resources.museum_cliff_walk_ground
+import kmpoddscroll.shared.generated.resources.museum_cliff_walk_strokes
 import kmpoddscroll.shared.generated.resources.museum_fan
 import kmpoddscroll.shared.generated.resources.museum_june
 import kmpoddscroll.shared.generated.resources.museum_kiss
@@ -58,8 +66,11 @@ import org.jetbrains.compose.resources.imageResource
  * rosewood or ebonised wood, and carved shell, acanthus, gadroon or classical,
  * no two neighbours alike. The Cliff Walk carries Monet's notes from Pourville
  * on its back, for when it is taken out and turned over. Each carries a depth
- * map worked out by Depth Anything V2 Small, for stepping inside it. Credits
- * are in the README.
+ * map worked out by Depth Anything V2 Small, for stepping inside it — but for
+ * The Cliff Walk, which is rebuilt as a place instead: the coast, the meadow,
+ * the figures and the sails laid out round the spot it was painted from, the
+ * paint carried on past its edges and in behind its near things, to walk into
+ * and look round. Credits are in the README.
  *
  * Back steps out of a painting that has been stepped inside, then away from
  * one that has been walked up to, before it leaves the room.
@@ -103,11 +114,25 @@ fun GalleryWallDemoScreen() {
     val fanDepth = imageResource(Res.drawable.museum_fan_depth)
     val seashoreDepth = imageResource(Res.drawable.museum_seashore_depth)
 
+    // The Cliff Walk as a place: sky and sea, meadow, cliffs, figures and sails, the sea's brushwork, and how they lie.
+    val cliffwalkFar = imageResource(Res.drawable.museum_cliff_walk_far)
+    val cliffwalkGround = imageResource(Res.drawable.museum_cliff_walk_ground)
+    val cliffwalkCliff = imageResource(Res.drawable.museum_cliff_walk_cliff)
+    val cliffwalkCards = imageResource(Res.drawable.museum_cliff_walk_cards)
+    val cliffwalkStrokes = imageResource(Res.drawable.museum_cliff_walk_strokes)
+    val cliffwalkLayout by produceState<ByteArray?>(null) { value = Res.readBytes("files/museum_cliff_walk_scene.bin") }
+    val cliffwalkScene = remember(cliffwalkLayout, cliffwalkFar, cliffwalkGround, cliffwalkCliff, cliffwalkCards, cliffwalkStrokes) {
+        cliffwalkLayout?.let {
+            GalleryWallScene(it, listOf(cliffwalkFar, cliffwalkGround, cliffwalkCliff, cliffwalkCards, cliffwalkStrokes))
+        }
+    }
+
     val items = remember(
         sunflowers, boating, june, bridge, roses, armchair, kiss,
         almond, boatingparty, cliffwalk, cliffwalkBack, venus, poppies, fan, seashore,
         sunflowersDepth, boatingDepth, juneDepth, bridgeDepth, rosesDepth, armchairDepth, kissDepth,
         almondDepth, boatingpartyDepth, cliffwalkDepth, venusDepth, poppiesDepth, fanDepth, seashoreDepth,
+        cliffwalkScene,
     ) {
         listOf(
             GalleryWallItem(sunflowers, "Sunflowers", "Vincent van Gogh", "1888–1889", "Oil on canvas", frame = gilt(YELLOW_GOLD, Shell), depth = sunflowersDepth),
@@ -119,7 +144,7 @@ fun GalleryWallDemoScreen() {
             GalleryWallItem(kiss, "The Kiss", "Gustav Klimt", "1907–1908", "Oil and gold leaf on canvas", frame = wood(EBONISED, Acanthus), depth = kissDepth),
             GalleryWallItem(almond, "Almond Blossoms", "Vincent van Gogh", "1890", "Oil on canvas", frame = gilt(ANTIQUE_GOLD, Shell), depth = almondDepth),
             GalleryWallItem(boatingparty, "Luncheon of the Boating Party", "Pierre-Auguste Renoir", "1881", "Oil on canvas", frame = wood(WALNUT, Gadroon), depth = boatingpartyDepth),
-            GalleryWallItem(cliffwalk, "The Cliff Walk at Pourville", "Claude Monet", "1882", "Oil on canvas", frame = wood(OAK, Classical, width = 0.07f), back = cliffwalkBack, depth = cliffwalkDepth),
+            GalleryWallItem(cliffwalk, "The Cliff Walk at Pourville", "Claude Monet", "1882", "Oil on canvas", frame = wood(OAK, Classical, width = 0.07f), back = cliffwalkBack, depth = cliffwalkDepth, scene = cliffwalkScene),
             GalleryWallItem(venus, "The Birth of Venus", "Sandro Botticelli", "c. 1485", "Tempera on canvas", frame = gilt(PALE_GOLD, Shell, width = 0.115f), depth = venusDepth),
             GalleryWallItem(poppies, "Poppy Field", "Claude Monet", "1873", "Oil on canvas", frame = gilt(RED_GOLD, Acanthus, width = 0.095f), depth = poppiesDepth),
             GalleryWallItem(fan, "Lady with a Fan", "Gustav Klimt", "1917–1918", "Oil on canvas", frame = wood(ROSEWOOD, Gadroon), depth = fanDepth),

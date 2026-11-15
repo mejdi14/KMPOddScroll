@@ -456,6 +456,24 @@ furthest, smoothed within each patch of colour so it jumps along outlines. It
 is one textured triangle mesh a frame, its arrays written in place, so it needs
 Android 10 or later, like Flip.
 
+A painting can instead be rebuilt as a place, `GalleryWallItem.scene`, and then
+Step inside walks into it. The demo does this for *The Cliff Walk* only. Its
+coast is laid out round the spot it was painted from — a 55° camera tilted 6°
+down to put the horizon at a third of the way down — as a sloping meadow, the
+headland's wall, the rock across the cove as a tapered mass, a flat sea and a
+sky dome, with the figures and sails on their own cards and grass standing up
+off the meadow. Each surface carries the painting's own paint where it shows
+and paint carried on from round it where it does not: the sea and sky past the
+edges, the sea behind the headland, the grass behind the figures, the rock's
+far side. From the entry pose the scene is the painting; stepping in, the room
+goes dark, the painting gives way to the scene with nothing moving, the scene
+opens out past the frame, and the eye walks 2.8 s along a route towards the
+water. A drag turns up to 25° either way — right towards the cliff, left out
+to sea — and tilts 8° down or 10° up; a scroll walks on or back along the
+route; the sea's brushwork drifts over it once in; Exit walks back out. It is
+one textured mesh per layer, about 33,000 triangles in all, drawn back to
+front.
+
 Measured off a recording of the reference rather than eyeballed. How tall a
 painting stands at each column of the screen is one fixed curve for every
 painting in every frame, bar its own height — 475,000 columns over 640 frames
@@ -502,7 +520,10 @@ GalleryWallScroll(
 `GalleryWallItem.back` what is on the back of its canvas when it is turned over,
 stretched to its size, and `GalleryWallItem.depth` a depth map of it for
 stepping inside — white near, black far, any size, what a single-image depth
-model such as Depth Anything writes out.
+model such as Depth Anything writes out — and `GalleryWallItem.scene` a
+`GalleryWallScene(geometry, textures)` to walk into instead: the scene file
+(its camera, route, look bounds and layers, documented on the class) and the
+textures its layers name.
 `GalleryWallScrollState.scrollTo(index)` brings a painting to the middle from a
 host's own controls, and `centred` is the one there. `canLook` turns true two
 seconds after the hang comes to rest; `look()` walks up to the painting and
@@ -625,6 +646,13 @@ black far, for stepping inside it: worked out from the 1200x800 cut by
 (Apache 2.0 — the larger Depth Anything V2 models are non-commercial, so keep
 to the small one), its relative depth stretched so the nearest and farthest
 hundredth fill the range.
+
+*The Cliff Walk* also has a scene to walk into: `files/museum_cliff_walk_scene.bin`
+lays it out, and `museum_cliff_walk_far.webp` (sky and sea), `_ground`, `_cliff`,
+`_cards` (figures, sails and grass) and `_strokes` (the sea's brushwork) paint
+it. All of them are cut from the 1200x800 cut of the painting and its depth
+map: the painting traced into regions, the coast fitted to it, and the paint
+it does not show carried on from the paint round it — none of it is new art.
 
 ### Illustrations
 

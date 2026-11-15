@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import io.github.mejdi14.oddscroll.internal.clamped
 import io.github.mejdi14.oddscroll.internal.frameRate
 import kotlin.math.abs
 import kotlin.math.exp
@@ -72,6 +73,13 @@ internal const val FLIP_MS = 1800f
 /** Stepping into the painting, and back out of it. */
 private const val STEP_IN_MS = 2600f
 private const val STEP_OUT_MS = 1600f
+
+/** A painting rebuilt as a place: the walk in along its route, and how much faster it walks back out. */
+private const val ROUTE_MS = 2800f
+private const val ROUTE_BACK = 3f
+
+/** How far stepped in before the walk in starts, once the scene has opened past the frame. */
+private const val ROUTE_FROM = 0.6f
 
 /** The head easing after a drag inside the painting, per frame at 60Hz. */
 private const val LOOK_EASE = 0.12f
@@ -199,6 +207,19 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
     private val look = FloatArray(2)
     private var wanderTo = 0f
 
+    /**
+     * The painting walked up to is rebuilt as a place, [GalleryWallItem.scene]:
+     * stepping in walks its route, a drag turns within its bounds and a scroll
+     * walks on or back along it. Set as it is drawn.
+     */
+    internal var scene: GalleryWallScene? = null
+
+    /** How far along the scene's route, 0 at the painting and 1 at its end, linear in time; and where it is going. */
+    internal var route = 0f
+        private set
+    private var routeTo = 0f
+    private var walkPending = false
+
     /** The walk into the room, 0 in the doorway and 1 where the hang is seen from, linear in time. */
     internal var entry = if (walkIn) 0f else 1f
         private set
@@ -243,6 +264,7 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
         if (!canStepInside) return
         inside = true
         canStepInside = false
+        walkPending = scene != null
     }
 
     /**
@@ -255,6 +277,8 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
             look[0] = 0f
             look[1] = 0f
             wanderTo = 0f
+            routeTo = 0f
+            walkPending = false
             return
         }
         looking = false
@@ -273,13 +297,25 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
     /** A drag of [dx], [dy] pixels inside the painting, seen through a focal length of [focal]. */
     internal fun lookAround(dx: Float, dy: Float, focal: Float) {
         if (!inside) return
-        lookBy(dx, dy, focal, look[0], look[1], look)
+        val scene = scene
+        if (scene == null) {
+            lookBy(dx, dy, focal, look[0], look[1], look)
+        } else {
+            // Into the scene: a drag right turns right, towards the cliff, and a drag up looks up.
+            look[0] = (look[0] + dx / focal).clamped(-scene.yawMax, scene.yawMax)
+            look[1] = (look[1] - dy / focal).clamped(-scene.pitchDown, scene.pitchUp)
+        }
     }
 
     /** A scroll of [by] inside the painting walks in, or back. */
     internal fun walkInside(by: Float) {
         if (!inside) return
-        wanderTo = wanderBy(by, wanderTo)
+        if (scene != null) {
+            routeTo = (routeTo - by * 0.04f).clamped(0f, 1f)
+            walkPending = false
+        } else {
+            wanderTo = wanderBy(by, wanderTo)
+        }
     }
 
     internal fun press() {
@@ -375,6 +411,12 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
             pitch += (look[1] - pitch) * k
             wander += (wanderTo - wander) * k
             insideTime = if (deep > 0f) insideTime + deltaMs / 1000f else 0f
+            if (walkPending && inside && stepIn >= ROUTE_FROM) {
+                routeTo = 1f
+                walkPending = false
+            }
+            val step = deltaMs / ROUTE_MS * if (inside) 1f else ROUTE_BACK
+            route = if (deep == 0f) 0f else if (route < routeTo) min(routeTo, route + step) else max(routeTo, route - step)
             // Inside, the head never quite stops drifting.
             moved = true
         }
