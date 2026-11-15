@@ -9,7 +9,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -367,7 +369,7 @@ fun rememberGalleryWallScrollState(walkIn: Boolean = true): GalleryWallScrollSta
  * @param flipLabel the button, bottom right once the frame and glass are off,
  *   that turns the painting over and back, or null for none — a host can show its own
  *   off [GalleryWallScrollState.canFlip].
- * @param stepInsideLabel the button, bottom middle up close, that goes into
+ * @param stepInsideLabel the button, bottom right up close above the others, that goes into
  *   the painting, or null for none — a host can show its own off
  *   [GalleryWallScrollState.canStepInside].
  * @param state also lets a host's own controls move it.
@@ -508,32 +510,45 @@ fun GalleryWallScroll(
         }
 
         if (lookLabel != null) {
-            HudButton(lookLabel, state.canLook, background, contentColor, Modifier.align(Alignment.BottomCenter)) {
+            HudButton(lookLabel, state.canLook, background, contentColor, Modifier.align(Alignment.BottomCenter).padding(bottom = HUD_BOTTOM)) {
                 state.look()
             }
         }
         if (exitLabel != null) {
-            HudButton(exitLabel, state.arrived, background, contentColor, Modifier.align(Alignment.BottomStart).padding(start = 28.dp)) {
+            HudButton(exitLabel, state.arrived, background, contentColor, Modifier.align(Alignment.BottomStart).padding(start = HUD_SIDE, bottom = HUD_BOTTOM)) {
                 state.leave()
             }
         }
-        if (inspectLabel != null) {
-            HudButton(inspectLabel, state.canInspect, background, contentColor, Modifier.align(Alignment.BottomEnd).padding(end = 28.dp)) {
-                state.inspect()
+        // Stepping inside stands over inspecting and flipping, on the right, so
+        // all three fit beside the way back on a narrow phone.
+        Column(
+            Modifier.align(Alignment.BottomEnd).padding(end = HUD_SIDE, bottom = HUD_BOTTOM),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.End,
+        ) {
+            if (stepInsideLabel != null) {
+                HudButton(stepInsideLabel, state.canStepInside, background, contentColor, Modifier) {
+                    state.stepInside()
+                }
             }
-        }
-        if (flipLabel != null) {
-            HudButton(flipLabel, state.canFlip, background, contentColor, Modifier.align(Alignment.BottomEnd).padding(end = 28.dp)) {
-                state.flip()
-            }
-        }
-        if (stepInsideLabel != null) {
-            HudButton(stepInsideLabel, state.canStepInside, background, contentColor, Modifier.align(Alignment.BottomCenter)) {
-                state.stepInside()
+            Box(contentAlignment = Alignment.CenterEnd) {
+                if (inspectLabel != null) {
+                    HudButton(inspectLabel, state.canInspect, background, contentColor, Modifier) {
+                        state.inspect()
+                    }
+                }
+                if (flipLabel != null) {
+                    HudButton(flipLabel, state.canFlip, background, contentColor, Modifier) {
+                        state.flip()
+                    }
+                }
             }
         }
     }
 }
+
+private val HUD_SIDE = 28.dp
+private val HUD_BOTTOM = 48.dp
 
 @Composable
 private fun HudButton(
@@ -557,7 +572,6 @@ private fun HudButton(
             letterSpacing = 0.6.sp,
         ),
         modifier = modifier
-            .padding(bottom = 48.dp)
             .graphicsLayer {
                 alpha = reveal
                 translationY = (1f - reveal) * 10.dp.toPx()

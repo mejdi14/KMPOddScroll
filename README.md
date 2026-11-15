@@ -437,7 +437,7 @@ painting again without one — and on Android 13 and up the paper's grain
 showing as it turns. Flip again turns it back. Stepping back puts the glass
 and the frame back on.
 
-Up close, framed or bare, Step inside (bottom middle) goes into the painting.
+Up close, framed or bare, Step inside (bottom right, above Inspect) goes into the painting.
 Every point of it is pushed back along its own line of sight to the depth the
 scene would have — so from where you stand it still looks exactly like the
 flat painting — then the room fades to dark round it and the eye goes in, a
@@ -532,7 +532,7 @@ GalleryWallScroll(
 | `exitLabel` | `"Exit"` | the button, bottom left up close, that steps back; `null` for none, when a tap anywhere does |
 | `inspectLabel` | `"Inspect"` | the button, bottom right up close, that takes the frame and then the glass off; `null` for none |
 | `flipLabel` | `"Flip"` | the button, bottom right once the frame and glass are off, that turns the painting over and back; `null` for none |
-| `stepInsideLabel` | `"Step inside"` | the button, bottom middle up close, that goes into the painting; `null` for none |
+| `stepInsideLabel` | `"Step inside"` | the button, bottom right up close above Inspect and Flip, that goes into the painting; `null` for none |
 | `state` | — | `rememberGalleryWallScrollState()`; `walkIn = false` skips the walk in from the doorway |
 
 `GalleryWallItem.scale` is a painting's height against the tallest (1), and
