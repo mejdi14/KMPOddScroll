@@ -442,8 +442,11 @@ Every point of it is pushed back along its own line of sight to the depth the
 scene would have — so from where you stand it still looks exactly like the
 flat painting — then the room fades to dark round it and the eye goes in, a
 little forward and a little narrower: the near ground swells past you while
-the distance barely moves. Where the depth jumps, the sheet tears open and the
-dark shows through, the way a point cloud of a single picture does. Inside, a
+the distance barely moves. Where the depth jumps the sheet comes apart, and
+behind it is a second sheet: the painting with its near things painted out a
+little way in from their edges, in the colours round them, at the depth of
+what is behind — so a figure slides across a distance that goes on behind it,
+a shade darker in its shadow, instead of tearing onto the dark. Inside, a
 drag turns the head and leans it the same way so near things slide across far
 ones, a scroll walks in or back, and the head drifts a little on its own;
 Exit, or the system back, steps back out. The depth comes from the item's
