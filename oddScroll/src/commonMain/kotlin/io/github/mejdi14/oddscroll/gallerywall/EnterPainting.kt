@@ -1,6 +1,5 @@
 package io.github.mejdi14.oddscroll.gallerywall
 
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
@@ -8,11 +7,12 @@ import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.ImageShader
 import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.VertexMode
 import androidx.compose.ui.graphics.Vertices
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -21,6 +21,7 @@ import io.github.mejdi14.oddscroll.internal.lerp
 import io.github.mejdi14.oddscroll.internal.smoothstep
 import kotlin.math.PI
 import kotlin.math.cos
+import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.tan
@@ -34,9 +35,12 @@ import kotlin.math.tan
  * it is the place.
  *
  * The step in: the room goes dark, the painting gives way to the scene behind
- * it with nothing moving, the scene opens out past the frame, and the eye then
- * walks a set route in. A drag turns the head within set bounds, a scroll walks
- * on or back along the route, and the sea's brushwork drifts once in.
+ * it with nothing moving, and the eye then walks a set route in. The frame
+ * stays where it was in the scene, a window a little way ahead, so the scene
+ * is only ever seen through it until the walk has carried the eye through —
+ * it grows because the eye goes up to it, not because it is blown up. A drag
+ * turns the head within set bounds, a scroll walks on or back along the
+ * route, and the sea's brushwork drifts once in.
  *
  * Each layer is one textured triangle mesh, drawn back to front, its arrays
  * written in place each frame.
@@ -104,23 +108,31 @@ private const val WATER = 3
 /** Nothing nearer the eye than this is drawn, in metres. */
 private const val NEAR_CLIP = 0.05f
 
-/** Where on the way in, linear in time, the painting gives way to the scene, and the scene opens past the frame. */
+/** Where on the way in, linear in time, the painting gives way to the scene, and the head is free to turn. */
 private const val REVEAL_FROM = 0.08f
 private const val REVEAL_TO = 0.22f
-private const val OPEN_FROM = 0.25f
-private const val OPEN_TO = 0.75f
+private const val FREE_TO = 0.7f
+
+/** How far ahead the frame stands in the scene, as a part of the route's length straight ahead. */
+private const val WINDOW = 0.35f
+
+/** The frame is never nearer than this, in metres, however short the route. */
+private const val WINDOW_MIN = 0.5f
 
 /** The sea's brushwork: how much of it over the painted sea, and how far it drifts, in texture pixels. */
 private const val WATER_STRENGTH = 0.3f
 private const val WATER_DRIFT = 5f
-
-private val OPEN_EASE = CubicBezierEasing(0.45f, 0f, 0.2f, 1f)
 
 /** Draws a [GalleryWallScene], one mesh per layer. */
 internal class EnterPainting {
     private var forScene: GalleryWallScene? = null
     private var meshes: List<Mesh> = emptyList()
     private val eye = FloatArray(3)
+
+    /** The frame's corners ahead of the eye, x, y, z, clipped to what is in front of it; and the outline they make. */
+    private val corner = FloatArray(12)
+    private val window = FloatArray(24)
+    private val outline = Path()
 
     private class Mesh(val layer: SceneLayer, val vertices: Vertices, val paint: Paint) {
         val z = FloatArray(layer.weight.size)
@@ -171,9 +183,8 @@ internal class EnterPainting {
     ) {
         val e = progress.clamped(0f, 1f)
         val reveal = smoothstep(REVEAL_FROM, REVEAL_TO, e)
-        val open = OPEN_EASE.transform(smoothstep(OPEN_FROM, OPEN_TO, e))
         // Nothing moves until the painting has given way to the scene.
-        val free = smoothstep(REVEAL_TO, OPEN_TO, e)
+        val free = smoothstep(REVEAL_TO, FREE_TO, e)
 
         val cx = (left + right) / 2f
         val cy = (top + bottom) / 2f
@@ -191,9 +202,9 @@ internal class EnterPainting {
         val ux = -sy0 * sp; val uy = cp; val uz = cy0 * sp
         val water = WATER_STRENGTH * smoothstep(0f, 0.3f, route)
 
-        val w = scope.size.width
-        val h = scope.size.height
-        scope.clipRect(lerp(left, 0f, open), lerp(top, 0f, open), lerp(right, w, open), lerp(bottom, h, open)) {
+        val through = frame(scene, left, top, right, bottom, cx, cy, focal, fx, fy, fz, rx, rz, ux, uy, uz)
+        if (!through && outline.isEmpty) return
+        val layers: DrawScope.() -> Unit = {
             for (mesh in meshes) {
                 val layer = mesh.layer
                 if (layer.kind == WATER && water <= 0.001f) continue
@@ -213,6 +224,89 @@ internal class EnterPainting {
                 )
             }
         }
+        // Seen through the frame until the eye has gone through it.
+        if (through) scope.layers() else scope.clipPath(outline, block = layers)
+    }
+
+    /**
+     * Outlines in [outline] the frame as the eye now sees it: the painting's
+     * rectangle from [left], [top] to [right], [bottom] as seen from the start
+     * of the route, laid at [WINDOW] of the way along it, and seen from where
+     * the eye is now, looking along [fx], [fy], [fz] with [rx], [rz] to its
+     * right and [ux], [uy], [uz] up. True once the eye is through it, with the
+     * outline left empty.
+     */
+    private fun frame(
+        scene: GalleryWallScene,
+        left: Float,
+        top: Float,
+        right: Float,
+        bottom: Float,
+        cx: Float,
+        cy: Float,
+        focal: Float,
+        fx: Float, fy: Float, fz: Float,
+        rx: Float, rz: Float,
+        ux: Float, uy: Float, uz: Float,
+    ): Boolean {
+        outline.reset()
+        val route = scene.route
+        // The entry pose: at the start of the route, not turned, tilted as painted.
+        val cp = cos(scene.tilt)
+        val sp = sin(scene.tilt)
+        val f0y = sp; val f0z = -cp
+        val u0y = cp; val u0z = sp
+        val ahead = if (route.size >= 6) {
+            val n = route.size - 3
+            (route[n + 1] - route[1]) * f0y + (route[n + 2] - route[2]) * f0z
+        } else {
+            0f
+        }
+        val distance = max(WINDOW_MIN, WINDOW * ahead)
+        // How far the eye has come towards it.
+        val gone = (eye[1] - route[1]) * f0y + (eye[2] - route[2]) * f0z
+        if (gone >= distance) return true
+
+        // The corners clockwise from the top left, in the world, then about the eye as it is now.
+        for (k in 0..3) {
+            val sx = (if (k == 0 || k == 3) left else right) - cx
+            val sy = cy - (if (k < 2) top else bottom)
+            val wx = route[0] + distance * sx / focal
+            val wy = route[1] + distance * (f0y + u0y * sy / focal)
+            val wz = route[2] + distance * (f0z + u0z * sy / focal)
+            val dx = wx - eye[0]
+            val dy = wy - eye[1]
+            val dz = wz - eye[2]
+            corner[3 * k] = dx * rx + dz * rz
+            corner[3 * k + 1] = dx * ux + dy * uy + dz * uz
+            corner[3 * k + 2] = dx * fx + dy * fy + dz * fz
+        }
+        // Cut to what is in front of the eye, then laid on screen.
+        var count = 0
+        for (k in 0..3) {
+            val a = 3 * k
+            val b = 3 * ((k + 1) % 4)
+            val za = corner[a + 2]
+            val zb = corner[b + 2]
+            if (za >= NEAR_CLIP) {
+                window[3 * count] = corner[a]; window[3 * count + 1] = corner[a + 1]; window[3 * count + 2] = za
+                count++
+            }
+            if ((za >= NEAR_CLIP) != (zb >= NEAR_CLIP)) {
+                val t = (NEAR_CLIP - za) / (zb - za)
+                window[3 * count] = lerp(corner[a], corner[b], t)
+                window[3 * count + 1] = lerp(corner[a + 1], corner[b + 1], t)
+                window[3 * count + 2] = NEAR_CLIP
+                count++
+            }
+        }
+        for (k in 0 until count) {
+            val x = cx + focal * window[3 * k] / window[3 * k + 2]
+            val y = cy - focal * window[3 * k + 1] / window[3 * k + 2]
+            if (k == 0) outline.moveTo(x, y) else outline.lineTo(x, y)
+        }
+        if (count > 0) outline.close()
+        return false
     }
 
     private fun project(

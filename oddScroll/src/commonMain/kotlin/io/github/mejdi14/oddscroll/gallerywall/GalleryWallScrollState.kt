@@ -78,8 +78,8 @@ private const val STEP_OUT_MS = 1600f
 private const val ROUTE_MS = 2800f
 private const val ROUTE_BACK = 3f
 
-/** How far stepped in before the walk in starts, once the scene has opened past the frame. */
-private const val ROUTE_FROM = 0.6f
+/** How far stepped in before the walk in starts, once the room round the frame has gone dark. */
+private const val ROUTE_FROM = 0.4f
 
 /** The head easing after a drag inside the painting, per frame at 60Hz. */
 private const val LOOK_EASE = 0.12f

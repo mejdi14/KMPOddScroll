@@ -467,9 +467,9 @@ off the meadow. Each surface carries the painting's own paint where it shows
 and paint carried on from round it where it does not: the sea and sky past the
 edges, the sea behind the headland, the grass behind the figures, the rock's
 far side. From the entry pose the scene is the painting; stepping in, the room
-goes dark, the painting gives way to the scene with nothing moving, the scene
-opens out past the frame, and the eye walks 2.8 s along a route towards the
-water. A drag turns up to 25° either way — right towards the cliff, left out
+goes dark, the painting gives way to the scene with nothing moving, and the
+eye walks 2.8 s along a route towards the water — through the frame, which
+stays put in the scene as a window, so it grows only as the eye goes up to it. A drag turns up to 25° either way — right towards the cliff, left out
 to sea — and tilts 8° down or 10° up; a scroll walks on or back along the
 route; the sea's brushwork drifts over it once in; Exit walks back out. It is
 one textured mesh per layer, about 33,000 triangles in all, drawn back to
