@@ -616,7 +616,12 @@ the back of *The Cliff Walk*, is an illustrated note made for the demo — Monet
 portrait, notes and a sketch of the cliff in the style of a letter — not a scan
 of anything of his. Both sides of that one are WebP, cut to the note's worn,
 ragged outline (mirrored on the front, which it is the back of) with the
-paint rubbed off the front's edges and corners down to the same browned paper.
+paint rubbed off the front's edges and corners down to the same browned paper. Each painting has a `museum_*_depth.png` beside it, 600x400, white near and
+black far, for stepping inside it: worked out from the 1200x800 cut by
+[Depth Anything V2 Small](https://huggingface.co/depth-anything/Depth-Anything-V2-Small-hf)
+(Apache 2.0 — the larger Depth Anything V2 models are non-commercial, so keep
+to the small one), its relative depth stretched so the nearest and farthest
+hundredth fill the range.
 
 ### Illustrations
 

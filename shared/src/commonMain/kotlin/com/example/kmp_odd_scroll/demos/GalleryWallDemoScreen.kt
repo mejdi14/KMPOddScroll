@@ -33,6 +33,20 @@ import kmpoddscroll.shared.generated.resources.museum_roses
 import kmpoddscroll.shared.generated.resources.museum_seashore
 import kmpoddscroll.shared.generated.resources.museum_sunflowers
 import kmpoddscroll.shared.generated.resources.museum_venus
+import kmpoddscroll.shared.generated.resources.museum_almond_depth
+import kmpoddscroll.shared.generated.resources.museum_armchair_depth
+import kmpoddscroll.shared.generated.resources.museum_boating_depth
+import kmpoddscroll.shared.generated.resources.museum_boating_party_depth
+import kmpoddscroll.shared.generated.resources.museum_bridge_depth
+import kmpoddscroll.shared.generated.resources.museum_cliff_walk_depth
+import kmpoddscroll.shared.generated.resources.museum_fan_depth
+import kmpoddscroll.shared.generated.resources.museum_june_depth
+import kmpoddscroll.shared.generated.resources.museum_kiss_depth
+import kmpoddscroll.shared.generated.resources.museum_poppies_depth
+import kmpoddscroll.shared.generated.resources.museum_roses_depth
+import kmpoddscroll.shared.generated.resources.museum_seashore_depth
+import kmpoddscroll.shared.generated.resources.museum_sunflowers_depth
+import kmpoddscroll.shared.generated.resources.museum_venus_depth
 import org.jetbrains.compose.resources.imageResource
 
 /**
@@ -43,8 +57,9 @@ import org.jetbrains.compose.resources.imageResource
  * yellow, pale, red, green or antique gold, or carved walnut, mahogany, oak,
  * rosewood or ebonised wood, and carved shell, acanthus, gadroon or classical,
  * no two neighbours alike. The Cliff Walk carries Monet's notes from Pourville
- * on its back, for when it is taken out and turned over. Credits are in the
- * README.
+ * on its back, for when it is taken out and turned over. Each carries a depth
+ * map worked out by Depth Anything V2 Small, for stepping inside it. Credits
+ * are in the README.
  *
  * Back steps out of a painting that has been stepped inside, then away from
  * one that has been walked up to, before it leaves the room.
@@ -72,25 +87,43 @@ fun GalleryWallDemoScreen() {
     val fan = imageResource(Res.drawable.museum_fan)
     val seashore = imageResource(Res.drawable.museum_seashore)
 
+    // Depth Anything V2 Small, white near and black far, for stepping inside.
+    val sunflowersDepth = imageResource(Res.drawable.museum_sunflowers_depth)
+    val boatingDepth = imageResource(Res.drawable.museum_boating_depth)
+    val juneDepth = imageResource(Res.drawable.museum_june_depth)
+    val bridgeDepth = imageResource(Res.drawable.museum_bridge_depth)
+    val rosesDepth = imageResource(Res.drawable.museum_roses_depth)
+    val armchairDepth = imageResource(Res.drawable.museum_armchair_depth)
+    val kissDepth = imageResource(Res.drawable.museum_kiss_depth)
+    val almondDepth = imageResource(Res.drawable.museum_almond_depth)
+    val boatingpartyDepth = imageResource(Res.drawable.museum_boating_party_depth)
+    val cliffwalkDepth = imageResource(Res.drawable.museum_cliff_walk_depth)
+    val venusDepth = imageResource(Res.drawable.museum_venus_depth)
+    val poppiesDepth = imageResource(Res.drawable.museum_poppies_depth)
+    val fanDepth = imageResource(Res.drawable.museum_fan_depth)
+    val seashoreDepth = imageResource(Res.drawable.museum_seashore_depth)
+
     val items = remember(
         sunflowers, boating, june, bridge, roses, armchair, kiss,
         almond, boatingparty, cliffwalk, cliffwalkBack, venus, poppies, fan, seashore,
+        sunflowersDepth, boatingDepth, juneDepth, bridgeDepth, rosesDepth, armchairDepth, kissDepth,
+        almondDepth, boatingpartyDepth, cliffwalkDepth, venusDepth, poppiesDepth, fanDepth, seashoreDepth,
     ) {
         listOf(
-            GalleryWallItem(sunflowers, "Sunflowers", "Vincent van Gogh", "1888–1889", "Oil on canvas", frame = gilt(YELLOW_GOLD, Shell)),
-            GalleryWallItem(boating, "Boating", "Édouard Manet", "1874", "Oil on canvas", frame = wood(WALNUT, Acanthus, width = 0.095f)),
-            GalleryWallItem(june, "Flaming June", "Frederic Leighton", "1895", "Oil on canvas", frame = gilt(RED_GOLD, Gadroon, width = 0.105f)),
-            GalleryWallItem(bridge, "Water Lilies and Japanese Bridge", "Claude Monet", "1899", "Oil on canvas", frame = gilt(PALE_GOLD, Acanthus, width = 0.09f)),
-            GalleryWallItem(roses, "The Roses of Heliogabalus", "Lawrence Alma-Tadema", "1888", "Oil on canvas", frame = wood(MAHOGANY, Shell, width = 0.11f)),
-            GalleryWallItem(armchair, "Little Girl in a Blue Armchair", "Mary Cassatt", "1878", "Oil on canvas", frame = gilt(GREEN_GOLD, Gadroon, width = 0.095f)),
-            GalleryWallItem(kiss, "The Kiss", "Gustav Klimt", "1907–1908", "Oil and gold leaf on canvas", frame = wood(EBONISED, Acanthus)),
-            GalleryWallItem(almond, "Almond Blossoms", "Vincent van Gogh", "1890", "Oil on canvas", frame = gilt(ANTIQUE_GOLD, Shell)),
-            GalleryWallItem(boatingparty, "Luncheon of the Boating Party", "Pierre-Auguste Renoir", "1881", "Oil on canvas", frame = wood(WALNUT, Gadroon)),
-            GalleryWallItem(cliffwalk, "The Cliff Walk at Pourville", "Claude Monet", "1882", "Oil on canvas", frame = wood(OAK, Classical, width = 0.07f), back = cliffwalkBack),
-            GalleryWallItem(venus, "The Birth of Venus", "Sandro Botticelli", "c. 1485", "Tempera on canvas", frame = gilt(PALE_GOLD, Shell, width = 0.115f)),
-            GalleryWallItem(poppies, "Poppy Field", "Claude Monet", "1873", "Oil on canvas", frame = gilt(RED_GOLD, Acanthus, width = 0.095f)),
-            GalleryWallItem(fan, "Lady with a Fan", "Gustav Klimt", "1917–1918", "Oil on canvas", frame = wood(ROSEWOOD, Gadroon)),
-            GalleryWallItem(seashore, "Strolling along the Seashore", "Joaquín Sorolla", "1909", "Oil on canvas", frame = gilt(YELLOW_GOLD, Classical, width = 0.075f)),
+            GalleryWallItem(sunflowers, "Sunflowers", "Vincent van Gogh", "1888–1889", "Oil on canvas", frame = gilt(YELLOW_GOLD, Shell), depth = sunflowersDepth),
+            GalleryWallItem(boating, "Boating", "Édouard Manet", "1874", "Oil on canvas", frame = wood(WALNUT, Acanthus, width = 0.095f), depth = boatingDepth),
+            GalleryWallItem(june, "Flaming June", "Frederic Leighton", "1895", "Oil on canvas", frame = gilt(RED_GOLD, Gadroon, width = 0.105f), depth = juneDepth),
+            GalleryWallItem(bridge, "Water Lilies and Japanese Bridge", "Claude Monet", "1899", "Oil on canvas", frame = gilt(PALE_GOLD, Acanthus, width = 0.09f), depth = bridgeDepth),
+            GalleryWallItem(roses, "The Roses of Heliogabalus", "Lawrence Alma-Tadema", "1888", "Oil on canvas", frame = wood(MAHOGANY, Shell, width = 0.11f), depth = rosesDepth),
+            GalleryWallItem(armchair, "Little Girl in a Blue Armchair", "Mary Cassatt", "1878", "Oil on canvas", frame = gilt(GREEN_GOLD, Gadroon, width = 0.095f), depth = armchairDepth),
+            GalleryWallItem(kiss, "The Kiss", "Gustav Klimt", "1907–1908", "Oil and gold leaf on canvas", frame = wood(EBONISED, Acanthus), depth = kissDepth),
+            GalleryWallItem(almond, "Almond Blossoms", "Vincent van Gogh", "1890", "Oil on canvas", frame = gilt(ANTIQUE_GOLD, Shell), depth = almondDepth),
+            GalleryWallItem(boatingparty, "Luncheon of the Boating Party", "Pierre-Auguste Renoir", "1881", "Oil on canvas", frame = wood(WALNUT, Gadroon), depth = boatingpartyDepth),
+            GalleryWallItem(cliffwalk, "The Cliff Walk at Pourville", "Claude Monet", "1882", "Oil on canvas", frame = wood(OAK, Classical, width = 0.07f), back = cliffwalkBack, depth = cliffwalkDepth),
+            GalleryWallItem(venus, "The Birth of Venus", "Sandro Botticelli", "c. 1485", "Tempera on canvas", frame = gilt(PALE_GOLD, Shell, width = 0.115f), depth = venusDepth),
+            GalleryWallItem(poppies, "Poppy Field", "Claude Monet", "1873", "Oil on canvas", frame = gilt(RED_GOLD, Acanthus, width = 0.095f), depth = poppiesDepth),
+            GalleryWallItem(fan, "Lady with a Fan", "Gustav Klimt", "1917–1918", "Oil on canvas", frame = wood(ROSEWOOD, Gadroon), depth = fanDepth),
+            GalleryWallItem(seashore, "Strolling along the Seashore", "Joaquín Sorolla", "1909", "Oil on canvas", frame = gilt(YELLOW_GOLD, Classical, width = 0.075f), depth = seashoreDepth),
         )
     }
 
