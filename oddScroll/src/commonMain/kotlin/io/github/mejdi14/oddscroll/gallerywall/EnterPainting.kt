@@ -132,6 +132,10 @@ internal class EnterPainting {
     private var meshes: List<Mesh> = emptyList()
     private val eye = FloatArray(3)
 
+    /** The focal length the scene was last drawn with, in pixels, so a drag turns it pixel for pixel. */
+    var focal = 1f
+        private set
+
     /** The frame's corners ahead of the eye, x, y, z, clipped to what is in front of it; and the outline they make. */
     private val corner = FloatArray(12)
     private val window = FloatArray(24)
@@ -192,6 +196,7 @@ internal class EnterPainting {
         val cx = (left + right) / 2f
         val cy = (top + bottom) / 2f
         val focal = (right - left) / 2f / tan(scene.hFov / 2f)
+        this.focal = focal
         path(scene.route, smoothstep(0f, 1f, route.clamped(0f, 1f)), eye)
         val turn = yaw * free
         val tilt = scene.tilt + pitch * free
