@@ -36,11 +36,13 @@ fun ScrollArtwork(route: String, modifier: Modifier = Modifier) {
             "edge_distortion" -> edgeDistortion()
             "flex_carousel" -> flexCarousel()
             "infinite_menu" -> infiniteMenu()
+            "cartwheel" -> cartwheel()
             "card_sphere" -> cardSphere()
             "lift_stack" -> liftStack()
             "cd_rack" -> cdRack()
             "gallery_wall" -> galleryWall()
             "terrace" -> terrace()
+            "runway" -> runway()
             else -> infiniteSpiral()
         }
     }
@@ -190,6 +192,37 @@ private fun DrawScope.cardSphere() {
         topLeft = Offset(cx - hero / 2f, cy - hero * 0.62f),
         size = Size(hero, hero * 1.25f),
     )
+}
+
+/**
+ * The wheel in miniature: the rim arcing off the right edge, with square cards
+ * pinned flat to it so only the one passing the middle sits square.
+ */
+private fun DrawScope.cartwheel() {
+    val radius = size.minDimension * 1.55f
+    val hubX = size.width * 0.5f + radius
+    val hubY = size.height / 2f
+    val card = size.minDimension * 0.3f
+    val step = (card * 1.18f) / radius
+
+    for (i in -3..3) {
+        val angle = i * step
+        val x = hubX - cos(angle) * radius
+        val y = hubY - sin(angle) * radius
+        val c = cos(angle)
+        val s = sin(angle)
+        val h = card / 2f
+        val corners = listOf(-h to -h, h to -h, h to h, -h to h).map { (ox, oy) ->
+            Offset(x + c * ox - s * oy, y + s * ox + c * oy)
+        }
+        val path = Path().apply {
+            moveTo(corners[0].x, corners[0].y)
+            corners.drop(1).forEach { lineTo(it.x, it.y) }
+            close()
+        }
+        val lit = 1f - kotlin.math.abs(i) / 4f
+        drawPath(path, Color(0xFFBFBFB6).copy(alpha = 0.22f + lit * 0.55f))
+    }
 }
 
 /**
@@ -351,4 +384,60 @@ private fun DrawScope.terrace() {
             )
         }
     }
+}
+
+/**
+ * The runway in miniature: a curved perspective strip narrowing from the bottom
+ * corners up to 0.381 of the frame at the top, colour-banded, with raised card
+ * plinths on the inner 0.738 rails and curved spline tethers from the left index.
+ */
+private fun DrawScope.runway() {
+    val cx = size.width * 0.5f
+    val w = size.width
+    val h = size.height
+
+    fun widthAt(yn: Float): Float =
+        w * (0.381f + 0.088f * yn + 1.258f * yn * yn - 1.298f * yn * yn * yn + 0.571f * yn * yn * yn * yn)
+
+    val bands = arrayOf(
+        0.00f to 0.28f to Color(0xFF5E0099),
+        0.28f to 0.64f to Color(0xFF920056),
+        0.64f to 1.00f to Color(0xFF090C99),
+    )
+    for ((range, color) in bands) {
+        val (y0, y1) = range
+        val w0 = widthAt(y0)
+        val w1 = widthAt(y1)
+        val path = Path().apply {
+            moveTo(cx - w0 * 0.5f, y0 * h)
+            lineTo(cx + w0 * 0.5f, y0 * h)
+            lineTo(cx + w1 * 0.5f, y1 * h)
+            lineTo(cx - w1 * 0.5f, y1 * h)
+            close()
+        }
+        drawPath(path, color.copy(alpha = 0.85f))
+    }
+
+    // Two raised card plinths on the inner 0.738 rail
+    for ((ynTop, ynBot) in arrayOf(0.34f to 0.54f, 0.68f to 0.90f)) {
+        val wt = widthAt(ynTop) * 0.369f
+        val wb = widthAt(ynBot) * 0.369f
+        val card = Path().apply {
+            moveTo(cx - wt, ynTop * h)
+            lineTo(cx + wt, ynTop * h)
+            lineTo(cx + wb, ynBot * h)
+            lineTo(cx - wb, ynBot * h)
+            close()
+        }
+        drawPath(card, Color(0xFFF4F1E8).copy(alpha = 0.88f))
+    }
+
+    // Left index node + curved Bezier tether spline
+    val dot = Offset(w * 0.11f, h * 0.48f)
+    drawCircle(Color.White, radius = 2.2f, center = dot)
+    val spline = Path().apply {
+        moveTo(dot.x, dot.y)
+        cubicTo(w * 0.22f, dot.y, w * 0.28f, h * 0.44f, cx - widthAt(0.44f) * 0.369f, h * 0.44f)
+    }
+    drawPath(spline, Color.White.copy(alpha = 0.75f), style = Stroke(1.2f))
 }

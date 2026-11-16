@@ -2,6 +2,7 @@ package com.example.kmp_odd_scroll
 
 import androidx.compose.runtime.Composable
 import com.example.kmp_odd_scroll.demos.CardSphereDemoScreen
+import com.example.kmp_odd_scroll.demos.CartwheelDemoScreen
 import com.example.kmp_odd_scroll.demos.CdRackDemoScreen
 import com.example.kmp_odd_scroll.demos.EdgeDistortionDemoScreen
 import com.example.kmp_odd_scroll.demos.FlexCarouselDemoScreen
@@ -9,6 +10,7 @@ import com.example.kmp_odd_scroll.demos.GalleryWallDemoScreen
 import com.example.kmp_odd_scroll.demos.InfiniteMenuDemoScreen
 import com.example.kmp_odd_scroll.demos.InfiniteSpiralDemoScreen
 import com.example.kmp_odd_scroll.demos.LiftStackDemoScreen
+import com.example.kmp_odd_scroll.demos.RunwayDemoScreen
 import com.example.kmp_odd_scroll.demos.TerraceDemoScreen
 
 /**
@@ -56,6 +58,13 @@ val scrollDemos: List<ScrollDemo> = listOf(
         screen = { InfiniteMenuDemoScreen() },
     ),
     ScrollDemo(
+        route = "cartwheel",
+        category = "Mechanical",
+        title = "Cartwheel",
+        subtitle = "A column of cards riding the rim of a wheel that rolls past the frame",
+        screen = { CartwheelDemoScreen() },
+    ),
+    ScrollDemo(
         route = "card_sphere",
         category = "Graphic",
         title = "Card Sphere",
@@ -89,5 +98,12 @@ val scrollDemos: List<ScrollDemo> = listOf(
         title = "Terrace",
         subtitle = "A deck stacked back both ways from the front card, its neighbours stepping out as narrowing bands",
         screen = { TerraceDemoScreen() },
+    ),
+    ScrollDemo(
+        route = "runway",
+        category = "Blueprint",
+        title = "Runway",
+        subtitle = "A colour-banded runway of raised card plinths curving up into the distance, tethered to a margin index",
+        screen = { RunwayDemoScreen() },
     ),
 )

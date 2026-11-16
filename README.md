@@ -19,7 +19,7 @@ styles add an AGSL shader on Android 13+ and draw without it everywhere else.
   [Edge Distortion](#edge-distortion) · [Flex Carousel](#flex-carousel) ·
   [Infinite Menu](#infinite-menu) · [Card Sphere](#card-sphere) ·
   [Lift Stack](#lift-stack) · [CD Rack](#cd-rack) ·
-  [Gallery Wall](#gallery-wall) · [Terrace](#terrace)
+  [Gallery Wall](#gallery-wall) · [Terrace](#terrace) · [Runway](#runway)
 - [Running the demo app](#running-the-demo-app)
 - [Demo GIFs](#demo-gifs)
 - [Image credits](#image-credits)
@@ -64,6 +64,7 @@ controls.
 | [CD Rack](#cd-rack) | a row of jewel cases to open, take the cover out of and read the manual of | shaded plastic and disc on Android 13+ |
 | [Gallery Wall](#gallery-wall) | paintings round a room, to walk up to, take apart and step inside | liquid glass and paper grain on Android 13+; Flip and Step inside need Android 10+ |
 | [Terrace](#terrace) | a deck stacked in depth both ways from the front card | — |
+| [Runway](#runway) | a colour-banded runway of raised card plinths curving up into the distance, tethered to a margin index | — |
 
 "Platform extras" are drawn only where they are listed; everywhere else the
 style looks flat in that one respect and behaves identically otherwise.
@@ -737,6 +738,72 @@ levels from the front:
 
 A card and one shared, baked shadow are each a single `drawImage` placed by a
 transform, so the stack is fourteen draws a frame and needs no shader.
+
+</details>
+
+### Runway
+
+A colour-banded 3D perspective runway of raised card plinths that runs away from
+the bottom corners of the frame and curves upward into the distance at the top,
+flanked by a 500-px coordinate ruler, wireframe architectural blocks and
+equations on the dark floor, and an eleven-section index down the left margin
+whose active dot throws curved Bezier spline tethers to the cards and feature
+nodes passing on the runway. Drag up or down, flick to coast and settle, scroll
+with the wheel, tap any section in the left index to jump to it, or tap the
+`start ↑` plinth at the 44,071-px finish line to fold it and launch.
+
+```kotlin
+RunwayScroll(
+    items = listOf(
+        RunwayItem(image, "Shop skill for any agent", "Give agents discovery and checkout."),
+        /* ... */
+    ),
+    modifier = Modifier.fillMaxSize(),
+)
+```
+
+| Parameter | Default | |
+| --- | --- | --- |
+| `items` | — | raised card plinths placed along the runway sections |
+| `sections` | `DefaultRunwaySections` | the eleven colour-coded runway sections (`Agentic` to `Developer`) |
+| `background` | `#050507` | dark blueprint ground colour |
+| `state` | `autoplay = true` | `rememberRunwayScrollState(autoplay, initialScrollPx)` |
+
+**State.** `RunwayScrollState.scrollToSection(index)` and `scrollToPx(target)`
+drive the runway from a host's own controls, `triggerLaunch()` runs the finish
+plinth's fold-and-launch sequence, and `activeSection` reports the section
+currently passing the middle of the frame.
+
+<details>
+<summary>How it's measured and drawn</summary>
+
+Measured off the 752 post-intro frames (`t = 2.000 s .. 27.033 s`) of the
+reference recording rather than eyeballed. Pooling the 10 colour-band section
+boundaries (292 observations) and 17 flat card tracks (34 horizontal edges,
+1,132 edge observations, 606 pose observations) collapses the entire scene onto
+one scalar scroll coordinate `S(t)` per frame (calibrated to the HUD's `page W =
+993 px` and `to the finish: ↑ 44,071 px`):
+
+- the runway is centred at `0.5000` of the frame width to 0.25 px RMS (max
+  0.42 px); its width narrows from a flat tilted plane in the foreground
+  (`dw/dy = 0.798` below `y = 0.55 H`) up a concave ramp that turns to face the
+  camera at the top edge (`w(0) = 0.3812 W`, `dw/dy → 0`), fitted across all
+  1,020 unclipped scanlines to 0.59 px RMS;
+- card plinths ride the inner rails `u ∈ [-0.369, +0.369]` (`0.738` of the
+  runway width, with a `0.0148` centre gutter between paired half-cards) and
+  stand `0.0201` runway widths (`20.0 px` on `1080 px`) proud of the floor,
+  placing card horizontal centres to 0.41 px RMS, card vertical centres to
+  0.89 px RMS (median 0.19 px), and section boundaries to 0.92 px RMS (median
+  0.17 px);
+- nothing turns (`θ = 0.00°`, RMS `0.34°`), dims or changes intrinsic size on
+  the way up the ramp — section colours hold to `2.2%` across depth and card
+  panels to `2.3%`;
+- the reference tour runs in two main segments separated by a 0.27 s hold at
+  `Developer` (`S = 36,321 px`): a 12.87 s cruise-and-deceleration (`CubicBezier(0.129, 0.100, 0.886, 0.900)` into `CubicBezier(0.616, 0.912, 0.861, 0.976)`, 6.44 px RMS) followed by an 8.83 s run through `Developer` that settles at `44,071 px` on `spring(dampingRatio = 0.7907f, stiffness = 275.37f)` (`ωn = 16.59 rad/s`, 1.07 px RMS).
+
+Each card image is baked once and drawn through its exact four-corner projective
+`Matrix` — one `drawImage` per visible plinth — so it runs in common code on
+every target without shaders or strip subdivision.
 
 </details>
 
