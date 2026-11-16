@@ -8,7 +8,7 @@ a list of items and owns its own layout, projection and gestures.
 styles add an AGSL shader on Android 13+ and draw without it everywhere else.
 
 <p align="center">
-  <img src="docs/demos/cd-rack.gif" width="520" alt="CD Rack: scrolling a rack of PlayStation cases, opening one, taking the cover out and leafing through the manual">
+  <img src="docs/demos/cd-rack.gif" width="640" alt="CD Rack: scrolling a rack of PlayStation cases, opening one, taking the cover out and leafing through the manual">
 </p>
 
 ## Contents
@@ -313,7 +313,7 @@ and no strips anywhere.
 ### CD Rack
 
 <p align="center">
-  <img src="docs/demos/cd-rack.gif" width="520" alt="CD Rack demo">
+  <img src="docs/demos/cd-rack.gif" width="640" alt="CD Rack demo">
 </p>
 
 A row of clear CD jewel cases standing on edge, seen from above and to the
@@ -767,15 +767,17 @@ Tests: `./gradlew :shared:jvmTest`, `:shared:testAndroidHostTest`,
 ## Demo GIFs
 
 The recordings in [`docs/demos`](./docs/demos) are made with
-[`scripts/demo-gif.sh`](./scripts/demo-gif.sh), which keeps each one around
-5 MB so the README loads them quickly:
+[`scripts/demo-gif.sh`](./scripts/demo-gif.sh), which keeps them sharp at
+640 px while storing only what moves from frame to frame:
 
 ```bash
 scripts/demo-gif.sh recording.mov docs/demos/cd-rack.gif 3040:1480:400:420
 ```
 
 The third argument is an optional crop in source pixels (`W:H:X:Y`), the fourth
-an optional width (520 by default). The script explains the settings.
+an optional width (640 by default). Size goes with length — about 0.4 MB a
+second of phone recording — so keep clips short. The script explains the
+settings.
 
 ## Image credits
 
