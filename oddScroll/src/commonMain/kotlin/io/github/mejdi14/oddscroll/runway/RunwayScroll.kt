@@ -47,6 +47,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 /** Which lateral slot a [RunwayItem] occupies on the runway. */
 enum class RunwaySpan {
@@ -115,7 +116,7 @@ val DefaultRunwaySections: List<RunwaySection> = listOf(
 private const val RAIL_OUTER_U = 0.369f
 private const val RAIL_GUTTER_U = 0.0074f
 private const val PLINTH_THICKNESS_NORM = 20.0f / 1080.0f
-private const val PAGE_WIDTH_PX = 993.0f
+internal const val PAGE_WIDTH_PX = 993.0f
 private const val TAP_SLOP = 8f
 
 /** Left-margin HUD index dot column and vertical row pitch on the 1080x1080 reference frame. */
@@ -140,6 +141,15 @@ private const val HINGE_ALONG_CARD = 0.90f
 /** Runway px from the focus row inside which a building stands square, and past which it is flat. */
 private const val FOLD_UP_PX = 140f
 private const val FOLD_FLAT_PX = 780f
+
+/**
+ * The one card whose building is the pagoda rather than a box, and where on
+ * that card its axis stands: the first full-width card after the opening pair,
+ * which is the row the demo opens on.
+ */
+private const val PAGODA_CARD = 3
+private const val PAGODA_ACROSS_CARD = 0.66f
+private const val PAGODA_ALONG_CARD = 0.52f
 
 private val PAPER_LIT = Color(0xFFFBF7EE)
 private val PAPER_FLAT = Color(0xFFE8E2D4)
@@ -183,6 +193,7 @@ fun RunwayScroll(
     }
     val layout = remember(items, sections) { RunwayLayout(items, sections) }
     val projector = remember { RunwayProjector() }
+    val pagoda = remember { PaperPagoda() }
 
     LaunchedEffect(state, layout, paperBuildings) {
         if (paperBuildings) {
@@ -267,7 +278,7 @@ fun RunwayScroll(
                 sections = sections,
                 projector = projector,
                 measurer = measurer,
-                paperBuildings = paperBuildings,
+                pagoda = if (paperBuildings) pagoda else null,
             )
         }
     }
@@ -498,7 +509,7 @@ private fun DrawScope.drawRunwayScene(
     sections: List<RunwaySection>,
     projector: RunwayProjector,
     measurer: TextMeasurer,
-    paperBuildings: Boolean,
+    pagoda: PaperPagoda?,
 ) {
     val w = size.width
     val h = size.height
@@ -611,8 +622,11 @@ private fun DrawScope.drawRunwayScene(
     val focusXi = projector.evalPhiCard(FOCUS_HINGE_YN)
     val lateral = projector.widthFraction(FOCUS_HINGE_YN + PLINTH_THICKNESS_NORM) * runwayScale / PAGE_WIDTH_PX
     val longitudinal = h / max(projector.dPhiCardDyNorm(FOCUS_HINGE_YN), 1f)
-    val liftScale = runwayScale / PAGE_WIDTH_PX *
-        (1.6f * longitudinal / max(lateral, 1e-3f)).clamped(0.6f, 2.2f)
+    val pitch = 1.6f * longitudinal / max(lateral, 1e-3f)
+    val liftScale = runwayScale / PAGE_WIDTH_PX * pitch.clamped(0.6f, 2.2f)
+    // The pagoda is five times as tall as a box and shows the stretch of a tall frame five times
+    // as plainly, so it takes only half of it.
+    val pagodaLift = runwayScale / PAGE_WIDTH_PX * (0.95f * sqrt(pitch)).clamped(0.7f, 1.5f)
     val buildingPts = FloatArray(20)
     val buildingPath = Path()
 
@@ -636,20 +650,43 @@ private fun DrawScope.drawRunwayScene(
             measurer = measurer,
         )
 
-        if (paperBuildings) {
+        if (pagoda != null) {
             val hinge = lerp(card.sTop, card.sBot, HINGE_ALONG_CARD)
-            drawPaperBuilding(
-                card = card,
-                S = S,
-                h = h,
-                fold = 1f - smoothstep(FOLD_UP_PX, FOLD_FLAT_PX, abs(hinge - S - focusXi)),
-                liftScale = liftScale,
-                cutout = sections[card.sectionIndex].color,
-                projector = projector,
-                xAt = ::xAt,
-                pts = buildingPts,
-                path = buildingPath,
-            )
+            val fold = 1f - smoothstep(FOLD_UP_PX, FOLD_FLAT_PX, abs(hinge - S - focusXi))
+            if (card === layout.placedCards.getOrNull(PAGODA_CARD)) {
+                // The pagoda takes the runway's projection as linear about its own axis: the row
+                // the axis stands on, how fast rows and the runway's width change toward the viewer.
+                val xi = lerp(card.sTop, card.sBot, PAGODA_ALONG_CARD) - S
+                val yn = projector.xiToYNormCard(xi)
+                val ynPerS = (projector.xiToYNormCard(xi + 150f) - projector.xiToYNormCard(xi - 150f)) / 300f
+                val ground = yn + PLINTH_THICKNESS_NORM
+                val widthPerYn = (projector.widthFraction(ground + 0.01f) - projector.widthFraction(ground - 0.01f)) / 0.02f
+                pagoda.draw(
+                    scope = this,
+                    fold = fold,
+                    originX = cx,
+                    u = lerp(card.uLeft, card.uRight, PAGODA_ACROSS_CARD),
+                    yn = yn,
+                    ynPerS = ynPerS,
+                    widthFraction = projector.widthFraction(ground),
+                    widthPerS = widthPerYn * ynPerS,
+                    across = runwayScale,
+                    lift = pagodaLift,
+                )
+            } else {
+                drawPaperBuilding(
+                    card = card,
+                    S = S,
+                    h = h,
+                    fold = fold,
+                    liftScale = liftScale,
+                    cutout = sections[card.sectionIndex].color,
+                    projector = projector,
+                    xAt = ::xAt,
+                    pts = buildingPts,
+                    path = buildingPath,
+                )
+            }
         }
 
         if (card.sectionIndex == state.activeSection && ynTop in 0.05f..0.92f) {
