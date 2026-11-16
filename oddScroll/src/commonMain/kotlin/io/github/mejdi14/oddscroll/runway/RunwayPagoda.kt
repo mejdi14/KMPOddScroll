@@ -17,24 +17,31 @@ import kotlin.math.pow
 import kotlin.math.sin
 
 /*
- * A paper pagoda, in runway px. It is an octagonal tower in seven lifts, bottom
- * to top:
+ * A paper pagoda, in runway px. It is an octagonal tower in lifts, bottom to
+ * top:
  *
- *   0  terrace       a wide low platform with a railing, stairs and a pier
- *   1  ground hall   podium, walls, a colonnade, and the big roof
- *   2-4  storeys     balcony, latticed walls, a skirt of roof
- *   5  top storey    the same under the tall concave roof
- *   6  spire         ringed mast, ball, rod, and the chains to the roof corners
+ *   terrace       a wide low platform with a railing, stairs and a pier
+ *   ground hall   podium, walls, a colonnade, and the big roof
+ *   storeys       balcony, latticed walls, a skirt of roof; none to three
+ *   top storey    the same under the tall concave roof
+ *   spire         ringed mast, ball, rod, and the chains to the roof corners
  *
  * Folded, every height is nought and what lies on the plinth is the tower's
  * plan: its roofs as rings one inside the next. It stands by telescoping, each
  * lift pulling up out of the one below a moment after it, so the fold travels
  * up the tower rather than happening all at once.
  */
-private val LIFT_HEIGHT = floatArrayOf(22f, 116f, 72f, 72f, 72f, 145f, 110f)
+private const val TERRACE_HEIGHT = 22f
+private const val HALL_HEIGHT = 116f
+private const val STOREY_HEIGHT = 72f
+private const val TOP_STOREY_HEIGHT = 145f
+private const val SPIRE_HEIGHT = 110f
 
-/** How far through the fold each lift starts after the one below, and how long it takes. */
-private const val LIFT_STAGGER = 0.105f
+/** The most storeys a pagoda has above its hall, the top one included. */
+internal const val PAGODA_MAX_STOREYS = 4
+private const val MAX_LIFTS = PAGODA_MAX_STOREYS + 3
+
+/** How much of the fold one lift takes to come up; the lifts start evenly through the rest. */
 private const val LIFT_SPAN = 0.37f
 
 /** Below this a lift has no height worth drawing walls for. */
@@ -62,6 +69,7 @@ private val FACE_LIGHT = FloatArray(8) { 0.5f + 0.5f * cos((it + 1f) * PI_F / 4f
 private val LINE = Color(0xFF4F5ABF)
 private val ROOF_LIGHT = Color(0xFFCDD3F7)
 private val ROOF_DARK = Color(0xFF9DA8E8)
+private val ROOF_FLAT = Color(0xFFBDC5F2)
 private val WALL_LIGHT = Color(0xFFF7F8FF)
 private val WALL_DARK = Color(0xFFD3D9F6)
 private val DECK = Color(0xFFECEEFB)
@@ -79,17 +87,25 @@ internal class PaperPagoda {
     private val cut = Path()
 
     /** How far up each lift is, `0 .. 1` and a touch over, and the height it starts from. */
-    private val rise = FloatArray(LIFT_HEIGHT.size)
-    private val base = FloatArray(LIFT_HEIGHT.size + 1)
+    private val liftHeight = FloatArray(MAX_LIFTS)
+    private val rise = FloatArray(MAX_LIFTS)
+    private val base = FloatArray(MAX_LIFTS + 1)
+
+    /** Storeys above the hall, and the lifts they make: the top storey's, the spire's, and how many in all. */
+    private var storeys = PAGODA_MAX_STOREYS
+    private var top = 5
+    private var mast = 6
+    private var lifts = 7
 
     // The runway's projection, taken as linear about the middle of the tower.
     private var originX = 0f
     private var u0 = 0f
+    private var uPerX = 0f
     private var yn0 = 0f
     private var ynPerS = 0f
     private var wf0 = 0f
     private var wfPerS = 0f
-    private var across = 0f
+    private var span = 0f
     private var lift = 0f
     private var frameH = 0f
     private var hair = 1f
@@ -106,7 +122,8 @@ internal class PaperPagoda {
     private var py = 0f
 
     /**
-     * [fold] is `0` flat to `1` standing. The tower's axis meets the plinth at
+     * [fold] is `0` flat to `1` standing. The tower has [storeys] storeys above
+     * its hall and is drawn [scale] times life size. Its axis meets the plinth at
      * lateral [u] and screen row [yn]; [ynPerS] is how far a runway px toward
      * the viewer moves down the frame, [widthFraction] the runway's width
      * there and [widthPerS] how that grows toward the viewer. [across] and
@@ -115,6 +132,8 @@ internal class PaperPagoda {
     fun draw(
         scope: DrawScope,
         fold: Float,
+        storeys: Int,
+        scale: Float,
         originX: Float,
         u: Float,
         yn: Float,
@@ -124,30 +143,43 @@ internal class PaperPagoda {
         across: Float,
         lift: Float,
     ) {
+        // The scale goes into the projection, so everything below is written at life size.
         this.originX = originX
         u0 = u
+        uPerX = scale / PAGE_WIDTH_PX
         yn0 = yn
-        this.ynPerS = ynPerS
+        this.ynPerS = ynPerS * scale
         wf0 = widthFraction
-        wfPerS = widthPerS
-        this.across = across
-        this.lift = lift
+        wfPerS = widthPerS * scale
+        span = across
+        this.lift = lift * scale
         frameH = scope.size.height
         hair = (frameH / 1080f).clamped(0.8f, 1.7f)
 
+        this.storeys = storeys.coerceIn(1, PAGODA_MAX_STOREYS)
+        top = 1 + this.storeys
+        mast = top + 1
+        lifts = mast + 1
+        liftHeight[0] = TERRACE_HEIGHT
+        liftHeight[1] = HALL_HEIGHT
+        for (k in 2 until top) liftHeight[k] = STOREY_HEIGHT
+        liftHeight[top] = TOP_STOREY_HEIGHT
+        liftHeight[mast] = SPIRE_HEIGHT
+
+        val stagger = (1f - LIFT_SPAN) / (lifts - 1)
         var floor = 0f
-        for (k in LIFT_HEIGHT.indices) {
-            rise[k] = popOut(((fold - k * LIFT_STAGGER) / LIFT_SPAN).clamped(0f, 1f))
+        for (k in 0 until lifts) {
+            rise[k] = popOut(((fold - k * stagger) / LIFT_SPAN).clamped(0f, 1f))
             base[k] = floor
-            floor += LIFT_HEIGHT[k] * rise[k]
+            floor += liftHeight[k] * rise[k]
         }
-        base[LIFT_HEIGHT.size] = floor
+        base[lifts] = floor
 
         with(scope) {
             shadow()
             terrace()
             hall()
-            for (storey in 0..3) storey(storey)
+            for (storey in 0 until this@PaperPagoda.storeys) storey(storey)
             spire()
         }
     }
@@ -162,7 +194,7 @@ internal class PaperPagoda {
 
     /** Screen x of the point [x] runway px right of the axis and [s] toward the viewer. */
     private fun sx(x: Float, s: Float): Float =
-        originX + (u0 + x / PAGE_WIDTH_PX) * (wf0 + s * wfPerS) * across
+        originX + (u0 + x * uPerX) * (wf0 + s * wfPerS) * span
 
     /** Screen y of a point [s] runway px toward the viewer and [z] above the plinth. */
     private fun sy(s: Float, z: Float): Float =
@@ -228,7 +260,7 @@ internal class PaperPagoda {
         fill.octagon(TERRACE_R + 7f, 0f)
         drawPath(fill, Color.Black.copy(alpha = 0.30f))
 
-        val height = base[LIFT_HEIGHT.size]
+        val height = base[lifts]
         if (height < 6f) return
         val reach = height * 0.58f
         val tipX = -0.47f * reach
@@ -429,10 +461,11 @@ internal class PaperPagoda {
             reach = 0.08f,
             curve = 2.0f,
             edge = 5f * rise[1],
+            up = rise[1],
         )
     }
 
-    // --- Lifts 2-5: storeys --------------------------------------------------
+    // --- Storeys, the top one last --------------------------------------------------
 
     private fun DrawScope.storey(index: Int) {
         val k = 2 + index
@@ -467,7 +500,7 @@ internal class PaperPagoda {
             stroke(ink, 1f)
         }
 
-        if (index < 3) {
+        if (k < top) {
             roof(
                 rIn = wallR + 9f,
                 zIn = base[k + 1],
@@ -477,6 +510,7 @@ internal class PaperPagoda {
                 reach = 0.08f,
                 curve = 1.8f,
                 edge = 4f * rise[k],
+                up = rise[k],
             )
         } else {
             // The top roof runs all the way in to the foot of the spire, steep and hollow.
@@ -489,6 +523,7 @@ internal class PaperPagoda {
                 reach = 0.10f,
                 curve = 2.5f,
                 edge = 4f * rise[k],
+                up = rise[k],
             )
         }
     }
@@ -552,17 +587,56 @@ internal class PaperPagoda {
         py = sy(s, height)
     }
 
+    /** Puts face [j] of the current roof in [fill]: along the ring, down one hip, back along the eave, up the other. */
+    private fun roofFace(j: Int) {
+        fill.reset()
+        roofAt(j, 0f, 0f)
+        fill.moveTo(px, py)
+        roofAt(j, 1f, 0f)
+        fill.lineTo(px, py)
+        for (step in 1..HIP_STEPS) {
+            roofAt(j, 1f, step.toFloat() / HIP_STEPS)
+            fill.lineTo(px, py)
+        }
+        for (step in EAVE_STEPS - 1 downTo 0) {
+            roofAt(j, step.toFloat() / EAVE_STEPS, 1f)
+            fill.lineTo(px, py)
+        }
+        for (step in HIP_STEPS - 1 downTo 1) {
+            roofAt(j, 0f, step.toFloat() / HIP_STEPS)
+            fill.lineTo(px, py)
+        }
+        fill.close()
+    }
+
+    /** The lines on face [j]: a second one just up from the eave into [ink], three ribs down the slope into [faint]. */
+    private fun roofLines(j: Int) {
+        for (step in 0..EAVE_STEPS) {
+            roofAt(j, step.toFloat() / EAVE_STEPS, 0.86f)
+            if (step == 0) ink.moveTo(px, py) else ink.lineTo(px, py)
+        }
+        for (rib in 1..3) {
+            for (step in 0..HIP_STEPS) {
+                roofAt(j, rib / 4f, step.toFloat() / HIP_STEPS)
+                if (step == 0) faint.moveTo(px, py) else faint.lineTo(px, py)
+            }
+        }
+    }
+
     /**
      * A skirt of roof from a ring of radius [rIn] at [zIn] out and down to an
      * eave of radius [rOut] at [zEave]. Its corners lift by [flare] and run out
-     * by [reach] of the radius; [curve] is how hollow the slope is, and [edge]
-     * the thickness of the eave seen from the front.
+     * by [reach] of the radius; [curve] is how hollow the slope is, [edge] the
+     * thickness of the eave seen from the front, and [up] how far its lift has
+     * risen.
      *
-     * Every face is drawn, far to near, and none is culled: a hollow roof seen
-     * from above shows the level foot of its far faces even where their steep
-     * tops are turned away, and whatever should not show is painted over by
-     * the near faces and by the storey that stands in the ring. The far three
-     * are inked before the near five go down, so their lines are hidden too.
+     * Lying flat, the eight faces are one ring of paper under one light: one
+     * fill and two strokes. Standing, every face is drawn far to near in its
+     * own light, and none is culled: a hollow roof seen from above shows the
+     * level foot of its far faces even where their steep tops are turned away,
+     * and whatever should not show is painted over by the near faces and by
+     * the storey that stands in the ring. The far three are inked before the
+     * near five go down, so their lines are hidden too.
      */
     private fun DrawScope.roof(
         rIn: Float,
@@ -573,6 +647,7 @@ internal class PaperPagoda {
         reach: Float,
         curve: Float,
         edge: Float,
+        up: Float,
     ) {
         roofIn = rIn
         roofOut = rOut
@@ -584,42 +659,27 @@ internal class PaperPagoda {
 
         ink.reset()
         faint.reset()
+        if (up <= MIN_RISE) {
+            cut.reset()
+            for (j in 0..7) {
+                roofFace(j)
+                cut.addPath(fill)
+                roofLines(j)
+            }
+            drawPath(cut, ROOF_FLAT)
+            ink.addPath(cut)
+            stroke(faint, 0.8f, LINE.copy(alpha = 0.45f))
+            stroke(ink)
+            return
+        }
+
+        val lit = up.clamped(0f, 1f)
         for (n in 0..7) {
             val j = FAR_TO_NEAR[n]
-
-            // The face: along the ring, down one hip, back along the eave, up the other hip.
-            fill.reset()
-            roofAt(j, 0f, 0f)
-            fill.moveTo(px, py)
-            roofAt(j, 1f, 0f)
-            fill.lineTo(px, py)
-            for (step in 1..HIP_STEPS) {
-                roofAt(j, 1f, step.toFloat() / HIP_STEPS)
-                fill.lineTo(px, py)
-            }
-            for (step in EAVE_STEPS - 1 downTo 0) {
-                roofAt(j, step.toFloat() / EAVE_STEPS, 1f)
-                fill.lineTo(px, py)
-            }
-            for (step in HIP_STEPS - 1 downTo 1) {
-                roofAt(j, 0f, step.toFloat() / HIP_STEPS)
-                fill.lineTo(px, py)
-            }
-            fill.close()
-            drawPath(fill, lerpColor(ROOF_DARK, ROOF_LIGHT, FACE_LIGHT[j]))
+            roofFace(j)
+            drawPath(fill, lerpColor(ROOF_FLAT, lerpColor(ROOF_DARK, ROOF_LIGHT, FACE_LIGHT[j]), lit))
             ink.addPath(fill)
-
-            // A second line just up from the eave, and three ribs down the slope.
-            for (step in 0..EAVE_STEPS) {
-                roofAt(j, step.toFloat() / EAVE_STEPS, 0.86f)
-                if (step == 0) ink.moveTo(px, py) else ink.lineTo(px, py)
-            }
-            for (rib in 1..3) {
-                for (step in 0..HIP_STEPS) {
-                    roofAt(j, rib / 4f, step.toFloat() / HIP_STEPS)
-                    if (step == 0) faint.moveTo(px, py) else faint.lineTo(px, py)
-                }
-            }
+            roofLines(j)
 
             // The thickness of the eave, on the faces that show their front edge.
             if (edge > 0.2f && faces(j, rOut)) {
@@ -645,19 +705,19 @@ internal class PaperPagoda {
         }
     }
 
-    // --- Lift 6: spire -------------------------------------------------------
+    // --- Last lift: spire -------------------------------------------------------
 
     private fun DrawScope.spire() {
-        val foot = base[6]
-        val mastTop = z(6, 40f)
+        val foot = base[mast]
+        val mastTop = z(mast, 40f)
         val axisX = sx(0f, 0f)
 
         // Chains from the mast to the eight corners of the top roof, which is still the current one.
         ink.reset()
-        val chainY = sy(0f, z(6, 64f))
+        val chainY = sy(0f, z(mast, 64f))
         for (k in 0..7) {
             roofAt(k, 0f, 1f)
-            val sag = abs(py - chainY) * 0.24f * rise[5].clamped(0f, 1f)
+            val sag = abs(py - chainY) * 0.24f * rise[top].clamped(0f, 1f)
             ink.moveTo(axisX, chainY)
             ink.quadraticTo((axisX + px) * 0.5f, (chainY + py) * 0.5f + sag, px, py)
         }
@@ -689,19 +749,19 @@ internal class PaperPagoda {
 
         // Rod, with three crossbars shortening toward the tip.
         ink.to(0f, 0f, mastTop, start = true)
-        ink.to(0f, 0f, z(6, 110f))
-        ink.to(-7f, 0f, z(6, 74f), start = true)
-        ink.to(7f, 0f, z(6, 74f))
-        ink.to(-5f, 0f, z(6, 87f), start = true)
-        ink.to(5f, 0f, z(6, 87f))
-        ink.to(-3f, 0f, z(6, 99f), start = true)
-        ink.to(3f, 0f, z(6, 99f))
+        ink.to(0f, 0f, z(mast, 110f))
+        ink.to(-7f, 0f, z(mast, 74f), start = true)
+        ink.to(7f, 0f, z(mast, 74f))
+        ink.to(-5f, 0f, z(mast, 87f), start = true)
+        ink.to(5f, 0f, z(mast, 87f))
+        ink.to(-3f, 0f, z(mast, 99f), start = true)
+        ink.to(3f, 0f, z(mast, 99f))
         stroke(ink, 1.1f)
 
         // The ball where the chains gather.
-        val ballY = sy(0f, z(6, 52f))
+        val ballY = sy(0f, z(mast, 52f))
         val rx = sx(6.5f, 0f) - axisX
-        val ry = max((sy(0f, z(6, 43f)) - sy(0f, z(6, 61f))) * 0.5f, rx * 0.5f)
+        val ry = max((sy(0f, z(mast, 43f)) - sy(0f, z(mast, 61f))) * 0.5f, rx * 0.5f)
         drawOval(SPIRE, Offset(axisX - rx, ballY - ry), Size(rx * 2f, ry * 2f))
         drawOval(LINE, Offset(axisX - rx, ballY - ry), Size(rx * 2f, ry * 2f), style = Stroke(hair))
     }

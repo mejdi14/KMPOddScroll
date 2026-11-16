@@ -18,9 +18,10 @@ import kmpoddscroll.shared.generated.resources.wide_towers
 import org.jetbrains.compose.resources.imageResource
 
 /**
- * The colour-banded blueprint runway, populated across all eleven sections with
- * raised 3D card plinths, side callout leaders, the 500-px coordinate ruler,
- * and the left-margin index tethered by live Bezier splines.
+ * The runway as a street of paper pagodas: one band of colour and one platform
+ * per stop, each pagoda lying flat as its plan until its platform reaches the
+ * middle of the frame. In this mode the style draws no text and no pictures,
+ * so the items below only say how many stops' worth of variety there is.
  */
 @Composable
 fun RunwayDemoScreen() {

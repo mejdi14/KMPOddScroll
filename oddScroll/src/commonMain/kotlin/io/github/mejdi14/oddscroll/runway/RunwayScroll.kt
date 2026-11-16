@@ -22,7 +22,6 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.withTransform
-import androidx.compose.ui.graphics.lerp as lerpColor
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextMeasurer
@@ -125,37 +124,54 @@ private const val HUD_TOP_Y_NORM = 404.0f / 1080.0f
 private const val HUD_ROW_PITCH_NORM = 26.0f / 1080.0f
 
 /*
- * Paper buildings. Each plinth carries a box of paper hinged to it along its
- * near edge. Flat, the facade lies face up on the plinth with the roof beyond
- * it; as the card comes to the middle of the frame the walls swing up together
- * on their hinges, the roof riding level on top of them the way a pop-up book's
- * box opens, and they lie back down as the card leaves.
+ * Paper buildings. With them on, the runway is retiled into one band of colour
+ * per item, no two neighbours alike, and each band holds one platform with a
+ * paper pagoda on its centre. Flat, the pagoda is its own plan drawn on the
+ * platform; as the platform comes to the middle of the frame it telescopes up
+ * storey by storey, and it folds back down as the platform leaves. Nothing is
+ * written anywhere: the runway is only the bands, the platforms and the towers.
  */
 
-/** Screen row a building's hinge rests on when its card is the one in focus. */
-private const val FOCUS_HINGE_YN = 0.66f
+/** Screen row a pagoda's axis rests on when its platform is the one in focus. */
+private const val FOCUS_AXIS_YN = 0.60f
 
-/** Where along a card (far edge 0, near edge 1) its building is hinged. */
-private const val HINGE_ALONG_CARD = 0.90f
-
-/** Runway px from the focus row inside which a building stands square, and past which it is flat. */
+/** Runway px from the focus row inside which a pagoda stands square, and past which it is flat. */
 private const val FOLD_UP_PX = 140f
 private const val FOLD_FLAT_PX = 780f
 
-/**
- * The one card whose building is the pagoda rather than a box, and where on
- * that card its axis stands: the first full-width card after the opening pair,
- * which is the row the demo opens on.
- */
-private const val PAGODA_CARD = 3
-private const val PAGODA_ACROSS_CARD = 0.66f
-private const val PAGODA_ALONG_CARD = 0.52f
+/** Length of one band, and how many bare bands run up to the first so the runway has a far end to show. */
+private const val PAPER_BAND_PX = 1500f
+private const val PAPER_LEAD_IN_BANDS = 2
 
-private val PAPER_LIT = Color(0xFFFBF7EE)
-private val PAPER_FLAT = Color(0xFFE8E2D4)
-private val PAPER_ROOF = Color(0xFFDAD3C3)
-private val PAPER_SIDE = Color(0xFFC4BCAA)
-private val PAPER_CREASE = Color(0xFF5E584C)
+/** A platform: half its width in runway widths, and its length in runway px. */
+private const val PAPER_PLATFORM_U = 0.28f
+private const val PAPER_PLATFORM_PX = 600f
+
+/** Storeys above the hall, item by item, so that no pagoda is its neighbour's twin. */
+private val PAGODA_STOREYS = intArrayOf(4, 3, 4, 2, 4, 3)
+
+/** Colours close enough to pass for one another on two bands side by side. */
+private fun alike(a: Color, b: Color): Boolean =
+    abs(a.red - b.red) + abs(a.green - b.green) + abs(a.blue - b.blue) < 0.12f
+
+/**
+ * The runway of [sections] cut again into equal bands, taking the sections'
+ * colours in turn and passing over any that would repeat the band before.
+ */
+private fun paperBands(sections: List<RunwaySection>): List<RunwaySection> {
+    val count = ceil(sections.last().endPx / PAPER_BAND_PX).toInt()
+    val bands = ArrayList<RunwaySection>(count + PAPER_LEAD_IN_BANDS)
+    var pick = 0
+    for (k in -PAPER_LEAD_IN_BANDS until count) {
+        var section = sections[pick++ % sections.size]
+        var passes = 0
+        while (bands.isNotEmpty() && alike(section.color, bands.last().color) && passes++ < sections.size) {
+            section = sections[pick++ % sections.size]
+        }
+        bands.add(RunwaySection(section.name, section.color, k * PAPER_BAND_PX, (k + 1) * PAPER_BAND_PX))
+    }
+    return bands
+}
 
 /**
  * A colour-banded 3D perspective runway of raised architectural card plinths
@@ -168,10 +184,11 @@ private val PAPER_CREASE = Color(0xFF5E584C)
  * a wheel or trackpad, tap any section in the left-margin index to jump there,
  * or tap the `start ↑` plinth at the finish line to fold it and launch.
  *
- * With [paperBuildings] each plinth carries a paper building in place of its
- * picture, lying flat until the card nears the middle of the frame and folding
- * up to stand there, and the runway scrolls in steps, one row of cards at a
- * time. Pair it with `rememberRunwayScrollState(autoplay = false)`.
+ * With [paperBuildings] the runway becomes a street of paper pagodas: one band
+ * of colour per item, one platform on it, and a pagoda that lies flat as its
+ * own plan until the platform nears the middle of the frame and folds up to
+ * stand there. The runway then scrolls in steps, one platform at a time, and
+ * draws no text at all. Pair it with `rememberRunwayScrollState(autoplay = false)`.
  */
 @Composable
 fun RunwayScroll(
@@ -191,18 +208,19 @@ fun RunwayScroll(
     val bakedImages = remember(items, paperBuildings) {
         if (paperBuildings) emptyList() else items.map { cardBitmap(it.image, 1.45f, 0.045f) }
     }
-    val layout = remember(items, sections) { RunwayLayout(items, sections) }
+    val bands = remember(sections, paperBuildings) { if (paperBuildings) paperBands(sections) else sections }
+    val layout = remember(items, bands, paperBuildings) { RunwayLayout(items, bands, paperBuildings) }
     val projector = remember { RunwayProjector() }
     val pagoda = remember { PaperPagoda() }
 
     LaunchedEffect(state, layout, paperBuildings) {
         if (paperBuildings) {
-            // One stop per row of cards, where its hinge sits on the focus row, and a last one at the finish.
-            val focusXi = projector.evalPhiCard(FOCUS_HINGE_YN)
-            val rows = layout.rowHinges.size
+            // One stop per platform, where its pagoda's axis sits on the focus row, and a last one at the finish.
+            val focusXi = projector.evalPhiCard(FOCUS_AXIS_YN)
+            val rows = layout.rowAnchors.size
             state.setSnapStops(
-                FloatArray(rows + 1) { if (it < rows) layout.rowHinges[it] - focusXi else RUNWAY_FINISH_PX },
-                IntArray(rows + 1) { if (it < rows) layout.rowSections[it] else sections.lastIndex },
+                FloatArray(rows + 1) { if (it < rows) layout.rowAnchors[it] - focusXi else RUNWAY_FINISH_PX },
+                IntArray(rows + 1) { if (it < rows) layout.rowSections[it] else bands.lastIndex },
             )
         } else {
             state.setSnapStops(FloatArray(0), IntArray(0))
@@ -253,7 +271,7 @@ fun RunwayScroll(
                         if (started) {
                             state.onDragEnd()
                         } else {
-                            handleTap(down.position, size.width.toFloat(), size.height.toFloat(), sections.size, state)
+                            handleTap(down.position, size.width.toFloat(), size.height.toFloat(), if (paperBuildings) 0 else sections.size, state)
                         }
                     }
                 }
@@ -275,7 +293,7 @@ fun RunwayScroll(
                 state = state,
                 layout = layout,
                 bakedImages = bakedImages,
-                sections = sections,
+                sections = bands,
                 projector = projector,
                 measurer = measurer,
                 pagoda = if (paperBuildings) pagoda else null,
@@ -420,18 +438,40 @@ internal class PlacedCard(
 internal class RunwayLayout(
     items: List<RunwayItem>,
     val sections: List<RunwaySection>,
+    paper: Boolean = false,
 ) {
     val placedCards: List<PlacedCard>
 
-    /** The hinge line and section of each row of cards, far to near; a pair of half-cards is one row. */
-    val rowHinges: FloatArray
+    /** The middle and section of each row of cards, far to near; a pair of half-cards is one row. */
+    val rowAnchors: FloatArray
     val rowSections: IntArray
 
     init {
         val list = ArrayList<PlacedCard>(items.size * 3)
         // Populate each of the 11 sections with raised 3D card plinths (alternating full-width and paired half-width plinths)
         var cursor = 0
-        for (secIdx in sections.indices) {
+        if (paper) {
+            // One platform in the middle of every band that lies on the runway proper.
+            for (secIdx in sections.indices) {
+                val sec = sections[secIdx]
+                if (sec.startPx < 0f) continue
+                val middle = 0.5f * (sec.startPx + sec.endPx)
+                list.add(
+                    PlacedCard(
+                        itemIndex = cursor,
+                        item = items[cursor % items.size],
+                        sectionIndex = secIdx,
+                        sTop = middle - PAPER_PLATFORM_PX * 0.5f,
+                        sBot = middle + PAPER_PLATFORM_PX * 0.5f,
+                        uLeft = -PAPER_PLATFORM_U,
+                        uRight = PAPER_PLATFORM_U,
+                        calloutRight = false,
+                    )
+                )
+                cursor++
+            }
+        }
+        for (secIdx in if (paper) IntRange.EMPTY else sections.indices) {
             val sec = sections[secIdx]
             val spanPx = sec.endPx - sec.startPx
             var s = sec.startPx + 620f
@@ -495,7 +535,7 @@ internal class RunwayLayout(
         }
         placedCards = list
         val rows = list.filterIndexed { i, card -> i == 0 || card.sTop != list[i - 1].sTop }
-        rowHinges = FloatArray(rows.size) { lerp(rows[it].sTop, rows[it].sBot, HINGE_ALONG_CARD) }
+        rowAnchors = FloatArray(rows.size) { 0.5f * (rows[it].sTop + rows[it].sBot) }
         rowSections = IntArray(rows.size) { rows[it].sectionIndex }
     }
 }
@@ -524,7 +564,8 @@ private fun DrawScope.drawRunwayScene(
         cx + u * projector.widthFraction(yNorm) * runwayScale
 
     // 1. Background 3D ground grid, twin curved trajectory arcs, wireframe blocks & math equations
-    drawGroundEnvironment(S, w, h, cx, runwayScale, projector, measurer, ::xAt)
+    val labels = pagoda == null
+    drawGroundEnvironment(S, w, h, cx, runwayScale, projector, measurer, labels, ::xAt)
 
     // 2. Runway floor polygon & colour-banded sections
     val runwayClip = Path().apply {
@@ -604,31 +645,26 @@ private fun DrawScope.drawRunwayScene(
     drawPath(rightBorder, Color.White.copy(alpha = 0.42f), style = Stroke(1.4f))
 
     // 3. 500-px coordinate ruler ticks & labels on both outside borders of the runway
-    drawBorderRulerTicks(S, h, projector, measurer, ::xAt)
+    drawBorderRulerTicks(S, h, projector, measurer, labels, ::xAt)
 
     // 4. Section titles, constellation node clusters & 4-column feature bullets on the runway floor
     val tetherTargets = ArrayList<Offset>(8)
-    drawSectionHeadersAndClusters(S, h, sections, state.activeSection, projector, measurer, ::xAt, tetherTargets)
+    drawSectionHeadersAndClusters(S, h, sections, state.activeSection, projector, measurer, labels, ::xAt, tetherTargets)
 
     // 5. Raised 3D card plinths, wireframe dimension callouts & projective-warped images (drawn back-to-front: top of screen to bottom)
     val corners = FloatArray(8)
     val matrix = Matrix()
 
-    // Paper buildings: where the focus row is along the runway, and how many screen px a runway px
-    // of height is worth. Heights are drawn straight up the screen at the scale of the ground they
-    // stand on. The factor is tied to how long a runway px of floor is at the focus row, so a
-    // standing wall is always about 1.6 times as tall as it was lying down, however the frame's
-    // proportions stretch the runway.
-    val focusXi = projector.evalPhiCard(FOCUS_HINGE_YN)
-    val lateral = projector.widthFraction(FOCUS_HINGE_YN + PLINTH_THICKNESS_NORM) * runwayScale / PAGE_WIDTH_PX
-    val longitudinal = h / max(projector.dPhiCardDyNorm(FOCUS_HINGE_YN), 1f)
-    val pitch = 1.6f * longitudinal / max(lateral, 1e-3f)
-    val liftScale = runwayScale / PAGE_WIDTH_PX * pitch.clamped(0.6f, 2.2f)
-    // The pagoda is five times as tall as a box and shows the stretch of a tall frame five times
-    // as plainly, so it takes only half of it.
-    val pagodaLift = runwayScale / PAGE_WIDTH_PX * (0.95f * sqrt(pitch)).clamped(0.7f, 1.5f)
-    val buildingPts = FloatArray(20)
-    val buildingPath = Path()
+    // Pagodas: where the focus row is along the runway, and how many screen px a runway px of
+    // height is worth. Heights are drawn straight up the screen at the scale of the ground they
+    // stand on. A flat plane seen at the focus row's pitch makes a standing wall 1.6 times as tall
+    // as the same wall lying down; a tall frame stretches the floor, and the towers take half of
+    // that stretch rather than all of it, which would leave them needles.
+    val focusXi = projector.evalPhiCard(FOCUS_AXIS_YN)
+    val lateral = projector.widthFraction(FOCUS_AXIS_YN + PLINTH_THICKNESS_NORM) * runwayScale / PAGE_WIDTH_PX
+    val longitudinal = h / max(projector.dPhiCardDyNorm(FOCUS_AXIS_YN), 1f)
+    val pagodaLift = runwayScale / PAGE_WIDTH_PX *
+        (0.95f * sqrt(1.6f * longitudinal / max(lateral, 1e-3f))).clamped(0.7f, 1.5f)
 
     for (card in layout.placedCards) {
         val xiTop = card.sTop - S
@@ -648,45 +684,34 @@ private fun DrawScope.drawRunwayScene(
             corners = corners,
             matrix = matrix,
             measurer = measurer,
+            labels = labels,
         )
 
         if (pagoda != null) {
-            val hinge = lerp(card.sTop, card.sBot, HINGE_ALONG_CARD)
-            val fold = 1f - smoothstep(FOLD_UP_PX, FOLD_FLAT_PX, abs(hinge - S - focusXi))
-            if (card === layout.placedCards.getOrNull(PAGODA_CARD)) {
-                // The pagoda takes the runway's projection as linear about its own axis: the row
-                // the axis stands on, how fast rows and the runway's width change toward the viewer.
-                val xi = lerp(card.sTop, card.sBot, PAGODA_ALONG_CARD) - S
-                val yn = projector.xiToYNormCard(xi)
-                val ynPerS = (projector.xiToYNormCard(xi + 150f) - projector.xiToYNormCard(xi - 150f)) / 300f
-                val ground = yn + PLINTH_THICKNESS_NORM
-                val widthPerYn = (projector.widthFraction(ground + 0.01f) - projector.widthFraction(ground - 0.01f)) / 0.02f
-                pagoda.draw(
-                    scope = this,
-                    fold = fold,
-                    originX = cx,
-                    u = lerp(card.uLeft, card.uRight, PAGODA_ACROSS_CARD),
-                    yn = yn,
-                    ynPerS = ynPerS,
-                    widthFraction = projector.widthFraction(ground),
-                    widthPerS = widthPerYn * ynPerS,
-                    across = runwayScale,
-                    lift = pagodaLift,
-                )
-            } else {
-                drawPaperBuilding(
-                    card = card,
-                    S = S,
-                    h = h,
-                    fold = fold,
-                    liftScale = liftScale,
-                    cutout = sections[card.sectionIndex].color,
-                    projector = projector,
-                    xAt = ::xAt,
-                    pts = buildingPts,
-                    path = buildingPath,
-                )
-            }
+            // The pagoda takes the runway's projection as linear about its own axis: the row the
+            // axis stands on, and how fast rows and the runway's width change toward the viewer.
+            val xi = 0.5f * (card.sTop + card.sBot) - S
+            val yn = projector.xiToYNormCard(xi)
+            val ynPerS = (projector.xiToYNormCard(xi + 150f) - projector.xiToYNormCard(xi - 150f)) / 300f
+            val ground = yn + PLINTH_THICKNESS_NORM
+            val widthPerYn = (projector.widthFraction(ground + 0.01f) - projector.widthFraction(ground - 0.01f)) / 0.02f
+            val storeys = PAGODA_STOREYS[card.itemIndex % PAGODA_STOREYS.size]
+            pagoda.draw(
+                scope = this,
+                fold = 1f - smoothstep(FOLD_UP_PX, FOLD_FLAT_PX, abs(xi - focusXi)),
+                storeys = storeys,
+                // A tenth over life size fills the platform; the shorter towers are drawn a little
+                // larger again, so theirs never looks under-filled.
+                scale = 1.1f * (1f + 0.07f * (PAGODA_MAX_STOREYS - storeys)),
+                originX = cx,
+                u = 0.5f * (card.uLeft + card.uRight),
+                yn = yn,
+                ynPerS = ynPerS,
+                widthFraction = projector.widthFraction(ground),
+                widthPerS = widthPerYn * ynPerS,
+                across = runwayScale,
+                lift = pagodaLift,
+            )
         }
 
         if (card.sectionIndex == state.activeSection && ynTop in 0.05f..0.92f) {
@@ -696,10 +721,10 @@ private fun DrawScope.drawRunwayScene(
     }
 
     // 6. End-of-runway `start ↑` plinth and 3D control bar at s = 44,071 px
-    drawFinishControlBar(state, S, w, h, projector, measurer, ::xAt)
+    drawFinishControlBar(state, S, w, h, projector, measurer, labels, ::xAt)
 
     // 7. Left-margin 11-section HUD index and dynamic Bezier spline tethers to active section elements
-    drawLeftHudAndTethers(state.activeSection, sections, w, h, measurer, tetherTargets)
+    if (labels) drawLeftHudAndTethers(state.activeSection, sections, w, h, measurer, tetherTargets)
 }
 
 private fun stepsToFloat(n: Int): Float = max(n, 1).toFloat()
@@ -721,6 +746,7 @@ private fun DrawScope.drawGroundEnvironment(
     runwayScale: Float,
     projector: RunwayProjector,
     measurer: TextMeasurer,
+    labels: Boolean,
     xAt: (Float, Float) -> Float,
 ) {
     val gridColor = Color.White.copy(alpha = 0.07f)
@@ -790,11 +816,11 @@ private fun DrawScope.drawGroundEnvironment(
                 val label = if (stepIndex % 6 == 0) "1.2 m" else "0.8 m"
                 val tx = (bx + side * bw * 0.8f).clamped(4f, w - 42f)
                 val ty = yPx.clamped(12f, h - 18f)
-                drawText(measurer, label, Offset(tx, ty), style = dimStyle)
+                if (labels) drawText(measurer, label, Offset(tx, ty), style = dimStyle)
             }
 
             // Floating mathematical formula on the outer grid every 3000 world px
-            if (stepIndex % 3 == 1 && yn in 0.15f..0.82f) {
+            if (labels && stepIndex % 3 == 1 && yn in 0.15f..0.82f) {
                 val formula = FORMULAS[stepIndex.mod(FORMULAS.size)]
                 val onRight = stepIndex % 2 == 1
                 val fx = if (onRight) xAt(0.64f, yn) else xAt(-0.88f, yn)
@@ -814,6 +840,7 @@ private fun DrawScope.drawBorderRulerTicks(
     h: Float,
     projector: RunwayProjector,
     measurer: TextMeasurer,
+    labels: Boolean,
     xAt: (Float, Float) -> Float,
 ) {
     val firstTick = (floor((S + projector.xiFloorMin) / 500f).toInt() * 500).coerceAtLeast(0)
@@ -837,10 +864,10 @@ private fun DrawScope.drawBorderRulerTicks(
             drawLine(tickColor, Offset(xR, yPx), Offset(xR + 6f, yPx), strokeWidth = 1.2f)
 
             val label = sTick.toString()
-            if (xL > 44f) {
+            if (labels && xL > 44f) {
                 drawText(measurer, label, Offset(xL - 36f, yPx - 6f), style = tickStyle)
             }
-            if (xR + 44f < size.width) {
+            if (labels && xR + 44f < size.width) {
                 drawText(measurer, label, Offset(xR + 9f, yPx - 6f), style = tickStyle)
             }
         }
@@ -857,6 +884,7 @@ private fun DrawScope.drawSectionHeadersAndClusters(
     activeSection: Int,
     projector: RunwayProjector,
     measurer: TextMeasurer,
+    labels: Boolean,
     xAt: (Float, Float) -> Float,
     tetherTargets: MutableList<Offset>,
 ) {
@@ -891,7 +919,7 @@ private fun DrawScope.drawSectionHeadersAndClusters(
         // 2. Large section display title at s = sec.startPx + 460
         val sTitle = sec.startPx + 460f
         val xiTitle = sTitle - S
-        if (xiTitle in projector.xiFloorMin..projector.xiFloorMax) {
+        if (labels && xiTitle in projector.xiFloorMin..projector.xiFloorMax) {
             val yn = projector.xiToYNormFloor(xiTitle)
             if (yn in 0.04f..0.94f) {
                 val tx = xAt(-RAIL_OUTER_U, yn)
@@ -945,6 +973,7 @@ private fun DrawScope.drawCardPlinth(
     corners: FloatArray,
     matrix: Matrix,
     measurer: TextMeasurer,
+    labels: Boolean,
 ) {
     val yTopPx = ynTop * h
     val yBotPx = ynBot * h
@@ -1045,7 +1074,7 @@ private fun DrawScope.drawCardPlinth(
     val scale = (0.5f + 0.7f * ynBot).clamped(0.48f, 1.15f)
     val padX = (xTR - xTL) * 0.05f
     val padY = (yBotPx - yTopPx) * 0.10f
-    if (yBotPx - yTopPx > 28f && xTR - xTL > 70f) {
+    if (labels && yBotPx - yTopPx > 28f && xTR - xTL > 70f) {
         val cardTitleStyle = TextStyle(
             color = Color.White.copy(alpha = 0.92f),
             fontSize = (11f * scale).sp,
@@ -1074,7 +1103,7 @@ private fun DrawScope.drawCardPlinth(
     }
 
     // 5. Side callout leader line (`o─── Callout`) from the top corner of the plinth
-    if (ynTop in 0.08f..0.88f) {
+    if (labels && ynTop in 0.08f..0.88f) {
         val anchorX = if (card.calloutRight) xTR else xTL
         val anchorY = yTopPx
         val elbowX = if (card.calloutRight) xAt(0.44f, ynTop) else xAt(-0.44f, ynTop)
@@ -1105,143 +1134,6 @@ private fun DrawScope.drawCardPlinth(
     }
 }
 
-// --- Fold-up Paper Buildings -------------------------------------------------
-
-/**
- * One paper building on [card], [fold] of the way from lying flat (`0`) to
- * standing (`1`).
- *
- * The box is a parallelogram linkage seen from the side: front and back walls
- * turn on hinges along the plinth by the same angle, leaning away from the
- * viewer, and the roof joins their tops, so it stays level the whole way. At
- * rest the facade lies face up from the hinge back, the roof lies beyond it,
- * and the side walls have no area at all. Only the faces a viewer in front and
- * above can see are drawn — facade, roof, and the side wall turned toward the
- * middle of the runway — and those never overlap, so there is no sorting.
- */
-private fun DrawScope.drawPaperBuilding(
-    card: PlacedCard,
-    S: Float,
-    h: Float,
-    fold: Float,
-    liftScale: Float,
-    cutout: Color,
-    projector: RunwayProjector,
-    xAt: (Float, Float) -> Float,
-    pts: FloatArray,
-    path: Path,
-) {
-    val isFull = card.uRight - card.uLeft > 0.5f
-    val seed = (card.sTop / 97f).toInt() + if (card.uLeft > 0f) 5 else 0
-
-    // The plot: where the picture sits on a plinth without buildings.
-    val plotLeft = lerp(card.uLeft, card.uRight, if (isFull) 0.46f else 0.10f)
-    val plotRight = lerp(card.uLeft, card.uRight, 0.92f)
-    val uMid = 0.5f * (plotLeft + plotRight)
-    val halfWidth = 0.5f * (plotRight - plotLeft) * (0.66f + 0.07f * (seed % 3))
-    val uA = uMid - halfWidth
-    val uB = uMid + halfWidth
-
-    // Flat, the sheet runs from the hinge back over height + depth; keep that on the plinth.
-    val length = card.sBot - card.sTop
-    val sHinge = lerp(card.sTop, card.sBot, HINGE_ALONG_CARD)
-    val reach = length * (if (isFull) 0.76f else 0.58f)
-    val depth = reach * 0.28f
-    val height = (reach - depth) * (0.80f + 0.10f * ((seed / 3) % 3))
-
-    val angle = fold * PI_F / 2f
-    val run = height * cos(angle)
-    val rise = height * sin(angle)
-
-    fun project(index: Int, u: Float, s: Float, z: Float) {
-        val yn = projector.xiToYNormCard(s - S)
-        val ynGround = yn + PLINTH_THICKNESS_NORM
-        pts[index * 2] = xAt(u, ynGround)
-        pts[index * 2 + 1] = yn * h - z * projector.widthFraction(ynGround) * liftScale
-    }
-
-    // 0..3 down the A side, 4..7 down the B side: front foot, front top, back top, back foot.
-    // 8, 9: where the back of the roof would touch the plinth, pushed on a little, for the shadow.
-    for (side in 0..1) {
-        val u = if (side == 0) uA else uB
-        val base = side * 4
-        project(base, u, sHinge, 0f)
-        project(base + 1, u, sHinge - run, rise)
-        project(base + 2, u, sHinge - run - depth, rise)
-        project(base + 3, u, sHinge - depth, 0f)
-        project(8 + side, u, sHinge - run - depth - rise * 0.30f, 0f)
-    }
-
-    fun quad(a: Int, b: Int, c: Int, d: Int, dx: Float = 0f, dy: Float = 0f) {
-        path.moveTo(pts[a * 2] + dx, pts[a * 2 + 1] + dy)
-        path.lineTo(pts[b * 2] + dx, pts[b * 2 + 1] + dy)
-        path.lineTo(pts[c * 2] + dx, pts[c * 2 + 1] + dy)
-        path.lineTo(pts[d * 2] + dx, pts[d * 2 + 1] + dy)
-        path.close()
-    }
-
-    // 1. Shadow on the plinth: under the sheet while it lies flat, thrown back as it stands.
-    path.reset()
-    quad(0, 4, 9, 8, dx = 3f, dy = 4f)
-    drawPath(path, Color.Black.copy(alpha = 0.34f))
-
-    // 2. The side wall facing the middle of the runway, once there is any of it.
-    if (fold > 0.02f) {
-        val near = if (uMid > 0f) 0 else 4
-        path.reset()
-        quad(near, near + 3, near + 2, near + 1)
-        drawPath(path, PAPER_SIDE)
-        drawPath(path, PAPER_CREASE.copy(alpha = 0.30f), style = Stroke(1f))
-    }
-
-    // 3. Roof.
-    path.reset()
-    quad(1, 5, 6, 2)
-    drawPath(path, lerpColor(PAPER_FLAT, PAPER_ROOF, fold))
-
-    // 4. Facade, catching more light the nearer upright it is.
-    path.reset()
-    quad(0, 4, 5, 1)
-    drawPath(path, lerpColor(PAPER_FLAT, PAPER_LIT, fold))
-
-    // 5. Creases: the outline of facade and roof, and so the fold between them. The facade is
-    // still in the path; the roof joins it.
-    quad(1, 5, 6, 2)
-    drawPath(path, PAPER_CREASE.copy(alpha = 0.34f), style = Stroke(1f))
-
-    // 6. Windows and a door, cut out of the facade and showing the section's colour through.
-    // (a, t) runs across the facade from side A to side B and up it from the hinge.
-    fun faceX(a: Float, t: Float): Float =
-        lerp(lerp(pts[0], pts[8], a), lerp(pts[2], pts[10], a), t)
-
-    fun faceY(a: Float, t: Float): Float =
-        lerp(lerp(pts[1], pts[9], a), lerp(pts[3], pts[11], a), t)
-
-    fun cut(a0: Float, a1: Float, t0: Float, t1: Float) {
-        path.moveTo(faceX(a0, t0), faceY(a0, t0))
-        path.lineTo(faceX(a1, t0), faceY(a1, t0))
-        path.lineTo(faceX(a1, t1), faceY(a1, t1))
-        path.lineTo(faceX(a0, t1), faceY(a0, t1))
-        path.close()
-    }
-
-    path.reset()
-    val columns = if (isFull) 3 + seed % 2 else 3
-    val floors = if (height > 330f) 4 else 3
-    val cell = 0.80f / columns
-    val storey = 0.62f / floors
-    for (level in 0 until floors) {
-        val t0 = 0.31f + level * storey
-        for (column in 0 until columns) {
-            val a0 = 0.10f + column * cell + cell * 0.20f
-            cut(a0, a0 + cell * 0.60f, t0, t0 + storey * 0.62f)
-        }
-    }
-    val door = 0.10f + cell * (seed % columns) + cell * 0.5f
-    cut(door - 0.075f, door + 0.075f, 0f, 0.22f)
-    drawPath(path, cutout.copy(alpha = 0.92f))
-}
-
 // --- Finish `start ↑` Plinth & 3D Wireframe Control Bar ----------------------
 
 private fun DrawScope.drawFinishControlBar(
@@ -1251,6 +1143,7 @@ private fun DrawScope.drawFinishControlBar(
     h: Float,
     projector: RunwayProjector,
     measurer: TextMeasurer,
+    labels: Boolean,
     xAt: (Float, Float) -> Float,
 ) {
     val sFinish = 45000f
@@ -1278,6 +1171,17 @@ private fun DrawScope.drawFinishControlBar(
         topLeft = Offset(xBtnL, yBtnBot),
         size = Size(xBtnR - xBtnL, 6f * (1f - 0.6f * fold)),
     )
+    if (!labels) {
+        // No lettering: the block says "back to the start" with an arrow, and the bar of keys is left out.
+        val midX = (xBtnL + xBtnR) * 0.5f
+        val midY = (yBtnTop + yBtnBot) * 0.5f
+        val reach = ((yBtnBot - yBtnTop) * 0.28f).clamped(3f, 12f)
+        val ink = Color(0xFF111114)
+        drawLine(ink, Offset(midX, midY + reach), Offset(midX, midY - reach), strokeWidth = 2f)
+        drawLine(ink, Offset(midX, midY - reach), Offset(midX - reach * 0.7f, midY - reach * 0.3f), strokeWidth = 2f)
+        drawLine(ink, Offset(midX, midY - reach), Offset(midX + reach * 0.7f, midY - reach * 0.3f), strokeWidth = 2f)
+        return
+    }
     if (yBtnBot - yBtnTop > 18f) {
         val startStyle = TextStyle(
             color = Color(0xFF111114),
