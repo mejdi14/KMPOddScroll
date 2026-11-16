@@ -7,6 +7,7 @@ import androidx.compose.ui.Modifier
 import io.github.mejdi14.oddscroll.runway.RunwayItem
 import io.github.mejdi14.oddscroll.runway.RunwayScroll
 import io.github.mejdi14.oddscroll.runway.RunwaySpan
+import io.github.mejdi14.oddscroll.runway.rememberRunwayScrollState
 import kmpoddscroll.shared.generated.resources.Res
 import kmpoddscroll.shared.generated.resources.wide_basalt
 import kmpoddscroll.shared.generated.resources.wide_falls
@@ -134,5 +135,7 @@ fun RunwayDemoScreen() {
     RunwayScroll(
         items = items,
         modifier = Modifier.fillMaxSize(),
+        state = rememberRunwayScrollState(autoplay = false),
+        paperBuildings = true,
     )
 }
