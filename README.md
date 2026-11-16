@@ -1,51 +1,74 @@
-This is a Kotlin Multiplatform project targeting Android, iOS, Web, Desktop (JVM).
+# KMP Odd Scroll
 
-* [/iosApp](./iosApp/iosApp) contains an iOS application. Even if you’re sharing your UI with Compose Multiplatform,
-  you need this entry point for your iOS app. This is also where you should add SwiftUI code for your project.
+Odd scrolling styles for Compose Multiplatform — spirals, spheres, decks, a CD
+rack, a gallery you can walk into. Each style is a single composable that takes
+a list of items and owns its own layout, projection and gestures.
 
-* [/shared](./shared/src) is for code that will be shared across your Compose Multiplatform applications.
-  It contains several subfolders:
-  - [commonMain](./shared/src/commonMain/kotlin) is for code that’s common for all targets.
-  - Other folders are for Kotlin code that will be compiled for only the platform indicated in the folder name.
-    For example, if you want to use Apple’s CoreCrypto for the iOS part of your Kotlin app,
-    the [iosMain](./shared/src/iosMain/kotlin) folder would be the right place for such calls.
-    Similarly, if you want to edit the Desktop (JVM) specific part, the [jvmMain](./shared/src/jvmMain/kotlin)
-    folder is the appropriate location.
+**Android · iOS · Desktop (JVM) · Wasm · JS** — common code throughout. A few
+styles add an AGSL shader on Android 13+ and draw without it everywhere else.
 
-### Running the apps
+<p align="center">
+  <img src="docs/demos/cd-rack.gif" width="520" alt="CD Rack: scrolling a rack of PlayStation cases, opening one, taking the cover out and leafing through the manual">
+</p>
 
-Use the run configurations provided by the run widget in your IDE's toolbar. You can also use these commands and options:
+## Contents
 
-- Android app: `./gradlew :androidApp:assembleDebug`
-- Desktop app:
-  - Hot reload: `./gradlew :desktopApp:hotRun --auto`
-  - Standard run: `./gradlew :desktopApp:run`
-- Web app:
-  - Wasm target (faster, modern browsers): `./gradlew :webApp:wasmJsBrowserDevelopmentRun`
-  - JS target (slower, supports older browsers): `./gradlew :webApp:jsBrowserDevelopmentRun`
-- iOS app: open the [/iosApp](./iosApp) directory in Xcode and run it from there.
+- [Installation](#installation)
+- [Styles at a glance](#styles-at-a-glance)
+- Styles: [Infinite Spiral](#infinite-spiral) ·
+  [Edge Distortion](#edge-distortion) · [Flex Carousel](#flex-carousel) ·
+  [Infinite Menu](#infinite-menu) · [Card Sphere](#card-sphere) ·
+  [Lift Stack](#lift-stack) · [CD Rack](#cd-rack) ·
+  [Gallery Wall](#gallery-wall) · [Terrace](#terrace)
+- [Running the demo app](#running-the-demo-app)
+- [Demo GIFs](#demo-gifs)
+- [Image credits](#image-credits)
 
-### Running tests
+## Installation
 
-Use the run button in your IDE's editor gutter, or run tests using Gradle tasks:
+The library is `io.github.mejdi14:kmp-odd-scroll`. It is not on Maven Central
+yet; until it is, include the `oddScroll` module as a project dependency:
 
-- Android tests: `./gradlew :shared:testAndroidHostTest`
-- Desktop tests: `./gradlew :shared:jvmTest`
-- Web tests:
-  - Wasm target: `./gradlew :shared:wasmJsTest`
-  - JS target: `./gradlew :shared:jsTest`
-- iOS tests: `./gradlew :shared:iosSimulatorArm64Test`
+```kotlin
+// settings.gradle.kts
+include(":oddScroll")
+
+// build.gradle.kts of your shared module
+kotlin {
+    sourceSets {
+        commonMain.dependencies {
+            implementation(project(":oddScroll"))
+        }
+    }
+}
+```
+
+It depends on `compose.foundation` only — no Material — so it doesn't pull your
+app onto Material 3. Android needs API 24 or newer.
+
+## Styles at a glance
+
+Every style is called the same way: a list of items and a `Modifier`, usually
+`Modifier.fillMaxSize()`. Those with a `state` take it from a
+`remember…State()` function, which is also how a host drives them from its own
+controls.
+
+| Style | What it is | Platform extras |
+| --- | --- | --- |
+| [Infinite Spiral](#infinite-spiral) | a column of cards wound onto an endless spiral | — |
+| [Edge Distortion](#edge-distortion) | an endless lattice that bends away at the frame's borders | fisheye and fringe on Android 13+ |
+| [Flex Carousel](#flex-carousel) | an infinite row flowing through liquid glass at its edges | glass on Android 13+ |
+| [Infinite Menu](#infinite-menu) | a sphere of tiles that turns the nearest to face you | — |
+| [Card Sphere](#card-sphere) | flat graphic cards on a transparent sphere | — |
+| [Lift Stack](#lift-stack) | a deck seen from above, a card lifting off to face you | — |
+| [CD Rack](#cd-rack) | a row of jewel cases to open, take the cover out of and read the manual of | shaded plastic and disc on Android 13+ |
+| [Gallery Wall](#gallery-wall) | paintings round a room, to walk up to, take apart and step inside | liquid glass and paper grain on Android 13+; Flip and Step inside need Android 10+ |
+| [Terrace](#terrace) | a deck stacked in depth both ways from the front card | — |
+
+"Platform extras" are drawn only where they are listed; everywhere else the
+style looks flat in that one respect and behaves identically otherwise.
 
 ---
-
-Learn more about [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html),
-[Compose Multiplatform](https://kotlinlang.org/compose-multiplatform/),
-[Kotlin/Wasm](https://kotl.in/wasm/)…
-
-We would appreciate your feedback on Compose/Web and Kotlin/Wasm in the public Slack channel [#compose-web](https://slack-chats.kotlinlang.org/c/compose-web).
-If you face any issues, please report them on [YouTrack](https://youtrack.jetbrains.com/newIssue?project=CMP).
-
-## Scroll styles
 
 ### Infinite Spiral
 
@@ -80,9 +103,14 @@ InfiniteSpiralScroll(
 | `edgeFade` / `edgeBlur` | `0.3` / `6.dp` | how the ends fade and soften |
 | `grayscale` | `0` | drain the colour |
 
+<details>
+<summary>How it's drawn</summary>
+
 Compose has no blur in common code, so the softening at the ends is a blurred
 copy of each card made once — the picture laid down twenty-five times on a small
 offset lattice and added together — cross-faded against the sharp one.
+
+</details>
 
 ### Edge Distortion
 
@@ -91,9 +119,9 @@ borders of the frame with a fisheye and a colour fringe. It drifts diagonally on
 its own and takes a drag, resuming the drift on release. There is no extent and
 no edge — pan far enough and the pictures come round again.
 
-The border treatment is a single AGSL shader pass over the frame, so it needs
-**Android 13 (API 33) or newer**. Everywhere else — older Android, desktop, web,
-iOS — the lattice draws flat and behaves identically otherwise.
+> The border treatment is a single AGSL shader pass over the frame, so it needs
+> **Android 13 (API 33) or newer**. Everywhere else — older Android, desktop,
+> web, iOS — the lattice draws flat and behaves identically otherwise.
 
 ```kotlin
 EdgeDistortionScroll(
@@ -124,6 +152,10 @@ step along is half of this card plus the gap plus half of the next.
 Position is a spring: flick, wheel and tap all arrive as a new goal. The faster
 it runs, the narrower every card draws. Tap the centred card to open it.
 
+> Like Edge Distortion, the glass is a single AGSL pass and needs **Android 13
+> (API 33) or newer**; elsewhere the row runs undistorted and everything else is
+> unchanged.
+
 ```kotlin
 FlexCarouselScroll(
     items = listOf(FlexCarouselItem(image, "Forest Path"), /* ... */),
@@ -147,26 +179,23 @@ FlexCarouselScroll(
 | `captions` | `true` | title and counter |
 | `intro` | `true` | the row rises into place |
 
-Opening a card on a landscape frame grows it into the middle first, and only
-once it is there does it move over into the left half and give the right half to
-its title and description. Closing retraces that: over to the middle, then down
-into the row. The text lets itself in a piece at a time as the card arrives —
-the title by the letter, the description by the word, each piece rising into
-place behind the one before it. Closing takes it away at once, without a reverse
-reveal to sit through. `FlexFocus.Centred` keeps it in the middle throughout; On a portrait frame `Auto` stays centred,
-since there is no room to put text next to a card worth looking at.
+**Opening a card.** On a landscape frame it grows into the middle first, and
+only once it is there does it move over into the left half and give the right
+half to its title and description. Closing retraces that: over to the middle,
+then down into the row. The text lets itself in a piece at a time as the card
+arrives — the title by the letter, the description by the word, each piece
+rising into place behind the one before it. Closing takes it away at once,
+without a reverse reveal to sit through. `FlexFocus.Centred` keeps it in the
+middle throughout; on a portrait frame `Auto` stays centred, since there is no
+room to put text next to a card worth looking at.
 
-Every size is a share of the bounds the row is given, including the lens, so
-handing it a band rather than the whole screen is the way to make its cards
-smaller — the demo gives it 62% of the height on a portrait screen and all of a
-landscape one. `maxCardWidth` is the backstop underneath that: it holds the
+**Sizing.** Every size is a share of the bounds the row is given, including the
+lens, so handing it a band rather than the whole screen is the way to make its
+cards smaller — the demo gives it 62% of the height on a portrait screen and all
+of a landscape one. `maxCardWidth` is the backstop underneath that: it holds the
 widest card to a share of the width and brings `cardHeight` down with it, since
 on a tall frame half the height is wider than the frame itself. A landscape
 frame never reaches the cap.
-
-Like Edge Distortion, the glass is a single AGSL pass and needs **Android 13
-(API 33) or newer**; elsewhere the row runs undistorted and everything else is
-unchanged.
 
 ### Infinite Menu
 
@@ -196,8 +225,13 @@ InfiniteMenuScroll(
 | `grayscale` / `dim` | `true` / `0.5` | how the tiles behind are drained |
 | `captions` | `true` | title and description of the front tile |
 
+<details>
+<summary>How it's drawn</summary>
+
 Unlike the other two optical styles this one needs no shader anywhere — it is
 all geometry, one image per tile, so it runs the same on every target.
+
+</details>
 
 ### Card Sphere
 
@@ -225,8 +259,13 @@ CardSphereScroll(
 | `onSettle` | `null` | hero index, each time the field rests |
 | `onThemeChange` | `null` | called when the page flips |
 
+<details>
+<summary>How it's drawn</summary>
+
 The field itself is generated from a fixed seed, so the arrangement is the same
 every run. Like Infinite Menu it needs no shader anywhere.
+
+</details>
 
 ### Lift Stack
 
@@ -236,12 +275,6 @@ rides up four layers and fades off the top. Tap the top card and it lifts off
 the deck and turns upright to face you, with its title let in underneath; tap
 again and it plays back down into its slot. Drag it, flick it, or scroll to step
 it on — except while a card is up, when the deck stays put.
-
-The geometry and timing were measured off a recording of the reference rather
-than eyeballed: a pinhole camera fitted to the resting stack (yaw 45°, looking
-down 27°, fifteen card sides away), a layer gap of 0.274 card sides, a lift of
-0.73 sides, and the reference's own curves for the run, the settle, the rise
-and the turn.
 
 ```kotlin
 LiftStackScroll(
@@ -259,13 +292,29 @@ LiftStackScroll(
 | `captions` | `true` | title and credit of the standing card |
 | `state` | intro of `7` | `rememberLiftStackScrollState(intro)` — cards run on first show; `0` opens at rest |
 
-`LiftStackScrollState.step(by)` runs the deck on from a host's own controls, and
-`locked` says whether a card is up and the deck is holding still.
+**State.** `LiftStackScrollState.step(by)` runs the deck on from a host's own
+controls, and `locked` says whether a card is up and the deck is holding still.
+
+<details>
+<summary>How it's measured and drawn</summary>
+
+The geometry and timing were measured off a recording of the reference rather
+than eyeballed: a pinhole camera fitted to the resting stack (yaw 45°, looking
+down 27°, fifteen card sides away), a layer gap of 0.274 card sides, a lift of
+0.73 sides, and the reference's own curves for the run, the settle, the rise
+and the turn.
+
 Every card is one `drawImage` through its own exact projection — Compose's
 `Matrix` carries the perspective terms on every target — so it needs no shader
 and no strips anywhere.
 
+</details>
+
 ### CD Rack
+
+<p align="center">
+  <img src="docs/demos/cd-rack.gif" width="520" alt="CD Rack demo">
+</p>
 
 A row of clear CD jewel cases standing on edge, seen from above and to the
 left, running up and to the right across the frame. It slides along its own
@@ -273,63 +322,39 @@ length, and the case that comes to the slot in the middle rises out of the row,
 with its title let in top left. Drag along the row (or across it — only the
 part along it counts), flick to throw it, or scroll to step it a case.
 
-Tap a case to take it out: it comes to the slot, the rest of the row clears
-off the screen either way, and it turns to face you and comes forward — the
-single case below, to drag round and tap open. Open, an Inspect button at the
-bottom takes its cover out: the paper lifts off the lid, then turns over to its
-printed side and comes down under the case, which rises to make room as it
-goes and shuts once the cover is clear.
-Give the case a `manual` and the cover is the front of a booklet: tap it and
-the cover folds open over the spine, the spread coming up into the middle of the
-frame as the case goes up out of it. Swipe it, tap a page or scroll to turn the
-leaves — each turn is one fold of the leaf over the spine, its back mirrored
-onto it, after a sketchbook from another project of mine. Each spread is a
-picture of the booklet lying open, a page either side of its middle, and the
-last leaf shuts it on its back, which is also what the cover shows from behind.
+**Taking a case out.** Tap a case to take it out: it comes to the slot, the
+rest of the row clears off the screen either way, and it turns to face you and
+comes forward — the single case below, to drag round and tap open. Open, an
+Inspect button at the bottom takes its cover out: the paper lifts off the lid,
+then turns over to its printed side and comes down under the case, which rises
+to make room as it goes and shuts once the cover is clear. Wider than tall, the
+cover comes to rest to the right of the case rather than under it, the open
+case moving left as the cover moves right so its lid shuts clear of it. Back
+from the cover out plays the whole thing in reverse.
+
+**The manual.** Give the case a `manual` and the cover is the front of a
+booklet: tap it and the cover folds open over the spine, the spread coming up
+into the middle of the frame as the case goes up out of it. Swipe it, tap a
+page or scroll to turn the leaves — each turn is one fold of the leaf over the
+spine, its back mirrored onto it, after a sketchbook from another project of
+mine. Each spread is a picture of the booklet lying open, a page either side of
+its middle, and the last leaf shuts it on its back, which is also what the
+cover shows from behind.
+
 Down the right of the open booklet stands a ruler, a tick to a fraction of a
 page, from the front through every spread to the back: drag its red playhead
 and the booklet runs through them under the finger, the ticks swelling and
 darkening around the playhead and the page riding beside it in a capsule. A
 jump further than a leaf riffles there, a leaf at a time, slow at either end of
 the run, quickest and motion-blurred in the middle, like the sketchbook's
-opening riffle. While
-the booklet is open the one button is Exit, on the left, which shuts it; otherwise Back
-is on the left and the way on on the right. The ruler's proportions are measured off a
-recording of a time scrubber.
-`CdRackScrollState.leave()` (the demo wires it to the system's back)
-shuts the manual if it is open, slides the cover back up into the lid if it is
-out, shuts the case if it is open, turns it back into the rack and brings the
-row in again.
+opening riffle. The ruler's proportions are measured off a recording of a time
+scrubber.
 
-Every case is the 3D case of `CdCase`, drawn after Ann Nguyen's WebGL
-[CD case](https://github.com/annnguyentt/vibe-coding/tree/main/cd-case). The
-rack's three measured angles turn out to be one turn of it, exactly — tipped
-back 0.310 rad and turned 0.534 rad left, the cases standing face to face along
-their own axis, 71.9 mm apart — seen through a camera dollied 24 times out
-with its lens lengthened to match, which flattens the row to the reference's
-orthographic look. So each case is drawn once at that turn, shaders and all,
-and then only moved; the one taken out is drawn live, while the camera comes
-back in.
-
-The rack was measured off a recording of a row of cassettes, which is why the
-numbers below talk in tapes.
-
-Measured off a recording of the reference rather than eyeballed. The top-left
-corner of every tape, pooled over 270 frames, falls on one line with one pitch
-and one number per frame to 1.1 px, so the rack is a single scalar:
-
-- the row runs at 27.3°, a tape every 0.322 tape widths, with no perspective
-  to speak of (0.05% a tape), so every tape is the same shape on screen;
-- the slotted tape stands 0.342 widths proud, straight up, as a fixed function
-  of its distance from the slot — flat within 0.08 tapes, gone by 1.0, a
-  smoothstep between (1.9 px residual on a 50 px lift; a timed per-tape lift
-  fits no better than 7 px);
-- nothing turns (top edges agree to 0.6°), grows or fades; each tape sits a
-  fixed 0.018 widths off the line, the same every time it comes round, and a
-  light over the slot lifts its shell 18%;
-- a throw leaves at the finger's speed on `cubic-bezier(0.283, 0.501, 0.698,
-  0.955)`, a run from rest is `cubic-bezier(0.280, 0.027, 0.248, 0.935)` for
-  0.664 s × √tapes — each within 0.6 px of the reference's own runs.
+**Buttons and back.** While the booklet is open the one button is Exit, on the
+left, which shuts it; otherwise Back is on the left and the way on on the right.
+`CdRackScrollState.leave()` (the demo wires it to the system's back) shuts the
+manual if it is open, slides the cover back up into the lid if it is out, shuts
+the case if it is open, turns it back into the rack and brings the row in again.
 
 ```kotlin
 CdRackScroll(
@@ -345,9 +370,16 @@ CdRackScroll(
 )
 ```
 
+Each `CdRackItem` has the disc's `image`, a `title` and `artist`, an optional
+`cover` slipped in under the lid's glass, and an optional `manual` — a
+suspending loader for the booklet behind the cover, called off the main thread
+only for the case that is out: a `CdManual` of its `spreads`, each a 2:1
+picture of it lying open on a clear ground, spine down the middle, and its
+`back`.
+
 | Parameter | Default | |
 | --- | --- | --- |
-| `items` | — | cases in order; the rack repeats, so it has no end. Each `CdRackItem` has the disc's `image`, a `title` and `artist`, an optional `cover` slipped in under the lid's glass, and an optional `manual` — a suspending loader for the booklet behind the cover, called off the main thread only for the case that is out: a `CdManual` of its `spreads`, each a 2:1 picture of it lying open on a clear ground, spine down the middle, and its `back` |
+| `items` | — | cases in order; the rack repeats, so it has no end |
 | `background` | white | the backdrop; the plastic is shaded for a pale one |
 | `contentColor` | `#111114` | caption text |
 | `captions` | `true` | title and artist of the case in the slot |
@@ -357,24 +389,74 @@ CdRackScroll(
 | `backLabel`, `openLabel`, `nextLabel` | `"Back"`, `"Open"`, `"Next"` | the other labels of the Back and forward buttons that walk the case out through its steps |
 | `state` | intro of `4` | `rememberCdRackScrollState(intro)` — cases slid on first show; `0` opens at rest |
 
-`CdRackScrollState.scrollTo(index)` and `step(by)` drive it from a host's own
-controls, `inspect(index)` takes a case out, `leave()` puts it back, `slotted`
-is the case in the slot and `inspecting` whether one is out. `canInspectCover`
-is true while the case out is open with its cover in, and `inspectCover()`
-takes the cover out — for a host that brings its own button. With the cover
-out, `case.turnPage(by)` and `case.closeManual()` leaf through its manual, and
-`case.manualPage` is the spread it is open at (`-1` shut). The buttons walk
-`step` — `0` shut, `1` open, `2` cover out, then a step per spread of the
-manual — with `stepForward()`, `stepBack()` and `lastStep` for a host's own.
-Wider than tall, the cover comes to rest to the right of the case rather than under it, the open case moving left as the cover moves right so its lid shuts clear of it. Back from the cover out plays the whole thing in reverse.
+**State.** `CdRackScrollState.scrollTo(index)` and `step(by)` drive it from a
+host's own controls, `inspect(index)` takes a case out, `leave()` puts it back,
+`slotted` is the case in the slot and `inspecting` whether one is out.
+`canInspectCover` is true while the case out is open with its cover in, and
+`inspectCover()` takes the cover out — for a host that brings its own button.
+With the cover out, `case.turnPage(by)` and `case.closeManual()` leaf through
+its manual, and `case.manualPage` is the spread it is open at (`-1` shut). The
+buttons walk `step` — `0` shut, `1` open, `2` cover out, then a step per spread
+of the manual — with `stepForward()`, `stepBack()` and `lastStep` for a host's
+own.
+
+<details>
+<summary>How it's measured and drawn</summary>
+
+Every case is the 3D case of `CdCase`, drawn after Ann Nguyen's WebGL
+[CD case](https://github.com/annnguyentt/vibe-coding/tree/main/cd-case). The
+rack's three measured angles turn out to be one turn of it, exactly — tipped
+back 0.310 rad and turned 0.534 rad left, the cases standing face to face along
+their own axis, 71.9 mm apart — seen through a camera dollied 24 times out
+with its lens lengthened to match, which flattens the row to the reference's
+orthographic look. So each case is drawn once at that turn, shaders and all,
+and then only moved; the one taken out is drawn live, while the camera comes
+back in.
+
+The rack was measured off a recording of a row of cassettes, which is why the
+numbers below talk in tapes. The top-left corner of every tape, pooled over 270
+frames, falls on one line with one pitch and one number per frame to 1.1 px, so
+the rack is a single scalar:
+
+- the row runs at 27.3°, a tape every 0.322 tape widths, with no perspective
+  to speak of (0.05% a tape), so every tape is the same shape on screen;
+- the slotted tape stands 0.342 widths proud, straight up, as a fixed function
+  of its distance from the slot — flat within 0.08 tapes, gone by 1.0, a
+  smoothstep between (1.9 px residual on a 50 px lift; a timed per-tape lift
+  fits no better than 7 px);
+- nothing turns (top edges agree to 0.6°), grows or fades; each tape sits a
+  fixed 0.018 widths off the line, the same every time it comes round, and a
+  light over the slot lifts its shell 18%;
+- a throw leaves at the finger's speed on `cubic-bezier(0.283, 0.501, 0.698,
+  0.955)`, a run from rest is `cubic-bezier(0.280, 0.027, 0.248, 0.935)` for
+  0.664 s × √tapes — each within 0.6 px of the reference's own runs.
+
+</details>
 
 #### One case: `CdCase`
 
 The case the rack takes out, on its own: on its white studio wall, idling with
-a slow sway, the disc turning inside. Drag it to turn
-it (it springs back when let go); tap it to open it — it turns right round as
-the lid swings out to its left on the reference's own hand-keyed curves — and
-tap again to shut it.
+a slow sway, the disc turning inside. Drag it to turn it (it springs back when
+let go); tap it to open it — it turns right round as the lid swings out to its
+left on the reference's own hand-keyed curves — and tap again to shut it.
+
+```kotlin
+CdCase(
+    art = image,
+    modifier = Modifier.fillMaxSize(),
+)
+```
+
+| Parameter | Default | |
+| --- | --- | --- |
+| `art` | — | printed across the disc, its middle square to the disc's width |
+| `cover` | `null` | slipped in under the lid's glass, its middle square filling the lid; `null` leaves it clear |
+| `background` | white | the backdrop; the plastic is shaded for a pale one |
+| `spin` | `true` | turn the disc inside the case |
+| `state` | — | `rememberCdCaseState()`; `open()`, `close()`, `toggle()` and `isOpen`; open, `inspectCover()` takes the cover out from under the lid and `returnCover()` puts it back, with `coverOut` true in between |
+
+<details>
+<summary>How it's drawn</summary>
 
 It is the reference's geometry and its studio, carried over:
 
@@ -396,20 +478,7 @@ It is the reference's geometry and its studio, carried over:
   look, with the rainbow and the lid's glare worked out per frame for the case's
   turn.
 
-```kotlin
-CdCase(
-    art = image,
-    modifier = Modifier.fillMaxSize(),
-)
-```
-
-| Parameter | Default | |
-| --- | --- | --- |
-| `art` | — | printed across the disc, its middle square to the disc's width |
-| `cover` | `null` | slipped in under the lid's glass, its middle square filling the lid; `null` leaves it clear |
-| `background` | white | the backdrop; the plastic is shaded for a pale one |
-| `spin` | `true` | turn the disc inside the case |
-| `state` | — | `rememberCdCaseState()`; `open()`, `close()`, `toggle()` and `isOpen`; open, `inspectCover()` takes the cover out from under the lid and `returnCover()` puts it back, with `coverOut` true in between |
+</details>
 
 ### Gallery Wall
 
@@ -419,61 +488,151 @@ you, each with its label on the wall underneath. A painting comes in down the
 right-hand wall, bends round the corner, crosses the back and goes out down the
 left. Drag along it or scroll, and the hang springs after and comes to rest
 with a painting in the middle; tap a painting to bring it to the middle. The
-room opens with a walk in from the doorway. Two seconds after it stops, a
-Take a look button walks you up to the painting in the
-middle — two seconds of a visitor's approach, steps and all. As the walk starts
-the painting comes off the wall's curve and hangs flat, square on; nearly
-there, the paintings either side slide away down the walls and out of the
-frame. Once there, Exit (bottom left) steps back and Inspect (bottom right)
-takes the painting apart: the frame cracks along its mitres and each of its
-four sticks flies off past its own edge of the screen while the label fades,
-then the glass slides straight up and out of the top — on Android 13 and up
-its liquid edges bending the painting as they cross it. With both gone, Flip
-(bottom right) turns the bare painting over like a sheet of paper: a crease
-sweeps in from the lower left corner with ripples settling behind it, the
-sheet turning about an axis that swings from the diagonal to upright, left
+room opens with a walk in from the doorway.
+
+**Taking a look.** Two seconds after it stops, a Take a look button walks you
+up to the painting in the middle — two seconds of a visitor's approach, steps
+and all. As the walk starts the painting comes off the wall's curve and hangs
+flat, square on; nearly there, the paintings either side slide away down the
+walls and out of the frame.
+
+**Inspect and Flip.** Once there, Exit (bottom left) steps back and Inspect
+(bottom right) takes the painting apart: the frame cracks along its mitres and
+each of its four sticks flies off past its own edge of the screen while the
+label fades, then the glass slides straight up and out of the top — on Android
+13 and up its liquid edges bending the painting as they cross it. With both
+gone, Flip (bottom right) turns the bare painting over like a sheet of paper: a
+crease sweeps in from the lower left corner with ripples settling behind it,
+the sheet turning about an axis that swings from the diagonal to upright, left
 side first, until it lies with its back showing — the item's `back`, or the
 painting again without one — and on Android 13 and up the paper's grain
-showing as it turns. Flip again turns it back. Stepping back puts the glass
-and the frame back on.
+showing as it turns. Flip again turns it back. Stepping back puts the glass and
+the frame back on.
 
-Up close, framed or bare, Step inside (bottom right, above Inspect) goes into the painting.
-Every point of it is pushed back along its own line of sight to the depth the
-scene would have — so from where you stand it still looks exactly like the
-flat painting — then the room fades to dark round it and the eye goes in, a
-little forward and a little narrower: the near ground swells past you while
-the distance barely moves. Where the depth jumps the sheet comes apart, and
-behind it is a second sheet: the painting with its near things painted out a
-little way in from their edges, in the colours round them, at the depth of
-what is behind — so a figure slides across a distance that goes on behind it,
-a shade darker in its shadow, instead of tearing onto the dark. Inside, a
-drag turns the head and leans it the same way so near things slide across far
-ones, a scroll walks in or back, and the head drifts a little on its own;
-Exit, or the system back, steps back out. The depth comes from the item's
+**Step inside.** Up close, framed or bare, Step inside (bottom right, above
+Inspect) goes into the painting. Every point of it is pushed back along its own
+line of sight to the depth the scene would have — so from where you stand it
+still looks exactly like the flat painting — then the room fades to dark round
+it and the eye goes in, a little forward and a little narrower: the near ground
+swells past you while the distance barely moves. Where the depth jumps the sheet
+comes apart, and behind it is a second sheet: the painting with its near things
+painted out a little way in from their edges, in the colours round them, at the
+depth of what is behind — so a figure slides across a distance that goes on
+behind it, a shade darker in its shadow, instead of tearing onto the dark.
+Inside, a drag turns the head and leans it the same way so near things slide
+across far ones, a scroll walks in or back, and the head drifts a little on its
+own; Exit, or the system back, steps back out. The depth comes from the item's
 `depth` map if it has one, or is guessed from the painting — the ground running
 away up the canvas, the distance hazier and bluer than what is near, the sky
 furthest, smoothed within each patch of colour so it jumps along outlines. It
 is one textured triangle mesh a frame, its arrays written in place, so it needs
 Android 10 or later, like Flip.
 
+```kotlin
+GalleryWallScroll(
+    items = listOf(
+        GalleryWallItem(image, "Wheat Field with Cypresses", "Vincent van Gogh", "1889", "Oil on canvas"),
+        /* ... */
+    ),
+    modifier = Modifier.fillMaxSize(),
+)
+```
+
+| Parameter | Default | |
+| --- | --- | --- |
+| `items` | — | paintings in order; the hang repeats, so it has no end |
+| `background` | `#FFFFFF` | the wall |
+| `contentColor` | `#1A1A1A` | the labels; all but the title are set in it at 45% |
+| `frame` | `null` | `GalleryWallFrame()` hangs each painting in a frame — see [Frames and glass](#frames-and-glass); `null` hangs them flat and bare |
+| `lookLabel` | `"Take a look"` | the button that walks up to a painting; `null` for none |
+| `exitLabel` | `"Exit"` | the button, bottom left up close, that steps back; `null` for none, when a tap anywhere does |
+| `inspectLabel` | `"Inspect"` | the button, bottom right up close, that takes the frame and then the glass off; `null` for none |
+| `flipLabel` | `"Flip"` | the button, bottom right once the frame and glass are off, that turns the painting over and back; `null` for none |
+| `stepInsideLabel` | `"Step inside"` | the button, bottom right up close above Inspect and Flip, that goes into the painting; `null` for none |
+| `state` | — | `rememberGalleryWallScrollState()`; `walkIn = false` skips the walk in from the doorway |
+
+**Items.** `GalleryWallItem.scale` is a painting's height against the tallest
+(1), `GalleryWallItem.back` what is on the back of its canvas when it is turned
+over, stretched to its size, `GalleryWallItem.depth` a depth map of it for
+stepping inside — white near, black far, any size, what a single-image depth
+model such as Depth Anything writes out — and `GalleryWallItem.scene` a
+`GalleryWallScene(geometry, textures)` to walk into instead: the scene file
+(its camera, route, look bounds and layers, documented on the class) and the
+textures its layers name. A `GalleryWallItem` can also carry a `frame` of its
+own in place of the one given to the wall, so each painting can hang in a
+different frame.
+
+**State.** `GalleryWallScrollState.scrollTo(index)` brings a painting to the
+middle from a host's own controls, and `centred` is the one there. `canLook`
+turns true two seconds after the hang comes to rest; `look()` walks up to the
+painting and `leave()` steps back, with `looking` true in between — a host can
+wire the system back to it with
+`BackHandler(enabled = state.looking) { state.leave() }`.
+Up close `arrived` is true, and while the frame is still on so is `canInspect`;
+`inspect()` takes it and the glass off, and `inspected` stays true until
+`leave()`. `canStepInside` is true up close while the painting lies face up and
+still; `stepInside()` goes into it, `inside` is true until `leave()`, which
+steps back out of the painting first and from it the next time. Once both are
+out of sight `canFlip` turns true and `flip()` turns the painting over, or back.
+
+#### Frames and glass
+
+`GalleryWallFrame()` hangs each painting in a walnut frame — four mitred sticks,
+the grain running along each — that stands 4.5 cm off the wall (against a
+metre-tall painting). The edge shows as the wall turns away, and a soft shadow
+falls behind. The painting sits 1.5 cm back inside it, so the inside of the
+moulding shows round it at an angle.
+
+With `carving = 1f` it is hand-carved, every piece a little off true, in one of
+four `ornament`s:
+
+- `Classical` (the default) cuts a rope twist round the outer edge, egg and dart
+  along the face, bead and reel at the sight edge and a rosette over each mitre;
+- the baroque ones swell the moulding into a big torus over a deep cove —
+  `Shell` runs acanthus along it towards the middle of each side, with pearls at
+  the sight edge and a scallop shell between C-scrolls over each corner and each
+  middle;
+- `Acanthus` runs the leaves clockwise all the way round, with a spray of leaves
+  round a flower over each corner and bead and reel at the sight edge;
+- `Gadroon` gadroons the torus, with C-scrolls curling into each corner round a
+  small shell and a fan of leaves at each middle.
+
+`gilt = true` lays gold leaf over any of them instead of bare wood (`color` is
+the gold, best with `grain = 0f`), rubbed through to the red bole on the high
+edge.
+
+The painting is behind glass that throws back more of the wall the further the
+wall turns away (Fresnel), with the doorway behind you as a soft glow that stays
+put as the paintings slide under it; `glass = false` leaves it open. On Android
+13 and up the glass is liquid glass, an AGSL shader drawn in the painting's own
+coordinates after Kyant's AndroidLiquidGlass (Apache 2.0): its square-cornered
+edges run under the moulding, where they bend the painting under them along a
+quarter circle and split it into colours, with 1.5x vibrancy, a faint white
+tint and a thin rim lit from the corners, and show as the glass slides away
+once the frame is off.
+
+#### Walking into a scene
+
 A painting can instead be rebuilt as a place, `GalleryWallItem.scene`, and then
 Step inside walks into it. The demo does this for *The Cliff Walk* and *Poppy
-Field*. *The Cliff Walk*'s
-coast is laid out round the spot it was painted from — a 55° camera tilted 6°
-down to put the horizon at a third of the way down — as a sloping meadow, the
-headland's wall, the rock across the cove as a tapered mass, a flat sea and a
-sky dome, with the figures and sails on their own cards and grass standing up
-off the meadow. Each surface carries the painting's own paint where it shows
-and paint carried on from round it where it does not: the sea and sky past the
-edges, the sea behind the headland, the grass behind the figures, the rock's
-far side. From the entry pose the scene is the painting; stepping in, the room
-goes dark, the painting gives way to the scene with nothing moving, and the
-eye walks 2.8 s along a route towards the water — through the frame, which
-stays put in the scene as a window, so it grows only as the eye goes up to it. A drag turns up to 25° either way — right towards the cliff, left out
-to sea — and tilts 8° down or 10° up; a scroll walks on or back along the
-route; the sea's brushwork drifts over it once in; Exit walks back out. It is
-one textured mesh per layer, about 33,000 triangles in all, drawn back to
-front.
+Field*.
+
+*The Cliff Walk*'s coast is laid out round the spot it was painted from — a 55°
+camera tilted 6° down to put the horizon at a third of the way down — as a
+sloping meadow, the headland's wall, the rock across the cove as a tapered mass,
+a flat sea and a sky dome, with the figures and sails on their own cards and
+grass standing up off the meadow. Each surface carries the painting's own paint
+where it shows and paint carried on from round it where it does not: the sea
+and sky past the edges, the sea behind the headland, the grass behind the
+figures, the rock's far side. From the entry pose the scene is the painting;
+stepping in, the room goes dark, the painting gives way to the scene with
+nothing moving, and the eye walks 2.8 s along a route towards the water —
+through the frame, which stays put in the scene as a window, so it grows only
+as the eye goes up to it. A drag turns up to 25° either way — right towards the
+cliff, left out to sea — and tilts 8° down or 10° up; a scroll walks on or back
+along the route; the sea's brushwork drifts over it once in; Exit walks back
+out. It is one textured mesh per layer, about 33,000 triangles in all, drawn
+back to front.
 
 *Poppy Field* is seen from 2.7 m up — the woman in the foreground has her head
 well below the horizon — over a low poppy hill on the left whose crest, 18 m
@@ -492,6 +651,9 @@ brushwork out there is Monet's own, at its own size, and no stroke is blended
 with another. The sky, the ground and the far tree line share one sheet that is
 the painting pixel for pixel inside the frame and runs on evenly in angle
 outside it.
+
+<details>
+<summary>How it's measured and drawn</summary>
 
 Measured off a recording of the reference rather than eyeballed. How tall a
 painting stands at each column of the screen is one fixed curve for every
@@ -512,54 +674,13 @@ to 0.44 px — so the wall stays put and the whole hang is a single scalar
   second (`spring(dampingRatio = 1f, stiffness = 45.5f)`), to 1.3 px over seven
   let-gos, and coasts no further than a spring trailing the input would.
 
-```kotlin
-GalleryWallScroll(
-    items = listOf(
-        GalleryWallItem(image, "Wheat Field with Cypresses", "Vincent van Gogh", "1889", "Oil on canvas"),
-        /* ... */
-    ),
-    modifier = Modifier.fillMaxSize(),
-)
-```
+Each painting is drawn once, label and all, into a bitmap and then through its
+own exact projection — one `drawImage` for each flat stretch of wall it is on
+and a dozen chords to a corner — so it needs no shader. Flip is one textured
+mesh a frame, the paper fold carried over from a GL study, drawn with
+`drawVertices` (Android 10 and up; the button stays hidden below).
 
-| Parameter | Default | |
-| --- | --- | --- |
-| `items` | — | paintings in order; the hang repeats, so it has no end |
-| `background` | `#FFFFFF` | the wall |
-| `contentColor` | `#1A1A1A` | the labels; all but the title are set in it at 45% |
-| `frame` | `null` | `GalleryWallFrame()` hangs each painting in a walnut frame — four mitred sticks, the grain running along each — that stands 4.5cm off the wall (against a metre-tall painting), and with `carving = 1f` hand-carved, every piece a little off true, in one of four `ornament`s: `Classical` (the default) cuts a rope twist round the outer edge, egg and dart along the face, bead and reel at the sight edge and a rosette over each mitre; the baroque ones swell the moulding into a big torus over a deep cove — `Shell` runs acanthus along it towards the middle of each side, with pearls at the sight edge and a scallop shell between C-scrolls over each corner and each middle, `Acanthus` runs the leaves clockwise all the way round, with a spray of leaves round a flower over each corner and bead and reel at the sight edge, and `Gadroon` gadroons the torus, with C-scrolls curling into each corner round a small shell and a fan of leaves at each middle. `gilt = true` lays gold leaf over any of them instead of bare wood (`color` is the gold, best with `grain = 0f`), rubbed through to the red bole on the high edge. A `GalleryWallItem` can carry a `frame` of its own in place of this one, so each painting can hang in a different frame: the edge shows as the wall turns away, and a soft shadow falls behind. The painting sits 1.5cm back inside it, so the inside of the moulding shows round it at an angle, behind glass that throws back more of the wall the further the wall turns away (Fresnel), with the doorway behind you as a soft glow that stays put as the paintings slide under it; `glass = false` leaves it open. On Android 13 and up the glass is liquid glass, an AGSL shader drawn in the painting's own coordinates after Kyant's AndroidLiquidGlass (Apache 2.0): its square-cornered edges run under the moulding, where they bend the painting under them along a quarter circle and split it into colours, with 1.5x vibrancy, a faint white tint and a thin rim lit from the corners, and show as the glass slides away once the frame is off. `null` hangs them flat and bare |
-| `lookLabel` | `"Take a look"` | the button that walks up to a painting; `null` for none |
-| `exitLabel` | `"Exit"` | the button, bottom left up close, that steps back; `null` for none, when a tap anywhere does |
-| `inspectLabel` | `"Inspect"` | the button, bottom right up close, that takes the frame and then the glass off; `null` for none |
-| `flipLabel` | `"Flip"` | the button, bottom right once the frame and glass are off, that turns the painting over and back; `null` for none |
-| `stepInsideLabel` | `"Step inside"` | the button, bottom right up close above Inspect and Flip, that goes into the painting; `null` for none |
-| `state` | — | `rememberGalleryWallScrollState()`; `walkIn = false` skips the walk in from the doorway |
-
-`GalleryWallItem.scale` is a painting's height against the tallest (1), and
-`GalleryWallItem.back` what is on the back of its canvas when it is turned over,
-stretched to its size, and `GalleryWallItem.depth` a depth map of it for
-stepping inside — white near, black far, any size, what a single-image depth
-model such as Depth Anything writes out — and `GalleryWallItem.scene` a
-`GalleryWallScene(geometry, textures)` to walk into instead: the scene file
-(its camera, route, look bounds and layers, documented on the class) and the
-textures its layers name.
-`GalleryWallScrollState.scrollTo(index)` brings a painting to the middle from a
-host's own controls, and `centred` is the one there. `canLook` turns true two
-seconds after the hang comes to rest; `look()` walks up to the painting and
-`leave()` steps back, with `looking` true in between — a host can wire the
-system back to it with `BackHandler(enabled = state.looking) { state.leave() }`.
-Up close `arrived` is true, and while the frame is still on so is `canInspect`;
-`inspect()` takes it and the glass off, and `inspected` stays true until `leave()`.
-`canStepInside` is true up close while the painting lies face up and still;
-`stepInside()` goes into it, `inside` is true until `leave()`, which steps back
-out of the painting first and from it the next time.
-Once both are out of sight `canFlip` turns true and `flip()` turns the painting
-over, or back — one textured mesh a frame, the paper fold carried over from a GL study,
-drawn with `drawVertices` (Android 10 and up; the button stays hidden below).
-Each painting is drawn
-once, label and all, into a bitmap and then through its own exact projection —
-one `drawImage` for each flat stretch of wall it is on and a dozen chords to a
-corner — so it needs no shader.
+</details>
 
 ### Terrace
 
@@ -571,6 +692,29 @@ Run it on and the front card shrinks back into the bands above while the first
 band below grows out to take its place; the two pass in front of each other
 halfway. Drag up or down, flick to throw it, scroll a card a notch, or tap a
 band to bring that card to the front.
+
+```kotlin
+TerraceScroll(
+    items = listOf(TerraceItem(image, "Sounds", "Marlborough Sounds"), /* ... */),
+    modifier = Modifier.fillMaxSize(),
+)
+```
+
+| Parameter | Default | |
+| --- | --- | --- |
+| `items` | — | cards in order; the stack repeats, so it has no end |
+| `background` | `#FFFFFF` | page colour |
+| `contentColor` | `#141414` | captions; the index and subtitle are set in it at reduced strength |
+| `shadowColor` | `#000000` | the shadow each card throws onto those behind it |
+| `captions` | `true` | index to the left of the front card, title and subtitle to its right |
+| `depth` | `3` | levels shown either side of the front card |
+| `state` | — | `rememberTerraceScrollState()` |
+
+**State.** `TerraceScrollState.scrollTo(index)` and `step(by)` drive it from a
+host's own controls, and `front` is the card at the front.
+
+<details>
+<summary>How it's measured and drawn</summary>
 
 Measured off a recording of the reference rather than eyeballed. The width of
 every card and the outer edge of every band, pooled over 175 frames, collapse
@@ -591,27 +735,47 @@ levels from the front:
   fit comes back critically damped with no swing, and one from rest would have
   to start eight frames before anything moves.
 
-```kotlin
-TerraceScroll(
-    items = listOf(TerraceItem(image, "Sounds", "Marlborough Sounds"), /* ... */),
-    modifier = Modifier.fillMaxSize(),
-)
+A card and one shared, baked shadow are each a single `drawImage` placed by a
+transform, so the stack is fourteen draws a frame and needs no shader.
+
+</details>
+
+---
+
+## Running the demo app
+
+The demo app in `shared/` shows every style from one gallery; the system's back
+returns to it. Run it from the IDE's run widget, or:
+
+| Target | Command |
+| --- | --- |
+| Android | `./gradlew :androidApp:assembleDebug` |
+| Desktop | `./gradlew :desktopApp:run` (hot reload: `./gradlew :desktopApp:hotRun --auto`) |
+| Web (Wasm) | `./gradlew :webApp:wasmJsBrowserDevelopmentRun` |
+| Web (JS, older browsers) | `./gradlew :webApp:jsBrowserDevelopmentRun` |
+| iOS | open [`iosApp`](./iosApp) in Xcode and run it from there |
+
+Tests: `./gradlew :shared:jvmTest`, `:shared:testAndroidHostTest`,
+`:shared:wasmJsTest`, `:shared:jsTest` or `:shared:iosSimulatorArm64Test`.
+
+| Module | |
+| --- | --- |
+| [`oddScroll`](./oddScroll) | the library |
+| [`shared`](./shared/src) | the demo app's UI, shared by every target |
+| [`androidApp`](./androidApp), [`desktopApp`](./desktopApp), [`webApp`](./webApp), [`iosApp`](./iosApp) | thin entry points that call `App()` from `shared` |
+
+## Demo GIFs
+
+The recordings in [`docs/demos`](./docs/demos) are made with
+[`scripts/demo-gif.sh`](./scripts/demo-gif.sh), which keeps each one around
+5 MB so the README loads them quickly:
+
+```bash
+scripts/demo-gif.sh recording.mov docs/demos/cd-rack.gif 3040:1480:400:420
 ```
 
-| Parameter | Default | |
-| --- | --- | --- |
-| `items` | — | cards in order; the stack repeats, so it has no end |
-| `background` | `#FFFFFF` | page colour |
-| `contentColor` | `#141414` | captions; the index and subtitle are set in it at reduced strength |
-| `shadowColor` | `#000000` | the shadow each card throws onto those behind it |
-| `captions` | `true` | index to the left of the front card, title and subtitle to its right |
-| `depth` | `3` | levels shown either side of the front card |
-| `state` | — | `rememberTerraceScrollState()` |
-
-`TerraceScrollState.scrollTo(index)` and `step(by)` drive it from a host's own
-controls, and `front` is the card at the front. A card and one shared, baked
-shadow are each a single `drawImage` placed by a transform, so the stack is
-fourteen draws a frame and needs no shader.
+The third argument is an optional crop in source pixels (`W:H:X:Y`), the fourth
+an optional width (520 by default). The script explains the settings.
 
 ## Image credits
 
@@ -647,6 +811,8 @@ square.
 | `art_village.jpg` | [Birmingham Museums Trust](https://unsplash.com/@birminghammuseumstrust) |
 | `art_cypresses.jpg` | [Tofan Teodor](https://unsplash.com/@tofanteodor) |
 
+### Paintings
+
 Gallery Wall hangs fourteen `museum_*` paintings instead, each cut 1200x800
 (3:2, so every one hangs the same height and one and a half times as wide) from
 a 1,800 px or larger scan on Wikipedia / Wikimedia Commons: *Sunflowers*,
@@ -654,18 +820,21 @@ a 1,800 px or larger scan on Wikipedia / Wikimedia Commons: *Sunflowers*,
 Heliogabalus*, *Little Girl in a Blue Armchair*, *The Kiss*, *Almond Blossoms*,
 *Luncheon of the Boating Party*, *The Cliff Walk at Pourville*, *The Birth of
 Venus*, *Poppy Field*, *Lady with a Fan* and *Strolling along the Seashore*. The
-reuse terms of each scan are on its Commons page. `museum_cliff_walk_back.webp`,
-the back of *The Cliff Walk*, is an illustrated note made for the demo — Monet's
-portrait, notes and a sketch of the cliff in the style of a letter — not a scan
-of anything of his. `museum_poppies_back.webp`, the back of *Poppy Field*, is
-another from Argenteuil in 1873 on the same paper turned end for end: the
-cliff note's ink lifted off it, notes in a hand set to match, a pencil study
-taken off the painting with the poppies in red chalk and the parasol in blue,
-paint tried at the corner, and the portrait, its caption and the signature
-carried over from the first. Both sides of those two are WebP, each cut to its
-note's worn, ragged outline (mirrored on the front, which it is the back of)
-with the paint rubbed off the front's edges and corners down to the same
-browned paper. Each painting has a `museum_*_depth.png` beside it, 600x400, white near and
+reuse terms of each scan are on its Commons page.
+
+`museum_cliff_walk_back.webp`, the back of *The Cliff Walk*, is an illustrated
+note made for the demo — Monet's portrait, notes and a sketch of the cliff in
+the style of a letter — not a scan of anything of his.
+`museum_poppies_back.webp`, the back of *Poppy Field*, is another from
+Argenteuil in 1873 on the same paper turned end for end: the cliff note's ink
+lifted off it, notes in a hand set to match, a pencil study taken off the
+painting with the poppies in red chalk and the parasol in blue, paint tried at
+the corner, and the portrait, its caption and the signature carried over from
+the first. Both sides of those two are WebP, each cut to its note's worn,
+ragged outline (mirrored on the front, which it is the back of) with the paint
+rubbed off the front's edges and corners down to the same browned paper.
+
+Each painting has a `museum_*_depth.png` beside it, 600x400, white near and
 black far, for stepping inside it: worked out from the 1200x800 cut by
 [Depth Anything V2 Small](https://huggingface.co/depth-anything/Depth-Anything-V2-Small-hf)
 (Apache 2.0 — the larger Depth Anything V2 models are non-commercial, so keep
@@ -692,9 +861,9 @@ framed to the card's 4:5.
 
 The `movie_*.jpg` set used by Infinite Menu is thirty silent-era film posters,
 high-resolution scans from Wikipedia/Wikimedia, cut square from the top and
-scaled to 640x640 for the sphere's tiles. Posters are copyrighted by their studios and shown here only to
-illustrate the demo, so swap them for your own artwork before using this
-anywhere real.
+scaled to 640x640 for the sphere's tiles. Posters are copyrighted by their
+studios and shown here only to illustrate the demo, so swap them for your own
+artwork before using this anywhere real.
 
 **Neither set is covered by the licences above.** Freepik's free licence wants
 attribution and does not allow the flowers to be redistributed on their own, so
