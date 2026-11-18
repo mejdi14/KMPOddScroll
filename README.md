@@ -16,17 +16,7 @@ Each one is a single composable that takes a list and owns its layout, projectio
 An infinite row of paintings that flows through liquid glass at its edges. Flick,
 scroll or tap to move it; tap the centred card to open it beside its text.
 
-https://github.com/user-attachments/assets/0446d7bf-080d-4278-a885-98c3e965e1a2
-
-
 https://github.com/user-attachments/assets/d67ff742-685a-44b4-9f56-c003ecf8b3d9
-
-
-<p align="center">
-  <a href="media/flex-carousel.mp4">
-    <img src="media/flex-carousel.jpg" width="720" alt="Flex Carousel demo — click to play">
-  </a>
-</p>
 
 ```kotlin
 FlexCarouselScroll(
@@ -52,11 +42,7 @@ undistorted.
 A row of jewel cases running across the frame. Tap one to take it out, open it,
 slide the cover from under the lid and leaf through its manual.
 
-<p align="center">
-  <a href="media/cd-rack.mp4">
-    <img src="media/cd-rack.jpg" width="720" alt="CD Rack demo — click to play">
-  </a>
-</p>
+https://github.com/user-attachments/assets/0446d7bf-080d-4278-a885-98c3e965e1a2
 
 ```kotlin
 CdRackScroll(
