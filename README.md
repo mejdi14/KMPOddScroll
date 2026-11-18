@@ -112,4 +112,6 @@ it for your own before using this anywhere real.
 
 If this is useful to you, a ⭐ helps other people find it.
 
+Made by [@mejdi141](https://x.com/mejdi141) — follow along on [X](https://x.com/mejdi141).
+
 </div>
