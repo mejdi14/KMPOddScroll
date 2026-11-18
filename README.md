@@ -3,7 +3,11 @@
 # KMP Odd Scroll
 
 Odd scrolling styles for Compose Multiplatform.<br>
-Each one is a single composable that takes a list and owns its layout, projection and gestures.
+Carousels, 3D racks and liquid-glass lists — each one a single composable that takes a list and owns its layout, projection and gestures.
+
+[![Stars](https://img.shields.io/github/stars/mejdi14/KMPOddScroll?style=flat-square&logo=github)](https://github.com/mejdi14/KMPOddScroll/stargazers)
+[![Kotlin Multiplatform](https://img.shields.io/badge/Kotlin-Multiplatform-7F52FF?style=flat-square&logo=kotlin&logoColor=white)](https://kotlinlang.org/docs/multiplatform.html)
+[![Compose Multiplatform](https://img.shields.io/badge/Compose-Multiplatform-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white)](https://www.jetbrains.com/compose-multiplatform/)
 
 **Android · iOS · Desktop · Wasm · JS**
 
@@ -101,3 +105,11 @@ CD Rack's disc labels come from the
 from [Emu-Land](https://www.emu-land.net/library/manuals/psx). The artwork
 belongs to each game's publisher and is shown only to illustrate the demo — swap
 it for your own before using this anywhere real.
+
+---
+
+<div align="center">
+
+If this is useful to you, a ⭐ helps other people find it.
+
+</div>
