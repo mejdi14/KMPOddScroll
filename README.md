@@ -15,11 +15,17 @@ styles add an AGSL shader on Android 13+ and draw without it everywhere else.
 
 - [Installation](#installation)
 - [Styles at a glance](#styles-at-a-glance)
-- Styles: [Infinite Spiral](#infinite-spiral) ·
-  [Edge Distortion](#edge-distortion) · [Flex Carousel](#flex-carousel) ·
-  [Infinite Menu](#infinite-menu) · [Card Sphere](#card-sphere) ·
-  [Lift Stack](#lift-stack) · [CD Rack](#cd-rack) ·
-  [Gallery Wall](#gallery-wall) · [Terrace](#terrace) · [Runway](#runway)
+- Styles
+  - [Infinite Spiral](#infinite-spiral)
+  - [Edge Distortion](#edge-distortion)
+  - [Flex Carousel](#flex-carousel)
+  - [Infinite Menu](#infinite-menu)
+  - [Card Sphere](#card-sphere)
+  - [Lift Stack](#lift-stack)
+  - [CD Rack](#cd-rack)
+  - [Gallery Wall](#gallery-wall)
+  - [Terrace](#terrace)
+  - [Runway](#runway)
 - [Running the demo app](#running-the-demo-app)
 - [Demo GIFs](#demo-gifs)
 - [Image credits](#image-credits)
@@ -146,10 +152,15 @@ EdgeDistortionScroll(
 
 ### Flex Carousel
 
+<p align="center">
+  <img src="docs/demos/flex-carousel.gif" width="640" alt="Flex Carousel: flicking a row of paintings through liquid glass, then opening one beside its title and description">
+</p>
+
 An infinite row of pictures that flows through invisible liquid glass at its
 edges. With `fit = Natural` cards keep their own proportions and the row is a
 run of unequal widths; any other `fit` draws them all at one size. Either way a
 step along is half of this card plus the gap plus half of the next.
+
 Position is a spring: flick, wheel and tap all arrive as a new goal. The faster
 it runs, the narrower every card draws. Tap the centred card to open it.
 
@@ -834,17 +845,22 @@ Tests: `./gradlew :shared:jvmTest`, `:shared:testAndroidHostTest`,
 ## Demo GIFs
 
 The recordings in [`docs/demos`](./docs/demos) are made with
-[`scripts/demo-gif.sh`](./scripts/demo-gif.sh), which keeps them sharp at
-640 px while storing only what moves from frame to frame:
+[`scripts/demo-gif.sh`](./scripts/demo-gif.sh), which keeps them sharp while
+storing only what moves from frame to frame:
 
 ```bash
-scripts/demo-gif.sh recording.mov docs/demos/cd-rack.gif 3040:1480:400:420
+scripts/demo-gif.sh recording.mp4 docs/demos/flex-carousel.gif 1740:840:90:120 720
 ```
 
-The third argument is an optional crop in source pixels (`W:H:X:Y`), the fourth
-an optional width (640 by default). Size goes with length — about 0.4 MB a
-second of phone recording — so keep clips short. The script explains the
-settings.
+| Argument | |
+| --- | --- |
+| input, output | the recording and the `.gif` to write |
+| crop (optional) | `W:H:X:Y` in source pixels — cut the phone out of the frame |
+| width (optional) | output width in px, `640` by default |
+
+`FPS` (12) and `COLORS` (128) override the frame rate and palette size. Size
+goes with length — a 1080p recording comes out around 0.35 MB a second at 720
+px — so keep clips short. The script explains the settings.
 
 ## Image credits
 

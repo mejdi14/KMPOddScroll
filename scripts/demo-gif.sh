@@ -30,8 +30,15 @@ filters="fps=${fps}"
 filters="${filters},scale=${width}:-2:flags=lanczos,hqdn3d=3:3:16:16"
 
 mkdir -p "$(dirname "$out")"
-ffmpeg -v error -y -i "$in" -an -filter_complex \
-  "${filters},split[a][b];[a]palettegen=max_colors=${colors}:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" \
+# Two passes (palette, then map) rather than one split graph: the split holds
+# every frame in memory until the palette is done, which a 1080p source at
+# 60 fps can exhaust.
+palette=$(mktemp -t demo-gif-palette).png
+trap 'rm -f "$palette"' EXIT
+ffmpeg -v error -y -i "$in" -an \
+  -vf "${filters},palettegen=max_colors=${colors}:stats_mode=diff" "$palette"
+ffmpeg -v error -y -i "$in" -i "$palette" -an -filter_complex \
+  "[0:v]${filters}[v];[v][1:v]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" \
   -loop 0 "$out"
 
 ls -lh "$out" | awk '{print $5, $NF}'
