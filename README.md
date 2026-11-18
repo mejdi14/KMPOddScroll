@@ -17,8 +17,8 @@ An infinite row of paintings that flows through liquid glass at its edges. Flick
 scroll or tap to move it; tap the centred card to open it beside its text.
 
 <p align="center">
-  <a href="docs/demos/flex-carousel.mp4">
-    <img src="docs/demos/flex-carousel.jpg" width="720" alt="Flex Carousel demo — click to play">
+  <a href="media/flex-carousel.mp4">
+    <img src="media/flex-carousel.jpg" width="720" alt="Flex Carousel demo — click to play">
   </a>
 </p>
 
@@ -47,8 +47,8 @@ A row of jewel cases running across the frame. Tap one to take it out, open it,
 slide the cover from under the lid and leaf through its manual.
 
 <p align="center">
-  <a href="docs/demos/cd-rack.mp4">
-    <img src="docs/demos/cd-rack.jpg" width="720" alt="CD Rack demo — click to play">
+  <a href="media/cd-rack.mp4">
+    <img src="media/cd-rack.jpg" width="720" alt="CD Rack demo — click to play">
   </a>
 </p>
 
