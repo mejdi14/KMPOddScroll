@@ -27,7 +27,7 @@ styles add an AGSL shader on Android 13+ and draw without it everywhere else.
   - [Terrace](#terrace)
   - [Runway](#runway)
 - [Running the demo app](#running-the-demo-app)
-- [Demo GIFs](#demo-gifs)
+- [Demo GIFs and videos](#demo-gifs-and-videos)
 - [Image credits](#image-credits)
 
 ## Installation
@@ -153,7 +153,9 @@ EdgeDistortionScroll(
 ### Flex Carousel
 
 <p align="center">
-  <img src="docs/demos/flex-carousel.gif" width="640" alt="Flex Carousel: flicking a row of paintings through liquid glass, then opening one beside its title and description">
+  <video src="https://github.com/mejdi14/KMPOddScroll/raw/main/docs/demos/flex-carousel.mp4" width="640" controls muted loop playsinline>
+    <a href="docs/demos/flex-carousel.mp4">Watch the Flex Carousel demo</a>
+  </video>
 </p>
 
 An infinite row of pictures that flows through invisible liquid glass at its
@@ -842,14 +844,24 @@ Tests: `./gradlew :shared:jvmTest`, `:shared:testAndroidHostTest`,
 | [`shared`](./shared/src) | the demo app's UI, shared by every target |
 | [`androidApp`](./androidApp), [`desktopApp`](./desktopApp), [`webApp`](./webApp), [`iosApp`](./iosApp) | thin entry points that call `App()` from `shared` |
 
-## Demo GIFs
+## Demo GIFs and videos
 
-The recordings in [`docs/demos`](./docs/demos) are made with
+Longer demos are MP4s, shown in the page with a video player. Crop the phone
+out of the recording and encode it for the web (1280 px wide, 30 fps, no audio,
+about 0.15 MB a second):
+
+```bash
+ffmpeg -i recording.mp4 -an -vf "crop=1740:840:90:120,fps=30,scale=1280:618" \
+  -c:v libx264 -preset slow -crf 23 -pix_fmt yuv420p -movflags +faststart \
+  docs/demos/flex-carousel.mp4
+```
+
+The GIFs in [`docs/demos`](./docs/demos) are made with
 [`scripts/demo-gif.sh`](./scripts/demo-gif.sh), which keeps them sharp while
 storing only what moves from frame to frame:
 
 ```bash
-scripts/demo-gif.sh recording.mp4 docs/demos/flex-carousel.gif 1740:840:90:120 720
+scripts/demo-gif.sh recording.mov docs/demos/cd-rack.gif 3040:1480:400:420
 ```
 
 | Argument | |
