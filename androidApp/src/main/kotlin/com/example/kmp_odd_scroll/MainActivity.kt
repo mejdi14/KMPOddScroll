@@ -1,6 +1,8 @@
 package com.example.kmp_odd_scroll
 
+import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -15,11 +17,19 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
-        // The navigation bar stays out of the way; a swipe from the edge brings
-        // it back for a moment.
-        WindowCompat.getInsetsController(window, window.decorView).apply {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        // Both system bars stay out of the way; a swipe from the edge brings
+        // them back for a moment.
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            hide(WindowInsetsCompat.Type.systemBars())
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            hide(WindowInsetsCompat.Type.navigationBars())
+        }
+
+        // Draw behind the camera hole too, so there's no black strip in landscape
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.attributes.layoutInDisplayCutoutMode =
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
 
         setContent {
