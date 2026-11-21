@@ -2,18 +2,15 @@ package io.github.mejdi14.oddscroll.cdrack
 
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.RenderEffect
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.asComposeShader
 import androidx.compose.ui.graphics.asComposeImageBitmap
-import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.asSkiaBitmap
 import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.ColorAlphaType
 import org.jetbrains.skia.ColorType
 import org.jetbrains.skia.FilterTileMode
 import org.jetbrains.skia.Image
-import org.jetbrains.skia.ImageFilter
 import org.jetbrains.skia.ImageInfo
 import org.jetbrains.skia.RuntimeEffect
 import org.jetbrains.skia.RuntimeShaderBuilder
@@ -22,8 +19,9 @@ import org.jetbrains.skia.Shader
 
 /**
  * Compose on desktop, iOS and the web draws through Skia, whose SkSL takes
- * the AGSL source as it is, so the case is lit the way it is on Android. If any shader fails to
- * compile, it is drawn from its baked look in common code.
+ * the AGSL source as it is, so the case is lit the way it is on Android. If
+ * either shader fails to compile, it is drawn from its baked look in common
+ * code.
  */
 internal actual fun caseShader(): CaseShader? = runCatching { SkslCase() }.getOrNull()
 
@@ -38,8 +36,6 @@ private const val MAPS_KEPT = 12
 private class SkslCase : CaseShader {
     private val glass = RuntimeShaderBuilder(RuntimeEffect.makeForShader(CASE_GLASS))
     private val disc = RuntimeShaderBuilder(RuntimeEffect.makeForShader(CASE_DISC))
-    private val bright = RuntimeShaderBuilder(RuntimeEffect.makeForShader(CASE_BRIGHT))
-    private val stars = RuntimeShaderBuilder(RuntimeEffect.makeForShader(CASE_STARS))
     private val maps = HashMap<ImageBitmap, Shader>()
 
     override fun heightMap(pixels: IntArray, width: Int, height: Int): ImageBitmap {
@@ -71,7 +67,6 @@ private class SkslCase : CaseShader {
         toWorld: FloatArray,
         thickness: Float,
         overDisc: Boolean,
-        sparks: Float,
     ): Brush {
         glass.child("height", map(height, FilterTileMode.DECAL))
         glass.uniform("frame", left, top, mmPerPx, z)
@@ -79,14 +74,7 @@ private class SkslCase : CaseShader {
         glass.uniform("toWorld", toWorld)
         glass.uniform("thickness", thickness)
         glass.uniform("overDisc", if (overDisc) 1f else 0f)
-        glass.uniform("sparks", sparks)
         return ShaderBrush(glass.makeShader().asComposeShader())
-    }
-
-    override fun stars(strength: Float): RenderEffect {
-        stars.uniform("strength", strength)
-        val mask = ImageFilter.makeRuntimeShader(bright, "mask", null)
-        return ImageFilter.makeRuntimeShader(stars, "bright", mask).asComposeRenderEffect()
     }
 
     override fun disc(art: ImageBitmap, eye: FloatArray, toWorld: FloatArray): Brush {

@@ -2,7 +2,6 @@ package io.github.mejdi14.oddscroll.cdrack
 
 import android.graphics.Bitmap
 import android.graphics.BitmapShader
-import android.graphics.RenderEffect
 import android.graphics.RuntimeShader
 import android.graphics.Shader
 import android.os.Build
@@ -11,7 +10,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.asAndroidBitmap
-import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.asImageBitmap
 
 /**
@@ -37,8 +35,6 @@ private class AgslCase : CaseShader {
     private val glassBrush = ShaderBrush(glass)
     private val disc = RuntimeShader(CASE_DISC)
     private val discBrush = ShaderBrush(disc)
-    private val bright = RuntimeShader(CASE_BRIGHT)
-    private val stars = RuntimeShader(CASE_STARS)
     private val maps = HashMap<ImageBitmap, BitmapShader>()
 
     override fun heightMap(pixels: IntArray, width: Int, height: Int): ImageBitmap =
@@ -54,7 +50,6 @@ private class AgslCase : CaseShader {
         toWorld: FloatArray,
         thickness: Float,
         overDisc: Boolean,
-        sparks: Float,
     ): Brush {
         glass.setInputShader("height", map(height, Shader.TileMode.DECAL))
         glass.setFloatUniform("frame", left, top, mmPerPx, z)
@@ -62,16 +57,7 @@ private class AgslCase : CaseShader {
         glass.setFloatUniform("toWorld", toWorld)
         glass.setFloatUniform("thickness", thickness)
         glass.setFloatUniform("overDisc", if (overDisc) 1f else 0f)
-        glass.setFloatUniform("sparks", sparks)
         return glassBrush
-    }
-
-    override fun stars(strength: Float): androidx.compose.ui.graphics.RenderEffect {
-        stars.setFloatUniform("strength", strength)
-        return RenderEffect.createChainEffect(
-            RenderEffect.createRuntimeShaderEffect(stars, "bright"),
-            RenderEffect.createRuntimeShaderEffect(bright, "mask"),
-        ).asComposeRenderEffect()
     }
 
     override fun disc(art: ImageBitmap, eye: FloatArray, toWorld: FloatArray): Brush {

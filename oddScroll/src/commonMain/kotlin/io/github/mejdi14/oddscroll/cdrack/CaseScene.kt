@@ -3,7 +3,6 @@ package io.github.mejdi14.oddscroll.cdrack
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
@@ -11,19 +10,12 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.withTransform
-import androidx.compose.ui.graphics.layer.GraphicsLayer
-import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import io.github.mejdi14.oddscroll.internal.clamped
-import io.github.mejdi14.oddscroll.internal.lerp
-import kotlin.math.PI
 import kotlin.math.abs
-import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.max
@@ -39,46 +31,20 @@ private const val MAX_PPM = 8.75f
 /** The largest the print is kept for the shader to sample. */
 private const val ART_PX = 1024
 
-/** The sparks are found at a half of the frame's pixels across, as the reference finds them. */
-private const val SPARK_DOWN = 2f
-
 /**
- * A drawing of one case, any pose, through any camera. Its pieces are baked
- * once for the size the case stands on screen, and shared by whatever art is
+ * A drawing of one shut case standing at a given turn, through a given
+ * camera — what the rack records once per case. Its pieces are baked once
+ * for the size the case stands on screen, and shared by whatever art is
  * printed on its disc; the art can be swapped, which bakes only the disc.
  */
 internal class CaseScene {
     private val shader: CaseShader? = sharedShader
     private var camera = Camera()
-    private var pose = CasePose()
     private var art: ImageBitmap? = null
     private var cover: ImageBitmap? = null
 
-    private val tray = Pose()
-    private val lid = Pose()
-    private val disc = Pose()
-    private val loose = Pose()
-
-    /** The cover is out of the lid this frame, drawn at [loose] instead. */
-    private var coverLoose = false
-
-    /** The manual behind the loose cover, this frame, or null for a single sheet. */
-    private var book: BookPose? = null
-    private var manual: CdManual? = null
-    private val spine = Pose()
-    private val leaf = Pose()
-
-    /** How wide the loose cover stands, in covers: two with its manual open. */
-    private var footprint = 1f
-
-    /** Drawing the sparks for [stars]: the rods' sparks, and all that is opaque in black. */
-    private var sparking = false
-
-    /** What the manual is drawn into to be blurred as it riffles, this frame. */
-    private var riffleLayer: GraphicsLayer? = null
-
-    /** The spine's two ends and a point right of it on screen, as last drawn. */
-    private val spineHull = FloatArray(6)
+    /** The case: tray, lid and disc share the one frame while it is shut. */
+    private val case = Pose()
 
     private val trayLayers = trayLayers()
     private val lidLayer = lidLayer()
@@ -87,9 +53,6 @@ internal class CaseScene {
     private var discArt: DiscArt? = null
     private var square: ImageBitmap? = null
     private var squarePx = 0
-    private val trayShadow = bakeShadow(lid = false)
-    private val lidShadow = bakeShadow(lid = true)
-    private val coverShadow = bakeCoverShadow()
     private var ppm = 0f
 
     private val matrix = Matrix()
@@ -98,12 +61,9 @@ internal class CaseScene {
     private val toWorld = FloatArray(9)
     private val world = FloatArray(12)
     private val screen = FloatArray(8)
-    private val rotation = FloatArray(9)
-    private val turn = FloatArray(9)
     private val v = FloatArray(3)
     private val n = FloatArray(3)
     private val path = Path()
-    private val hull = FloatArray(24)
 
     /**
      * Prints [image] on the disc from now on, sampled by the shader from a
@@ -123,20 +83,12 @@ internal class CaseScene {
     }
 
     /**
-     * The rest of the booklet the cover is the front of, or none; its back is
-     * also what the back of the cover shows, in the lid or out.
-     */
-    fun setManual(manual: CdManual?) {
-        this.manual = manual
-    }
-
-    /**
      * Bakes the pieces for the size [camera] shows the case at, if they are
      * not already. Touches no drawing state, so it can run off the main thread
      * before the case is first drawn.
      */
     fun prepare(camera: Camera) {
-        // As sharp as the shut case stands on screen.
+        // As sharp as the case stands on screen.
         val want = camera.scaleAt(0f).clamped(MIN_PPM, MAX_PPM)
         val rounded = (want * 4f).roundToInt() / 4f
         if (rounded == ppm) return
@@ -149,78 +101,18 @@ internal class CaseScene {
         ppm = rounded
     }
 
-    /**
-     * Draws the case at [pose] through [camera], its shadow on the backdrop at
-     * [shadow] of its strength; with [cover], the cover is out of the lid and
-     * stands there on its own, the front of [book] if it has one. Riffling,
-     * the book is drawn through [riffleLayer], smeared the way it turns.
-     */
-    fun draw(
-        scope: DrawScope,
-        camera: Camera,
-        pose: CasePose,
-        shadow: Float = 1f,
-        cover: CasePose? = null,
-        book: BookPose? = null,
-        riffleLayer: GraphicsLayer? = null,
-    ) = with(scope) {
+    /** Draws the shut case standing at [frame] through [camera]. */
+    fun draw(scope: DrawScope, camera: Camera, frame: Pose) = with(scope) {
         if (size.width <= 0f || size.height <= 0f) return@with
         this@CaseScene.camera = camera
-        this@CaseScene.pose = pose
         prepare(camera)
         if (art == null) return@with
-        place()
-        coverLoose = cover != null && this@CaseScene.cover != null
-        if (cover != null) placeLoose(cover)
-        val manual = if (coverLoose && book != null && book.spreads > 0) book else null
-        this@CaseScene.book = manual
-        this@CaseScene.riffleLayer = riffleLayer
-        footprint = if (manual == null) 1f else lerp(manual.across(manual.from), manual.across(manual.to), manual.turn)
-
-        // The shadows land on the backdrop, behind everything.
-        if (shadow > 0f) {
-            shadow(tray, -2f, trayShadow, shadow)
-            shadow(lid, HINGE_Z, lidShadow, shadow)
-            if (coverLoose) shadow(loose, 0f, coverShadow, shadow, widen = footprint)
-        }
-
-        pieces()
-        rememberHull()
-    }
-
-    /**
-     * The reference's four-point stars over the case [draw] has just drawn:
-     * the case drawn again into [layer], a [SPARK_DOWN]th the size, as the
-     * sparks its rods catch of the studio's lamps — the disc, the cover and
-     * the manual black in front of them — and the shader's stars made of
-     * them laid over it at [strength]. Nothing without a shader.
-     */
-    fun stars(scope: DrawScope, layer: GraphicsLayer, strength: Float = 1f) = with(scope) {
-        val glass = shader ?: return@with
-        if (art == null || strength <= 0f || size.width <= 0f || size.height <= 0f) return@with
-        val w = ceil(size.width / SPARK_DOWN).toInt()
-        val h = ceil(size.height / SPARK_DOWN).toInt()
-        layer.renderEffect = glass.stars(strength)
-        layer.record(this, layoutDirection, IntSize(w, h)) {
-            scale(1f / SPARK_DOWN, Offset.Zero) {
-                sparking = true
-                try {
-                    pieces()
-                } finally {
-                    sparking = false
-                }
-            }
-        }
-        scale(SPARK_DOWN, Offset.Zero) { drawLayer(layer) }
-    }
-
-    /** Tray, lid and the cover out of it, back to front. */
-    private fun DrawScope.pieces() {
+        case.copyFrom(frame)
         // Back half first: whichever of tray and lid is further from the
         // camera, by the middle of each.
-        tray.apply(0f, 0f, -2f, v)
+        case.apply(0f, 0f, -2f, v)
         val trayDepth = camera.distance - v[2]
-        lid.apply(0f, 0f, HINGE_Z, v)
+        case.apply(0f, 0f, HINGE_Z, v)
         val lidDepth = camera.distance - v[2]
         if (trayDepth > lidDepth) {
             drawTray()
@@ -229,68 +121,6 @@ internal class CaseScene {
             drawLid()
             drawTray()
         }
-        // Out of the lid, the cover is in front of the case all the way.
-        val manual = book
-        if (manual != null) riffledBook(manual) else if (coverLoose) insert(loose, 0f, facing(loose))
-    }
-
-    /**
-     * The manual, smeared sideways while it riffles, after the sketchbook's
-     * motion blur: none until a quarter of the run's top speed, then
-     * growing to as wide, against the book, as the sketchbook's widest.
-     */
-    private fun DrawScope.riffledBook(b: BookPose) {
-        val layer = riffleLayer
-        val fast = ((b.riffle - RIFFLE_BLUR_FROM) / (RIFFLE_BLUR_FULL - RIFFLE_BLUR_FROM)).clamped(0f, 1f)
-        // Half a spread across, from the spine as last drawn.
-        val half = sqrt(
-            (spineHull[4] - spineHull[0]) * (spineHull[4] - spineHull[0]) +
-                (spineHull[5] - spineHull[1]) * (spineHull[5] - spineHull[1]),
-        )
-        if (layer == null || sparking || fast <= 0f || !(half > 0f)) {
-            drawBook(b)
-            return
-        }
-        layer.renderEffect = BlurEffect(RIFFLE_BLUR * half * fast, 0f, TileMode.Decal)
-        layer.record(this, layoutDirection, IntSize(ceil(size.width).toInt(), ceil(size.height).toInt())) {
-            drawBook(b)
-        }
-        drawLayer(layer)
-    }
-
-    // --- placing -----------------------------------------------------------------
-
-    private fun place() {
-        val s = pose.scale
-        eulerXyz(pose.pitch, pose.yaw, pose.roll, tray.r)
-        tray.s = s
-        tray.t[0] = pose.x
-        tray.t[1] = pose.y
-        tray.t[2] = pose.z
-
-        // The lid turns about the hinge pin, which runs up the case's y.
-        aboutY(-pose.lid, turn)
-        times(tray.r, turn, lid.r)
-        lid.s = s
-        // The pin stays put: offset = s·R·(pin − turn·pin) + tray's offset.
-        val px = HINGE_X - (turn[0] * HINGE_X + turn[2] * HINGE_Z)
-        val pz = HINGE_Z - (turn[6] * HINGE_X + turn[8] * HINGE_Z)
-        for (k in 0 until 3) {
-            lid.t[k] = s * (tray.r[k * 3] * px + tray.r[k * 3 + 2] * pz) + tray.t[k]
-        }
-
-        aboutZ(-pose.spin, turn)
-        times(tray.r, turn, disc.r)
-        disc.s = s
-        tray.t.copyInto(disc.t)
-    }
-
-    private fun placeLoose(cover: CasePose) {
-        eulerXyz(cover.pitch, cover.yaw, cover.roll, loose.r)
-        loose.s = cover.scale
-        loose.t[0] = cover.x
-        loose.t[1] = cover.y
-        loose.t[2] = cover.z
     }
 
     /** Which way a frame's face points: towards the camera, or away. */
@@ -303,32 +133,32 @@ internal class CaseScene {
     // --- tray and lid --------------------------------------------------------------
 
     private fun DrawScope.drawTray() {
-        val front = facing(tray)
-        val hinge = hingeFacing(tray)
-        if (!hinge) knuckles(tray, trayKnuckles)
-        walls(tray, TRAY_BACK, TRAY_FRONT, front = false)
+        val front = facing(case)
+        val hinge = hingeFacing(case)
+        if (!hinge) knuckles(case, trayKnuckles)
+        walls(case, TRAY_BACK, TRAY_FRONT, front = false)
         // The disc sits between the floor and the rails.
         val order = if (front) TRAY_ORDER else TRAY_ORDER.reversed()
         for (k in order) {
-            if (k == DISC) drawDisc(front) else layer(tray, trayLayers[k], trayBitmaps[k])
+            if (k == DISC) drawDisc(front) else layer(case, trayLayers[k], trayBitmaps[k])
         }
-        walls(tray, TRAY_BACK, TRAY_FRONT, front = true)
-        if (hinge) knuckles(tray, trayKnuckles)
+        walls(case, TRAY_BACK, TRAY_FRONT, front = true)
+        if (hinge) knuckles(case, trayKnuckles)
     }
 
     private fun DrawScope.drawLid() {
-        val front = facing(lid)
-        val hinge = hingeFacing(lid)
-        if (!hinge) knuckles(lid, lidKnuckles)
-        walls(lid, LID_BACK, LID_FRONT, front = false)
+        val front = facing(case)
+        val hinge = hingeFacing(case)
+        if (!hinge) knuckles(case, lidKnuckles)
+        walls(case, LID_BACK, LID_FRONT, front = false)
         // The cover is just behind the glass: under it from the front, over
         // it from behind.
-        if (front && !coverLoose) insert(lid, COVER_Z, front)
-        lidBitmap?.let { layer(lid, lidLayer, it) }
-        if (!front && !coverLoose) insert(lid, COVER_Z, front)
-        if (shader == null) glare(lid)
-        walls(lid, LID_BACK, LID_FRONT, front = true)
-        if (hinge) knuckles(lid, lidKnuckles)
+        if (front) insert(front)
+        lidBitmap?.let { layer(case, lidLayer, it) }
+        if (!front) insert(front)
+        if (shader == null) glare(case)
+        walls(case, LID_BACK, LID_FRONT, front = true)
+        if (hinge) knuckles(case, lidKnuckles)
     }
 
     private fun hingeFacing(frame: Pose): Boolean {
@@ -351,7 +181,7 @@ internal class CaseScene {
                 frame.toWorld(toWorld)
                 val brush = glass.glass(
                     bitmap, layer.left, layer.top, mmPerPx, layer.z, eye, toWorld,
-                    layer.thickness, layer.overDisc, if (sparking) SPARK_DOWN else 0f,
+                    layer.thickness, layer.overDisc,
                 )
                 drawRect(brush, size = Size(bitmap.width.toFloat(), bitmap.height.toFloat()))
             } else {
@@ -368,39 +198,23 @@ internal class CaseScene {
     }
 
     /**
-     * The cover on [frame]'s plane at [z] — under the lid's glass, its middle
-     * square across the inside of the rim, or out on its own; from behind,
-     * the back of the paper, or of the booklet.
+     * The cover under the lid's glass, its middle square across the inside of
+     * the rim; from behind, the back of the paper.
      */
-    private fun DrawScope.insert(frame: Pose, z: Float, front: Boolean) {
+    private fun DrawScope.insert(front: Boolean) {
         val image = cover ?: return
-        frame.plane(camera, z, matrix, plane)
+        case.plane(camera, COVER_Z, matrix, plane)
         withTransform({ transform(matrix) }) {
-            if (!front) {
-                // Mirrored, so that from behind it reads the right way round.
-                withTransform({ scale(-1f, 1f, Offset.Zero) }) { back(-COVER_HALF) }
-            } else {
+            if (front) {
                 coverPrint(image, -COVER_HALF)
+            } else {
+                drawRect(PAPER, Offset(-COVER_HALF, -COVER_HALF), Size(2f * COVER_HALF, 2f * COVER_HALF))
             }
-        }
-    }
-
-    /** The booklet's back across the cover, its left edge at [left]; plain paper with none. */
-    private fun DrawScope.back(left: Float) {
-        val image = manual?.back
-        if (image != null && !sparking) {
-            coverPrint(image, left)
-        } else {
-            drawRect(if (sparking) Color.Black else PAPER, Offset(left, -COVER_HALF), Size(2f * COVER_HALF, 2f * COVER_HALF))
         }
     }
 
     /** [image]'s middle square across the cover, its left edge at [left]. */
     private fun DrawScope.coverPrint(image: ImageBitmap, left: Float) {
-        if (sparking) {
-            drawRect(Color.Black, Offset(left, -COVER_HALF), Size(2f * COVER_HALF, 2f * COVER_HALF))
-            return
-        }
         val square = discSquare(image)
         val k = 2f * COVER_HALF / square.width
         withTransform({
@@ -418,119 +232,16 @@ internal class CaseScene {
         }
     }
 
-    // --- the manual ------------------------------------------------------------------
-
-    /**
-     * The manual at [b]: its spine where the open spread is centred, or along
-     * the edge of a shut one, so that whatever shows stands in the middle; a
-     * leaf turning over the spine on top of the two halves it uncovers and
-     * lands on, as the camera sees it, its back mirrored onto it.
-     */
-    private fun DrawScope.drawBook(b: BookPose) {
-        if (b.from < 0 && b.to < 0) {
-            // Shut on its front: the cover, as it came out of the lid.
-            insert(loose, 0f, facing(loose))
-            rememberSpine()
-            return
-        }
-        val at = lerp(b.spineAt(b.from), b.spineAt(b.to), b.turn)
-        spine.copyFrom(loose)
-        loose.turn(1f, 0f, 0f, v)
-        for (k in 0 until 3) spine.t[k] += loose.s * v[k] * at
-        rememberSpine()
-
-        if (b.from == b.to) {
-            side(spine, b.from, 0, mirror = false)
-            side(spine, b.from, 1, mirror = false)
-            return
-        }
-        val next = b.to > b.from
-        side(spine, if (next) b.from else b.to, 0, mirror = false)
-        side(spine, if (next) b.to else b.from, 1, mirror = false)
-        // The leaf turns about the spine, lifting towards the camera.
-        val angle = PI.toFloat() * b.turn
-        aboutY(if (next) -angle else angle, turn)
-        times(spine.r, turn, leaf.r)
-        leaf.s = spine.s
-        spine.t.copyInto(leaf.t)
-        if (facing(leaf)) {
-            side(leaf, b.from, if (next) 1 else 0, mirror = false)
-        } else {
-            side(leaf, b.to, if (next) 0 else 1, mirror = true)
-        }
-    }
-
-    /**
-     * What the manual shows at [at] on [side] of the spine — 0 left, 1 right
-     * — on [frame]'s plane; [mirror]ed for the back of a leaf.
-     */
-    private fun DrawScope.side(frame: Pose, at: Int, side: Int, mirror: Boolean) {
-        val b = book ?: return
-        val left = if (side == 0) -2f * COVER_HALF else 0f
-        frame.plane(camera, 0f, matrix, plane)
-        withTransform({
-            transform(matrix)
-            if (mirror) scale(-1f, 1f, Offset.Zero)
-        }) {
-            when {
-                at < 0 -> if (side == 1) cover?.let { coverPrint(it, left) }
-                at >= b.spreads -> if (side == 0) back(left)
-                else -> manual?.spreads?.getOrNull(at)?.let { page(it, side, left) }
-            }
-        }
-    }
-
-    /** [side] of the spine of [spread], a square either side of its middle, its left edge at [left]. */
-    private fun DrawScope.page(spread: ImageBitmap, side: Int, left: Float) {
-        if (sparking) {
-            drawRect(Color.Black, Offset(left, -COVER_HALF), Size(2f * COVER_HALF, 2f * COVER_HALF))
-            return
-        }
-        val half = minOf(spread.width / 2, spread.height)
-        val k = 2f * COVER_HALF / half
-        withTransform({
-            translate(left, -COVER_HALF)
-            scale(k, k, Offset.Zero)
-        }) {
-            drawImage(
-                image = spread,
-                srcOffset = IntOffset(spread.width / 2 - (1 - side) * half, (spread.height - half) / 2),
-                srcSize = IntSize(half, half),
-                dstOffset = IntOffset.Zero,
-                dstSize = IntSize(half, half),
-                filterQuality = FilterQuality.Medium,
-            )
-        }
-    }
-
-    /** Where the spine's ends and the page right of it are on screen, for [bookSide]. */
-    private fun rememberSpine() {
-        val b = book ?: return
-        val at = if (b.from < 0 && b.to < 0) -COVER_HALF else lerp(b.spineAt(b.from), b.spineAt(b.to), b.turn)
-        var ok = true
-        loose.apply(at, -COVER_HALF, 0f, v)
-        ok = ok && camera.project(v[0], v[1], v[2], spineHull, 0)
-        loose.apply(at, COVER_HALF, 0f, v)
-        ok = ok && camera.project(v[0], v[1], v[2], spineHull, 2)
-        loose.apply(at + COVER_HALF, 0f, 0f, v)
-        ok = ok && camera.project(v[0], v[1], v[2], spineHull, 4)
-        if (!ok) spineHull.fill(Float.NaN)
-    }
-
     // --- disc ----------------------------------------------------------------------
 
     private fun DrawScope.drawDisc(front: Boolean) {
-        disc.plane(camera, DISC_Z, matrix, plane)
-        if (sparking) {
-            withTransform({ transform(matrix) }) { drawCircle(Color.Black, radius = DISC_R, center = Offset.Zero) }
-            return
-        }
+        case.plane(camera, DISC_Z, matrix, plane)
         val glass = shader
         val square = square
         if (glass != null && square != null) {
-            disc.eye(camera.distance, eye)
+            case.eye(camera.distance, eye)
             eye[2] -= DISC_Z
-            disc.toWorld(toWorld)
+            case.toWorld(toWorld)
             withTransform({ transform(matrix) }) {
                 drawCircle(glass.disc(square, eye, toWorld), radius = DISC_R, center = Offset.Zero)
             }
@@ -569,8 +280,8 @@ internal class CaseScene {
      * light while the disc turns under it.
      */
     private fun DrawScope.rainbow(front: Boolean) {
-        disc.eye(camera.distance, eye)
-        disc.toWorld(toWorld)
+        case.eye(camera.distance, eye)
+        case.toWorld(toWorld)
         val ex = eye[0]
         val ey = eye[1]
         val ez = eye[2] - DISC_Z
@@ -678,7 +389,7 @@ internal class CaseScene {
         return Offset(rx * k, ry * k)
     }
 
-    // --- walls, knuckles and shadows ---------------------------------------------------
+    // --- walls and knuckles -------------------------------------------------------------
 
     /**
      * The case's edge, a quad between each pair of points round its outline,
@@ -687,8 +398,6 @@ internal class CaseScene {
      * and drawn fainter, first.
      */
     private fun DrawScope.walls(frame: Pose, z0: Float, z1: Float, front: Boolean) {
-        // Drawn in plain colours, and no spark is taken off them.
-        if (sparking) return
         val o = wallOutline
         val count = o.size / 4
         for (i in 0 until count) {
@@ -736,7 +445,6 @@ internal class CaseScene {
      * band, dark at its two edges, pale down the middle, lit along one side.
      */
     private fun DrawScope.knuckles(frame: Pose, knuckles: List<Knuckle>) {
-        if (sparking) return
         for (k in knuckles) {
             frame.apply(HINGE_X, k.from, HINGE_Z, world, 0)
             frame.apply(HINGE_X, k.to, HINGE_Z, world, 3)
@@ -769,78 +477,6 @@ internal class CaseScene {
             )
         }
     }
-
-    private fun DrawScope.shadow(frame: Pose, z: Float, map: ImageBitmap, strength: Float, widen: Float = 1f) {
-        frame.shadowPlane(camera, z, BACKDROP_Z, matrix, plane)
-        withTransform({
-            transform(matrix)
-            scale(widen, 1f, Offset.Zero)
-            translate(SHADOW_LEFT, SHADOW_LEFT)
-            scale(SHADOW_MM_PER_PX, SHADOW_MM_PER_PX, Offset.Zero)
-        }) {
-            drawImage(
-                image = map,
-                srcOffset = IntOffset.Zero,
-                srcSize = IntSize(map.width, map.height),
-                dstOffset = IntOffset.Zero,
-                dstSize = IntSize(map.width, map.height),
-                alpha = strength.coerceAtMost(1f),
-                filterQuality = FilterQuality.Low,
-            )
-        }
-    }
-
-    // --- hits --------------------------------------------------------------------------
-
-    /** The tray's, the lid's and a loose cover's outlines on screen as they were last drawn, four corners each. */
-    private fun rememberHull() {
-        var at = 0
-        for (frame in arrayOf(tray, lid, loose)) {
-            val half = if (frame === loose) COVER_HALF else HALF_MM
-            val across = if (frame === loose) half * footprint else half
-            for ((cx, cy) in CORNERS) {
-                val seen = frame !== loose || coverLoose
-                frame.apply(cx * across, cy * half, 0f, v)
-                if (!seen || !camera.project(v[0], v[1], v[2], hull, at)) {
-                    hull[at] = Float.NaN
-                    hull[at + 1] = Float.NaN
-                }
-                at += 2
-            }
-        }
-    }
-
-    fun hit(x: Float, y: Float): Boolean = inside(x, y, 0) || inside(x, y, 8) || inside(x, y, 16)
-
-    /**
-     * Which side of the manual's spine [x], [y] falls on as it was last
-     * drawn, -1 left or 1 right; 0 off it, or with no manual out.
-     */
-    fun bookSide(x: Float, y: Float): Int {
-        if (book == null || spineHull[0].isNaN() || !inside(x, y, 16)) return 0
-        val ax = spineHull[0]
-        val ay = spineHull[1]
-        val dx = spineHull[2] - ax
-        val dy = spineHull[3] - ay
-        val at = dx * (y - ay) - dy * (x - ax)
-        val right = dx * (spineHull[5] - ay) - dy * (spineHull[4] - ax)
-        return if (at * right > 0f) 1 else -1
-    }
-
-    private fun inside(x: Float, y: Float, at: Int): Boolean {
-        var sign = 0f
-        for (k in 0 until 4) {
-            val ax = hull[at + k * 2]
-            val ay = hull[at + k * 2 + 1]
-            val bx = hull[at + (k + 1) % 4 * 2]
-            val by = hull[at + (k + 1) % 4 * 2 + 1]
-            if (ax.isNaN() || bx.isNaN()) return false
-            val cross = (bx - ax) * (y - ay) - (by - ay) * (x - ax)
-            if (cross == 0f) continue
-            if (sign == 0f) sign = cross else if (sign * cross < 0f) return false
-        }
-        return true
-    }
 }
 
 private val sharedShader: CaseShader? by lazy { caseShader() }
@@ -849,8 +485,6 @@ private val sharedShader: CaseShader? by lazy { caseShader() }
 private const val DISC = -1
 private val TRAY_ORDER = listOf(0, DISC, 1, 2, 3)
 
-private val CORNERS = listOf(-1f to -1f, 1f to -1f, 1f to 1f, -1f to 1f)
-
 // Kept off black: a darker rim drew a hard outline round the whole case.
 private val WALL_DARK = Color(0xFF959CA4)
 private val WALL_MID = Color(0xFFC2C7CD)
@@ -858,29 +492,6 @@ private val WALL_PALE = Color(0xFFF3F5F7)
 
 /** The back of the cover, seen through the lid from behind. */
 private val PAPER = Color(0xFFF2EFE9)
-
-/*
- * The sketchbook's riffle blurs from a quarter of its top speed, and three
- * times as much from 0.6 on, the widest a gaussian 14px across a spread
- * 860px wide: a blur radius of 0.054 of half a spread.
- */
-private const val RIFFLE_BLUR_FROM = 0.25f
-private const val RIFFLE_BLUR_FULL = 0.6f
-private const val RIFFLE_BLUR = 0.054f
-
-/** How wide the manual stands at [at], in covers: open, a spread is two. */
-private fun BookPose.across(at: Int): Float = if (at in 0 until spreads) 2f else 1f
-
-/**
- * Where the spine stands at [at], in millimetres across the loose cover:
- * shut on its front, down the cover's left edge; open, in the middle; shut
- * on its back, down its right edge.
- */
-private fun BookPose.spineAt(at: Int): Float = when {
-    at < 0 -> -COVER_HALF
-    at >= spreads -> COVER_HALF
-    else -> 0f
-}
 
 /** A studio light the disc's tracks split: its direction, strength and how tight its streak is. */
 private class StudioLight(x: Float, y: Float, z: Float, val weight: Float, val spread: Float) {

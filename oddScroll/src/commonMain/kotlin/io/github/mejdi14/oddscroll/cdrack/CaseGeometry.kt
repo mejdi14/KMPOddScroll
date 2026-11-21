@@ -68,9 +68,6 @@ internal const val LID_FRONT = 5f
 internal const val COVER_Z = LID_BACK - 0.2f
 internal const val COVER_HALF = HALF_MM - 4f
 
-/** Where the backdrop stands behind the case, which its shadow lands on. */
-internal const val BACKDROP_Z = -70f
-
 /**
  * One rod: a path, the width of its profile across, and the radius its
  * profile's corners are rounded to — the reference's rods are rounded
@@ -555,68 +552,6 @@ internal fun squareArt(art: ImageBitmap, max: Int): ImageBitmap {
     }
     return bitmap
 }
-
-/** Shadow maps are this coarse on purpose: drawn up smooth, they come out soft. */
-private const val SHADOW_PX = 40
-
-/**
- * What the tray and the lid keep off the backdrop, after the reference's
- * backdrop: the tray a little all over and more under its rails, the disc a
- * quarter of the light, the lid a little and a little more at its rim.
- */
-internal fun bakeShadow(lid: Boolean): ImageBitmap {
-    val bitmap = ImageBitmap(SHADOW_PX, SHADOW_PX)
-    val ppm = SHADOW_PX / (CASE_MM + 12f)
-    CanvasDrawScope().draw(
-        Density(1f),
-        LayoutDirection.Ltr,
-        BitmapCanvas(bitmap),
-        Size(SHADOW_PX.toFloat(), SHADOW_PX.toFloat()),
-    ) {
-        withTransform({
-            scale(ppm, ppm, Offset.Zero)
-            translate(HALF_MM + 6f, HALF_MM + 6f)
-        }) {
-            val outline = roundedSquare(HALF_MM, CORNER_MM)
-            if (lid) {
-                drawPath(outline, Color.Black.copy(alpha = 0.03f))
-                drawPath(roundedSquare(HALF_MM - 1.25f, CORNER_MM - 1.25f), Color.Black.copy(alpha = 0.05f), style = Stroke(2.5f))
-            } else {
-                drawPath(outline, Color.Black.copy(alpha = 0.02f))
-                drawPath(roundedSquare(HALF_MM - 5.75f, CORNER_MM - 5.75f), Color.Black.copy(alpha = 0.08f), style = Stroke(5.5f))
-                drawPath(ring(DISC_R, DISC_HOLE), Color.Black.copy(alpha = 0.24f))
-            }
-        }
-    }
-    return bitmap
-}
-
-/**
- * What the cover keeps off the backdrop once it is out on its own: paper,
- * so more than the clear lid, all over.
- */
-internal fun bakeCoverShadow(): ImageBitmap {
-    val bitmap = ImageBitmap(SHADOW_PX, SHADOW_PX)
-    val ppm = SHADOW_PX / (CASE_MM + 12f)
-    CanvasDrawScope().draw(
-        Density(1f),
-        LayoutDirection.Ltr,
-        BitmapCanvas(bitmap),
-        Size(SHADOW_PX.toFloat(), SHADOW_PX.toFloat()),
-    ) {
-        withTransform({
-            scale(ppm, ppm, Offset.Zero)
-            translate(HALF_MM + 6f, HALF_MM + 6f)
-        }) {
-            drawPath(roundedSquare(COVER_HALF, 1.5f), Color.Black.copy(alpha = 0.12f))
-        }
-    }
-    return bitmap
-}
-
-/** Where a shadow map's pixel (0, 0) sits on the case, and how many millimetres a pixel is. */
-internal const val SHADOW_LEFT = -HALF_MM - 6f
-internal val SHADOW_MM_PER_PX = (CASE_MM + 12f) / SHADOW_PX
 
 // --- paths -----------------------------------------------------------------------
 

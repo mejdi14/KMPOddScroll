@@ -1,23 +1,19 @@
 package io.github.mejdi14.oddscroll.cdrack
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,32 +27,24 @@ import androidx.compose.ui.graphics.GraphicsContext
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.translate
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
-import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalGraphicsContext
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.mejdi14.oddscroll.internal.clamped
-import io.github.mejdi14.oddscroll.internal.inOutCubic
-import io.github.mejdi14.oddscroll.internal.lerp
 import io.github.mejdi14.oddscroll.internal.smoothstep
 import kotlin.math.abs
 import kotlin.math.ceil
-import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.hypot
-import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -67,28 +55,12 @@ import kotlinx.coroutines.withContext
 data class CdRackItem(
     /** Printed on the disc inside the case, cropped square to fit it. */
     val image: ImageBitmap,
+    /** First line of the caption while the case is in the slot; empty for none. */
     val title: String = "",
     /** Second line of the caption, under the title. */
     val artist: String = "",
     /** Slipped in under the lid's glass, cropped square to fill it; none leaves the lid clear. */
     val cover: ImageBitmap? = null,
-    /**
-     * The rest of the booklet [cover] is the front of. Read in off the main
-     * thread while the case is out, and let go when it goes back; none leaves
-     * the cover a single sheet.
-     */
-    val manual: (suspend () -> CdManual)? = null,
-)
-
-/** A case's booklet behind its cover: its spreads in reading order, and its back. */
-class CdManual(
-    /**
-     * Each a picture of the booklet lying open, its spine down the middle, on
-     * a clear ground: each half is cropped square and turns as a page.
-     */
-    val spreads: List<ImageBitmap>,
-    /** The back of the booklet, cropped square; none leaves it plain paper. */
-    val back: ImageBitmap? = null,
 )
 
 /*
@@ -124,7 +96,7 @@ private val AXIS = floatArrayOf(0.5085733f, 0.2623819f, -0.8200664f)
 /**
  * How far out the rack's camera dollies. The lens lengthens to match, so the
  * case at the slot keeps its size and the row flattens to the reference's
- * orthographic look; taking a case out, the camera comes back in.
+ * orthographic look.
  */
 private const val RACK_ZOOM = 24f
 
@@ -141,64 +113,45 @@ private const val PREPARE_SHARE = 1f
 private const val LIFT_FLAT = 0.077f
 private const val LIFT_GONE = 1.002f
 
-/**
- * Cases leave the rack nearest first, this many seconds apart a place, up to
- * this many places out; past it they are off the frame anyway. The last of
- * them has to be gone by [FOCUS_SECONDS], where the clock stops.
- */
-private const val EXIT_STAGGER = 0.03f
-private const val EXIT_STAGGER_PLACES = 8
 
+/** A finger that moves further than this, in pixels, is dragging rather than tapping. */
 private const val TAP_SLOP = 8f
-
-/** A drag across an open manual this long, in dp, turns a leaf. */
-private const val LEAF_SWIPE = 24f
-
-@Composable
-fun rememberCdRackScrollState(intro: Int = 4): CdRackScrollState =
-    remember { CdRackScrollState(intro) }
 
 /**
  * A row of clear CD jewel cases standing on edge, seen from above and to the
  * left, that slides along its own length — the case that comes to the slot in
- * the middle of the frame rises out of the row. Tap a case and it comes to the
- * slot, the rest of the row clears off the screen, and it turns to face you:
- * drag it round, tap it to open it. Open, [inspectLabel] takes its cover out:
- * the cover turns over and comes to rest under the case — beside it, wider
- * than tall — which shuts once the cover has cleared it and moves over to
- * make room. With a [CdRackItem.manual] behind it, the cover is a
- * booklet: tap it and it folds open over its spine, coming up into the middle
- * as the case goes up out of the way; swipe it, tap a page or scroll to turn
- * its leaves, or drag along the ruler down its right to run through them.
- * [CdRackScrollState.leave] — the system's back, say — shuts the
- * manual, puts the cover back, then the case, and brings the row in again.
- *
- * Each case is the same 3D case as [CdCase], drawn once at the rack's turn and
- * then only moved, since the rack's camera is far enough off that every case
- * is the same shape on screen; the one taken out is drawn live from then on.
+ * the middle of the frame rises out of the row.
  *
  * Drag along the row, or across it, and the cases follow the finger; flick to
- * throw it, or scroll to step it a case.
+ * throw it, or scroll to step it a case. Tap a case and it slides to the slot,
+ * unless [onItemClick] takes the tap instead.
+ *
+ * Each case is drawn once in 3D at the rack's turn — the disc's print, the
+ * cover under the lid's glass, the clear plastic lit a pixel at a time where
+ * the platform has the shaders for it — and from then on only moved, since
+ * the rack's camera is far enough off that every case is the same shape on
+ * screen. That drawing runs when the rack first has a size, and again when
+ * its size changes; [CdRackScrollState.loaded] says how far it has got, for a
+ * host that wants to show a loader over the rack until it is done.
  *
  * @param items cases, in order; the rack repeats, so it has no end.
- * @param background the backdrop; the clear plastic is shaded for a pale one.
+ * @param modifier the rack fills whatever size this gives it.
+ * @param background the backdrop; the clear plastic is shaded to sit on a pale one.
  * @param contentColor caption text.
- * @param captions say what the case in the slot is, top left.
- * Back on the left and a forward button on the right walk it through its
- * steps — shut, open, its cover out, then each spread of the manual.
- *
- * @param inspectLabel the forward button's label on the open case, which takes
- *   its cover out; null for no buttons at all — a host can walk the steps
- *   itself off [CdRackScrollState.step], [CdRackScrollState.stepForward] and
- *   [CdRackScrollState.stepBack].
- * @param backLabel the back button's label.
- * @param exitLabel the one button's label while the manual is open to be
- *   read with its [pageScrubber], which shuts it.
- * @param openLabel the forward button's label on the shut case.
- * @param nextLabel the forward button's label from the cover on.
- * @param pageScrubber a ruler down the right of the open manual, a tick to a
- *   page, whose playhead the finger drags from spread to spread.
- * @param state also sets how far the rack slides when it first appears.
+ * @param caseSize how wide a case's face stands on screen, as a share of the
+ *   frame's width — at 0.4 about two and a half fit across — and at most 0.9
+ *   of that share of the frame's height, so a wide frame does not blow them
+ *   up. The spacing along the row goes with it, so smaller cases show more of
+ *   the row.
+ * @param captions say what the case in the slot is, top left, from its
+ *   [CdRackItem.title] and [CdRackItem.artist].
+ * @param userScrollEnabled false ignores drags, flicks and the wheel, and a
+ *   tap no longer slides a case to the slot; [state] can still move the rack,
+ *   and [onItemClick] is still called.
+ * @param onItemClick called with the tapped case's index in [items] in place
+ *   of sliding it to the slot — the host can call
+ *   [CdRackScrollState.animateScrollTo] itself. Null keeps the slide.
+ * @param state where the rack is; see [rememberCdRackScrollState].
  */
 @Composable
 fun CdRackScroll(
@@ -206,33 +159,30 @@ fun CdRackScroll(
     modifier: Modifier = Modifier,
     background: Color = Color.White,
     contentColor: Color = Color(0xFF111114),
+    caseSize: Float = 0.4f,
     captions: Boolean = true,
-    inspectLabel: String? = "Inspect",
-    backLabel: String = "Back",
-    openLabel: String = "Open",
-    nextLabel: String = "Next",
-    exitLabel: String = "Exit",
-    pageScrubber: Boolean = true,
+    userScrollEnabled: Boolean = true,
+    onItemClick: ((index: Int) -> Unit)? = null,
     state: CdRackScrollState = rememberCdRackScrollState(),
 ) {
+    require(caseSize > 0f) { "caseSize must be above 0, was $caseSize" }
+    SideEffect { state.count = items.size }
     if (items.isEmpty()) {
-        Box(modifier)
+        Box(modifier.background(background))
         return
     }
 
     // Kept for as long as the pictures are the same: a host that builds its
-    // list afresh each composition, with new loader lambdas and all, would
-    // otherwise throw the baked rack away every time it recomposes — as it
-    // does the moment a case comes out.
+    // list afresh each composition would otherwise throw the drawn rack away
+    // every time it recomposes.
     val rack = remember(items.map { it.image }, items.map { it.cover }) { RackScene(items) }
     rack.items = items
-    val stars = rememberGraphicsLayer()
-    val riffle = rememberGraphicsLayer()
     var frameSize by remember { mutableStateOf(IntSize.Zero) }
     val graphics = LocalGraphicsContext.current
     val layerDensity = LocalDensity.current
     val direction = LocalLayoutDirection.current
-    val measurer = rememberTextMeasurer()
+    val scrollEnabled by rememberUpdatedState(userScrollEnabled)
+    val onClick by rememberUpdatedState(onItemClick)
 
     LaunchedEffect(state, rack) {
         var previous = 0L
@@ -241,21 +191,16 @@ fun CdRackScroll(
                 val deltaMs = if (previous == 0L) 16.67f else (now - previous) / 1_000_000f
                 previous = now
                 state.advance(deltaMs.clamped(1f, 50f))
-                rack.scrubber.advance(deltaMs.clamped(1f, 50f), state.case.manualPage)
             }
         }
     }
 
-    // Each case drawn once at the rack's turn, through the same renderer that
-    // draws the one taken out — on Android, its shaders and all.
-    LaunchedEffect(rack, frameSize) {
+    // Each case drawn once at the rack's turn — on Android and through Skia,
+    // its shaders and all.
+    LaunchedEffect(rack, frameSize, caseSize) {
         if (frameSize.width <= 0 || frameSize.height <= 0) return@LaunchedEffect
-        // The renderer is shared with the case taken out, so this waits for
-        // it to be back in the rack, and takes taps away until it is done.
-        while (state.chosen != NONE) withFrameNanos { }
-        rack.ready = false
         state.loaded = 0f
-        rack.fit(frameSize.width.toFloat(), frameSize.height.toFloat())
+        rack.fit(frameSize.width.toFloat(), frameSize.height.toFloat(), caseSize)
         withContext(Dispatchers.Default) { rack.scene.prepare(rack.rackCamera) }
         val box = rack.spriteBox()
         rack.sprites.fill(null)
@@ -263,15 +208,15 @@ fun CdRackScroll(
         rack.box = box
         // The print need be no sharper than the disc stands in the rack.
         val artPx = (box.width * 1.5f).roundToInt().coerceIn(256, RACK_ART_PX)
-        for (index in items.indices) {
-            state.loaded = (index + PREPARE_SHARE) / (items.size + PREPARE_SHARE)
-            withContext(Dispatchers.Default) { rack.scene.setArt(items[index].image, artPx) }
-            rack.scene.setCover(items[index].cover)
-            rack.scene.setManual(null)
+        val cases = rack.items
+        for (index in cases.indices) {
+            state.loaded = (index + PREPARE_SHARE) / (cases.size + PREPARE_SHARE)
+            withContext(Dispatchers.Default) { rack.scene.setArt(cases[index].image, artPx) }
+            rack.scene.setCover(cases[index].cover)
             val layer = graphics.createGraphicsLayer()
             layer.record(layerDensity, direction, IntSize(box.width, box.height)) {
                 translate(-box.left.toFloat(), -box.top.toFloat()) {
-                    rack.scene.draw(this, rack.rackCamera, rack.rackPose, shadow = 0f)
+                    rack.scene.draw(this, rack.rackCamera, rack.rackFrame)
                 }
             }
             if (rackKeepsLayers) {
@@ -284,27 +229,9 @@ fun CdRackScroll(
                 }
             }
         }
-        rack.ready = true
         state.loaded = 1f
     }
     DisposableEffect(rack) { onDispose { rack.releaseLayers(graphics) } }
-
-    // The disc of the case tapped, baked off the main thread while it slides
-    // to the slot; it is taken out once this is done.
-    LaunchedEffect(rack, state.wanted) {
-        val wanted = state.wanted
-        if (wanted == NONE) return@LaunchedEffect
-        withContext(Dispatchers.Default) { rack.scene.setArt(items[wrapCase(wanted, items.size)].image) }
-        state.primed = wanted
-    }
-
-    // The manual of the case out, read in while it is out.
-    LaunchedEffect(rack, state.inspecting) {
-        rack.manual = null
-        if (!state.inspecting) return@LaunchedEffect
-        val load = items[wrapCase(state.chosen, items.size)].manual ?: return@LaunchedEffect
-        rack.manual = withContext(Dispatchers.Default) { load() }
-    }
 
     Box(modifier.background(background)) {
         Canvas(
@@ -316,95 +243,56 @@ fun CdRackScroll(
                         var last = down.position
                         var travel = 0f
                         var started = false
-                        // Out of the rack, the finger turns the case instead,
-                        // and on its manual, the manual's leaves.
-                        val out = state.inspecting && state.focus >= FOCUS_SECONDS
-                        // Down on the ruler beside the manual, the playhead
-                        // comes to the finger and follows it.
-                        val scrubbing = pageScrubber && out && state.case.canRead &&
-                            rack.scrubber.hit(down.position.x, down.position.y)
-                        if (scrubbing) {
-                            state.case.riffleTo(rack.scrubber.press(down.position.y))
-                            down.consume()
-                        }
-                        val leafing = !scrubbing && out && state.case.canRead &&
-                            rack.scene.bookSide(down.position.x, down.position.y) != 0
-                        var swept = 0f
-                        var lastMillis = down.uptimeMillis
+                        // Whether this gesture drags the rack, fixed as it starts.
+                        val scrolls = scrollEnabled
                         while (true) {
                             val event = awaitPointerEvent()
                             if (event.type == PointerEventType.Release) break
                             val change = event.changes.firstOrNull { it.id == down.id } ?: break
                             if (!change.pressed) break
-                            if (scrubbing) {
-                                state.case.riffleTo(rack.scrubber.drag(change.position.y))
-                                change.consume()
-                                continue
-                            }
-                            lastMillis = change.uptimeMillis
                             val dx = change.position.x - last.x
                             val dy = change.position.y - last.y
                             last = change.position
                             travel += abs(dx) + abs(dy)
-                            if (travel > TAP_SLOP) {
-                                if (!started) {
-                                    if (out && !leafing) state.case.onGrab()
-                                    if (!out) state.onDragStart(change.uptimeMillis / 1000f)
-                                    started = true
-                                }
-                                if (leafing) {
-                                    swept += dx
-                                } else if (out) {
-                                    state.case.onGrabMove(dx / density, dy / density, change.uptimeMillis)
-                                } else {
-                                    // Only the part of the drag that runs along
-                                    // the row counts, and up the row is back
-                                    // through the rack: the cases follow the finger.
-                                    val along = dx * ROW_X + dy * ROW_Y
-                                    state.onDrag(-along / max(rack.pitchPx, 1f), change.uptimeMillis / 1000f)
-                                }
-                                change.consume()
+                            if (travel <= TAP_SLOP) continue
+                            if (!started) {
+                                started = true
+                                if (scrolls) state.onDragStart(change.uptimeMillis / 1000f)
                             }
+                            if (!scrolls) continue
+                            // Only the part of the drag that runs along the
+                            // row counts, and up the row is back through the
+                            // rack: the cases follow the finger.
+                            val along = dx * ROW_X + dy * ROW_Y
+                            state.onDrag(-along / max(rack.pitchPx, 1f), change.uptimeMillis / 1000f)
+                            change.consume()
                         }
-                        if (scrubbing) {
-                            rack.scrubber.release()
-                        } else if (started) {
-                            if (leafing) {
-                                // Left turns on, as a page is turned.
-                                if (abs(swept) >= LEAF_SWIPE * density) state.case.turnPage(if (swept < 0f) 1 else -1)
-                            } else if (out) {
-                                state.case.onLetGo(lastMillis)
-                            } else {
-                                state.onDragEnd()
-                            }
-                        } else if (out) {
-                            val side = if (state.case.canRead) rack.scene.bookSide(down.position.x, down.position.y) else 0
-                            if (side != 0) {
-                                state.case.tapManual(side)
-                            } else if (rack.scene.hit(down.position.x, down.position.y)) {
-                                state.case.toggle()
-                            }
-                        } else if (state.racked && rack.ready) {
-                            val hit = rack.hit(down.position.x, down.position.y, state.position, items.size)
-                            if (hit != null) state.inspect(hit)
+                        if (started) {
+                            if (scrolls) state.onDragEnd()
+                            return@awaitEachGesture
+                        }
+                        val hit = rack.hit(down.position.x, down.position.y, state.position) ?: return@awaitEachGesture
+                        val click = onClick
+                        when {
+                            click != null -> click(wrapCase(hit, rack.items.size))
+                            scrollEnabled -> state.travelTo(hit)
                         }
                     }
                 }
                 .pointerInput(state) {
-                    // A notch is a case, or a leaf of a manual out. A trackpad
-                    // sends fractions of one, so they are added up until they
-                    // come to a whole one.
+                    // A notch is a case. A trackpad sends fractions of one,
+                    // so they are added up until they come to a whole one.
                     var notches = 0f
                     awaitPointerEventScope {
                         while (true) {
                             val event = awaitPointerEvent()
-                            if (event.type != PointerEventType.Scroll) continue
+                            if (event.type != PointerEventType.Scroll || !scrollEnabled) continue
                             val scroll = event.changes.firstOrNull()?.scrollDelta?.y ?: continue
                             if (scroll == 0f) continue
                             notches += scroll
                             while (abs(notches) >= 1f) {
                                 val by = if (notches > 0f) 1 else -1
-                                if (state.inspecting) state.case.turnPage(by) else state.step(by)
+                                state.step(by)
                                 notches -= by
                             }
                             event.changes.forEach { it.consume() }
@@ -416,124 +304,25 @@ fun CdRackScroll(
             val w = size.width.toInt()
             val h = size.height.toInt()
             if (frameSize.width != w || frameSize.height != h) frameSize = IntSize(w, h)
-            // Room either side of the open manual: its ruler down the right,
-            // Exit on the left.
-            val room = if (pageScrubber || inspectLabel != null) SCRUBBER_ROOM_DP else 0f
-            rack.fit(size.width, size.height, room.dp.toPx())
-            rack.draw(this, state, stars, riffle)
-            if (pageScrubber) rack.drawScrubber(this, state, measurer, contentColor, background)
+            rack.fit(size.width, size.height, caseSize)
+            rack.draw(this, state.position)
         }
 
         if (captions) Caption(items, state, contentColor)
-        if (inspectLabel != null) {
-            StepButtons(
-                back = backLabel,
-                // Open to be read, the ruler turns the pages: the one way on is out.
-                exit = if (pageScrubber) exitLabel else null,
-                state = state,
-                forward = { step ->
-                    when (step) {
-                        0 -> openLabel
-                        1 -> inspectLabel
-                        else -> nextLabel
-                    }
-                },
-                background = background,
-                contentColor = contentColor,
-            )
-        }
     }
-}
-
-/** The way back on the left edge, the way on on the right, each sliding in from its own side. */
-@Composable
-private fun BoxScope.StepButtons(
-    back: String,
-    exit: String?,
-    forward: (Int) -> String,
-    state: CdRackScrollState,
-    background: Color,
-    contentColor: Color,
-) {
-    val shown = state.inspecting
-    // The case takes its time coming out; the buttons arrive once it has.
-    val reveal by animateFloatAsState(
-        if (shown) 1f else 0f,
-        tween(if (shown) 450 else 200, delayMillis = if (shown) (FOCUS_SECONDS * 1000f).toInt() else 0),
-    )
-    val step = state.step
-    val more = step < state.lastStep
-    fun Modifier.slideIn(from: Float) = graphicsLayer {
-        alpha = reveal
-        translationX = from * (1f - reveal) * 10.dp.toPx()
-    }
-    val start = Modifier.align(Alignment.CenterStart).padding(start = 16.dp).slideIn(-1f)
-    val end = Modifier.align(Alignment.CenterEnd).padding(end = 16.dp).slideIn(1f)
-    if (exit != null && state.case.reading) {
-        StepButton(exit, true, shown, background, contentColor, start) { state.case.closeManual() }
-    } else {
-        StepButton(back, true, shown, background, contentColor, start) { state.stepBack() }
-        StepButton(forward(step), more, shown, background, contentColor, end) { state.stepForward() }
-    }
-}
-
-@Composable
-private fun StepButton(
-    label: String,
-    enabled: Boolean,
-    shown: Boolean,
-    background: Color,
-    contentColor: Color,
-    modifier: Modifier,
-    onTap: () -> Unit,
-) {
-    val shape = RoundedCornerShape(50)
-    val alpha by animateFloatAsState(if (enabled) 1f else 0.3f, tween(200))
-    val tap by rememberUpdatedState(onTap)
-    BasicText(
-        text = label.uppercase(),
-        style = TextStyle(
-            color = contentColor,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-            letterSpacing = 1.4.sp,
-        ),
-        modifier = modifier
-            .graphicsLayer { this.alpha = alpha }
-            // Only while it shows, or it would take taps meant for the case.
-            .then(if (shown && enabled) Modifier.pointerInput(Unit) { detectTapGestures { tap() } } else Modifier)
-            .background(background.copy(alpha = 0.9f), shape)
-            .border(1.dp, contentColor.copy(alpha = 0.35f), shape)
-            .padding(horizontal = 24.dp, vertical = 11.dp),
-    )
 }
 
 // --- the rack ------------------------------------------------------------------
 
 private class SpriteBox(val left: Int, val top: Int, val width: Int, val height: Int)
 
-/**
- * The rack and the case taken out of it: a camera dollied far out for the row,
- * one for the case that comes back in, each case's drawing at the rack's turn.
- */
+/** The rack: a camera dollied far out for the row, and each case drawn at the rack's turn. */
 private class RackScene(var items: List<CdRackItem>) {
     val scene = CaseScene()
     val rackCamera = Camera().also { it.zoom = RACK_ZOOM }
-    private val liveCamera = Camera()
 
-    /** Where every case in the rack stands, but for its place along the row. */
-    val rackPose = CasePose()
-    private val outPose = CasePose()
-    private val livePose = CasePose()
-    private val coverPose = CasePose()
-    private val bookPose = BookPose()
-
-    /** The manual of the case out, once read in. */
-    var manual: CdManual? = null
-
-    /** The ruler down the right of the manual, open. */
-    val scrubber = PageScrubber()
-    private val readBox = FloatArray(3)
+    /** How every case in the rack is turned and sized, standing at the origin. */
+    val rackFrame = Pose()
 
     val sprites = arrayOfNulls<ImageBitmap>(items.size)
 
@@ -546,11 +335,10 @@ private class RackScene(var items: List<CdRackItem>) {
             layers[i] = null
         }
     }
-    var box: SpriteBox? = null
-    @kotlin.concurrent.Volatile
-    var ready = false
 
-    /** How large the rack draws a case, against the case taken out. */
+    var box: SpriteBox? = null
+
+    /** How large the rack draws a case. */
     private var rackScale = 1f
 
     /** One place along the row, on screen. */
@@ -559,6 +347,7 @@ private class RackScene(var items: List<CdRackItem>) {
 
     private var width = -1f
     private var height = -1f
+    private var caseSize = -1f
 
     /** Places from the slot between which a case can be seen, either way. */
     private var reach = 1f
@@ -569,38 +358,30 @@ private class RackScene(var items: List<CdRackItem>) {
     private val origin = FloatArray(2)
     private val at = FloatArray(2)
 
-    /** Each side's way off the frame, below the case out and above it: one axis, ±1. */
-    private val exitX = FloatArray(2)
-    private val exitY = FloatArray(2)
-
-    fun fit(w: Float, h: Float, readInset: Float = liveCamera.readInset) {
-        liveCamera.readInset = readInset
-        liveCamera.fit(w, h)
-        if (w == width && h == height) return
+    fun fit(w: Float, h: Float, caseSize: Float) {
+        if (w == width && h == height && caseSize == this.caseSize) return
         width = w
         height = h
+        this.caseSize = caseSize
         rackCamera.fit(w, h)
-        // The face as wide on screen as the reference's tapes.
-        val facePx = min(w * 0.4f, h * 0.36f)
+        // By default, the face as wide on screen as the reference's tapes.
+        val facePx = min(w * caseSize, h * caseSize * 0.9f)
         rackScale = facePx / (CASE_MM * FACE_ACROSS * rackCamera.scaleAt(0f))
         pitchPx = PITCH * facePx
-        rackPose.pitch = RACK_PITCH
-        rackPose.yaw = RACK_YAW
-        rackPose.roll = 0f
-        rackPose.scale = rackScale
+        eulerXyz(RACK_PITCH, RACK_YAW, 0f, rackFrame.r)
+        rackFrame.s = rackScale
         reach = hypot(w, h) / pitchPx + 2f
         rackCamera.project(0f, 0f, 0f, origin)
     }
 
     /** The screen box a case at the slot takes up, lifted, walls and hinge and all. */
     fun spriteBox(): SpriteBox {
-        place(frame, rackPose)
         var x0 = Float.MAX_VALUE
         var y0 = Float.MAX_VALUE
         var x1 = -Float.MAX_VALUE
         var y1 = -Float.MAX_VALUE
         for (sx in floatArrayOf(-1f, 1f)) for (sy in floatArrayOf(-1f, 1f)) for (sz in floatArrayOf(-1f, 1f)) {
-            frame.apply(sx * (HALF_MM + 2f), sy * (HALF_MM + 2f), sz * 7f, point)
+            rackFrame.apply(sx * (HALF_MM + 2f), sy * (HALF_MM + 2f), sz * 7f, point)
             if (!rackCamera.project(point[0], point[1], point[2], screen)) continue
             x0 = min(x0, screen[0]); x1 = max(x1, screen[0])
             y0 = min(y0, screen[1]); y1 = max(y1, screen[1])
@@ -619,75 +400,25 @@ private class RackScene(var items: List<CdRackItem>) {
         out[2] = s * w * SPACING_MM * AXIS[2]
     }
 
-    /** The rack, and the case out of it with [stars] over it, its manual riffling through [riffle]. */
-    fun draw(scope: DrawScope, state: CdRackScrollState, stars: GraphicsLayer, riffle: GraphicsLayer) = with(scope) {
-        val position = state.position
+    /** The rack slid to [position]: one drawing per case in view. */
+    fun draw(scope: DrawScope, position: Float) = with(scope) {
+        val b = box ?: return@with
         val count = items.size
-        val focus = state.focus
-        val chosen = state.chosen
         val first = ceil(position - reach).toInt()
         val last = floor(position + reach).toInt()
-
-        // How far the case taken out has come, and the camera with it.
-        val come = inOutCubic(((focus - COME_FROM) / COME_SECONDS).clamped(0f, 1f))
-        if (chosen != NONE) {
-            liveCamera.zoom = exp(lerp(ln(RACK_ZOOM), 0f, come))
-            state.case.pose(outPose, liveCamera)
-            blend(come)
-            val item = items[wrapCase(chosen, count)]
-            scene.setArt(item.image)
-            scene.setCover(item.cover)
-            val covered = item.cover != null
-            if (state.case.hasCover != covered) state.case.hasCover = covered
-            val manual = manual
-            scene.setManual(manual)
-            state.case.manualSpreads = if (covered && manual != null) manual.spreads.size else 0
-        }
-        val loose = if (chosen != NONE && state.case.coverPose(coverPose, livePose, liveCamera)) coverPose else null
-        val book = if (loose != null && state.case.bookPose(bookPose)) bookPose else null
-        if (chosen != NONE) aimExits(position, chosen, size.width, size.height)
-
         // Back of the row first: each case covers the one behind it.
         for (i in last downTo first) {
-            if (i == chosen) {
-                scene.draw(this, liveCamera, livePose, shadow = come, cover = loose, book = book, riffleLayer = riffle)
-                continue
-            }
             val sprite = sprites[wrapCase(i, count)]
             val layer = layers[wrapCase(i, count)]
             if (sprite == null && layer == null) continue
-            val b = box ?: continue
             if (!spriteAt(i - position)) continue
-            var x = at[0]
-            var y = at[1]
-            if (chosen != NONE) {
-                // Each goes straight off its side's edge, only as far as
-                // takes it clear of the frame; coming back runs it in again.
-                val apart = abs(i - chosen)
-                val delay = EXIT_STAGGER * min(apart, EXIT_STAGGER_PLACES)
-                val gone = inOutCubic(((focus - delay) / EXIT_SECONDS).clamped(0f, 1f))
-                val side = if (i > chosen) 1 else 0
-                val off = clearance(side, x, y, size.width, size.height) * gone
-                x += exitX[side] * off
-                y += exitY[side] * off
-            }
+            val x = at[0]
+            val y = at[1]
             if (x > size.width || y > size.height || x + b.width < 0f || y + b.height < 0f) continue
             // Translated rather than offset by whole pixels, so a slow slide
             // does not step.
             translate(x, y) { if (layer != null) drawLayer(layer) else drawImage(sprite!!) }
         }
-        // The rack's cases are drawn without them; the one out comes into
-        // its stars as it comes out.
-        if (chosen != NONE) scene.stars(this, stars, strength = come)
-    }
-
-    /** The ruler beside the manual of the case out, while it is open to be read. */
-    fun drawScrubber(scope: DrawScope, state: CdRackScrollState, measurer: TextMeasurer, ink: Color, paper: Color) {
-        val reading = if (state.chosen != NONE) state.case.readingShown else 0f
-        scrubber.setSpreads(if (state.chosen != NONE) state.case.manualSpreads else 0)
-        liveCamera.readBox(readBox)
-        scrubber.layout(scope.size.width, readBox[1], readBox[2], scope.density, reading)
-        scrubber.draw(scope, measurer, ink, paper)
     }
 
     /** The top-left of the sprite of a case [w] places from the slot, into [at]. */
@@ -701,63 +432,11 @@ private class RackScene(var items: List<CdRackItem>) {
     }
 
     /**
-     * Which way each side of the row leaves the frame, below the case taken
-     * out and above it: straight off whichever of its two edges is nearer the
-     * case next to it, so a whole side goes the one way and none cross.
+     * The case under [x], [y] with the rack at [position], unwrapped, or null.
+     * The front of the row covers the back, so cases are tried front first.
      */
-    private fun aimExits(position: Float, chosen: Int, w: Float, h: Float) {
-        val b = box ?: return
-        if (!spriteAt(chosen - position)) return
-        val cx = at[0]
-        val cy = at[1]
-        for (side in 0..1) {
-            exitX[side] = 0f
-            exitY[side] = 0f
-            if (!spriteAt(chosen + (if (side == 1) 1 else -1) - position)) continue
-            val towardX = if (at[0] >= cx) 1f else -1f
-            val towardY = if (at[1] >= cy) 1f else -1f
-            val across = if (towardX > 0f) w - at[0] else at[0] + b.width
-            val upDown = if (towardY > 0f) h - at[1] else at[1] + b.height
-            if (across <= upDown) exitX[side] = towardX else exitY[side] = towardY
-        }
-    }
-
-    /** How far a sprite at [x], [y] goes along its [side]'s exit to be clear of the frame. */
-    private fun clearance(side: Int, x: Float, y: Float, w: Float, h: Float): Float {
-        val b = box ?: return 0f
-        val off = when {
-            exitX[side] > 0f -> w - x
-            exitX[side] < 0f -> x + b.width
-            exitY[side] > 0f -> h - y
-            exitY[side] < 0f -> y + b.height
-            else -> 0f
-        }
-        return max(off, 0f)
-    }
-
-    /**
-     * The case on its way out: from its place in the rack to where the
-     * case's own state holds it, turn, place and size by [k].
-     */
-    private fun blend(k: Float) {
-        livePose.pitch = lerp(RACK_PITCH, outPose.pitch, k)
-        livePose.yaw = lerp(RACK_YAW, outPose.yaw, k)
-        livePose.roll = lerp(0f, outPose.roll, k)
-        livePose.x = outPose.x * k
-        livePose.y = outPose.y * k
-        livePose.z = 0f
-        livePose.scale = lerp(rackScale, outPose.scale, k)
-        livePose.lid = outPose.lid
-        livePose.spread = outPose.spread
-        livePose.spin = outPose.spin * k
-    }
-
-    /**
-     * The case under [x], [y], unwrapped, or null. The front of the row covers
-     * the back, so cases are tried front first.
-     */
-    fun hit(x: Float, y: Float, position: Float, count: Int): Int? {
-        place(frame, rackPose)
+    fun hit(x: Float, y: Float, position: Float): Int? {
+        frame.copyFrom(rackFrame)
         val first = ceil(position - reach).toInt()
         val last = floor(position + reach).toInt()
         for (i in first..last) {
@@ -791,15 +470,6 @@ private class RackScene(var items: List<CdRackItem>) {
 
 private val CORNERS = listOf(-1f to -1f, 1f to -1f, 1f to 1f, -1f to 1f)
 
-/** [frame] turned and sized as [pose] holds the case, standing at the origin. */
-private fun place(frame: Pose, pose: CasePose) {
-    eulerXyz(pose.pitch, pose.yaw, pose.roll, frame.r)
-    frame.s = pose.scale
-    frame.t[0] = 0f
-    frame.t[1] = 0f
-    frame.t[2] = 0f
-}
-
 /** How far up a case [w] places from the slot stands, from 0 to 1. */
 private fun lift(w: Float): Float = 1f - smoothstep(LIFT_FLAT, LIFT_GONE, abs(w))
 
@@ -811,7 +481,7 @@ private fun BoxScope.Caption(
     state: CdRackScrollState,
     contentColor: Color,
 ) {
-    val item = items[wrapCase(state.slotted, items.size)]
+    val item = items[state.currentIndex.coerceIn(0, items.lastIndex)]
     if (item.title.isEmpty() && item.artist.isEmpty()) return
 
     Column(

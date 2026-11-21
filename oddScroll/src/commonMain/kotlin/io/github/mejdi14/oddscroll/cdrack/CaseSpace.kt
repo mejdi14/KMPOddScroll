@@ -18,20 +18,6 @@ internal const val FOV_DEGREES = 28f
 /** The camera stands far enough back that the case fills this much of the height. */
 private const val FIT = 0.6f
 
-/** The shut case and its cover under it fill at most this much of the height, this far apart. */
-private const val PAIR_FIT = 0.8f
-private const val PAIR_GAP = 16f
-
-/** The open manual fills at most this much of the width left between the insets, and of the height. */
-private const val READ_ACROSS = 0.96f
-private const val READ_TALL = 0.88f
-
-/** Past the frame, how far the case's soft shadow goes up out of it too. */
-private const val SHADOW_CLEAR = 16f
-
-/** The light the backdrop's shadows fall from. */
-internal val LIGHT = normalized(-0.3f, 0.48f, 1f)
-
 internal fun normalized(x: Float, y: Float, z: Float): FloatArray {
     val l = kotlin.math.sqrt(x * x + y * y + z * z)
     return floatArrayOf(x / l, y / l, z / l)
@@ -54,7 +40,7 @@ internal class Camera {
     /**
      * How far the camera has dollied out, keeping what stands at the origin the
      * same size: the lens lengthens as it backs away, so depth flattens out —
-     * at a large zoom the view is all but orthographic.
+     * at a large zoom the view is all but orthographic, as the rack's is.
      */
     var zoom = 1f
         set(value) {
@@ -63,58 +49,13 @@ internal class Camera {
             distance = baseDistance * value
         }
 
-    /** How small the opened case is drawn, so lid and tray both fit across. */
-    var openScale = 1f
-        private set
-
-    /**
-     * The shut case with its cover out under it: how small the two are drawn
-     * so they fit one over the other, how far up the case stands for it and
-     * how far down the cover hangs, in millimetres at the case.
-     */
-    var pairScale = 1f
-        private set
-    var pairRise = 0f
-        private set
-    var pairDrop = 0f
-        private set
-
-    /**
-     * Wider than tall, the cover stands beside the case instead of under it:
-     * how far the case goes left and the cover goes right, in millimetres at
-     * the case.
-     */
-    var pairShift = 0f
-        private set
-    var pairAside = 0f
-        private set
-    var beside = false
-        private set
-
-    /**
-     * The manual open in the middle of the frame: how large it is drawn so
-     * the spread fits, and how far up the case goes to clear the frame for it.
-     */
-    var readScale = 1f
-        private set
-    var readRise = 0f
-        private set
-
-    /**
-     * Pixels kept clear down either side of the frame for the open manual —
-     * its scrubber on the right, its button on the left.
-     */
-    var readInset = 0f
-    private var fittedInset = -1f
-
     private val cx get() = width / 2f
     private val cy get() = height / 2f
 
     fun fit(w: Float, h: Float) {
-        if (w == width && h == height && readInset == fittedInset) return
+        if (w == width && h == height) return
         width = w
         height = h
-        fittedInset = readInset
         val tanHalf = tan(FOV_DEGREES / 2f / 180f * kotlin.math.PI.toFloat())
         val aspect = w / max(h, 1f)
         baseFocal = h / 2f / tanHalf
@@ -122,31 +63,6 @@ internal class Camera {
         val fitW = CASE_MM * 1.3f / 2f / (tanHalf * aspect)
         baseDistance = max(fitH, fitW)
         zoom = zoom
-        val across = 2f * baseDistance * tanHalf * aspect
-        openScale = minOf(1.04f, across / (CASE_MM * 2.25f))
-        val tall = 2f * baseDistance * tanHalf
-        val stack = CASE_MM + PAIR_GAP + 2f * COVER_HALF
-        beside = aspect > 1f
-        if (beside) {
-            pairScale = minOf(1f, across * PAIR_FIT / stack, tall * PAIR_FIT / (2f * COVER_HALF))
-            pairShift = pairScale * (stack / 2f - HALF_MM)
-            pairAside = pairScale * (stack / 2f - COVER_HALF)
-            pairRise = 0f
-            pairDrop = 0f
-        } else {
-            pairScale = minOf(1f, tall * PAIR_FIT / stack)
-            pairRise = pairScale * (stack / 2f - HALF_MM)
-            pairDrop = pairScale * (stack / 2f - COVER_HALF)
-            pairShift = 0f
-            pairAside = 0f
-        }
-        val inset = across * (readInset / max(w, 1f)).coerceIn(0f, 0.3f)
-        readScale = minOf((across - 2f * inset) * READ_ACROSS / (4f * COVER_HALF), tall * READ_TALL / (2f * COVER_HALF))
-        // Clear of the frame, shadow and all: the shadow falls this far below
-        // the case on the backdrop, where the frame stands taller.
-        val wall = tall / 2f * (baseDistance - BACKDROP_Z) / baseDistance
-        val drop = LIGHT[1] / LIGHT[2] * (HINGE_Z - BACKDROP_Z)
-        readRise = wall + HALF_MM + drop + SHADOW_CLEAR
     }
 
     /** Screen x, y of a world point into [out] at [at]; false if it is behind the lens. */
@@ -156,16 +72,6 @@ internal class Camera {
         out[at] = cx + focal * x / w
         out[at + 1] = cy - focal * y / w
         return true
-    }
-
-    /**
-     * The open manual at rest in the middle, on screen, into [out]: its
-     * middle's x and y, and its height.
-     */
-    fun readBox(out: FloatArray) {
-        out[0] = cx
-        out[1] = cy
-        out[2] = scaleAt(0f) * 2f * COVER_HALF * readScale
     }
 
     /** Screen pixels per world millimetre at depth [z]. */
@@ -261,33 +167,6 @@ internal class Pose {
         camera.planeMatrix(scratch.a, scratch.b, scratch.o, out)
     }
 
-    /**
-     * The shadow plane z = [z] of this frame casts on the backdrop at world
-     * z = [floor], along [LIGHT]: each point slides back along the light until
-     * it reaches the wall, which is an affine map, so the shadow is one more
-     * plane through the same camera.
-     */
-    fun shadowPlane(camera: Camera, z: Float, floor: Float, out: Matrix, scratch: PlaneScratch) {
-        axis(0, scratch.a)
-        axis(1, scratch.b)
-        for (k in 0 until 3) {
-            scratch.a[k] *= s
-            scratch.b[k] *= s
-        }
-        apply(0f, 0f, z, scratch.o)
-        cast(scratch.a, 0f)
-        cast(scratch.b, 0f)
-        cast(scratch.o, floor)
-        camera.planeMatrix(scratch.a, scratch.b, scratch.o, out)
-    }
-
-    private fun cast(v: FloatArray, floor: Float) {
-        val k = (v[2] - floor) / LIGHT[2]
-        v[0] -= LIGHT[0] * k
-        v[1] -= LIGHT[1] * k
-        v[2] -= LIGHT[2] * k
-    }
-
     fun copyFrom(other: Pose) {
         other.r.copyInto(r)
         other.t.copyInto(t)
@@ -318,29 +197,4 @@ internal fun eulerXyz(x: Float, y: Float, z: Float, out: FloatArray) {
     out[6] = b * f - a * e * d
     out[7] = b * e + a * f * d
     out[8] = a * c
-}
-
-/** [a] · [b], both row-major 3×3, into [out] (which may not be either). */
-internal fun times(a: FloatArray, b: FloatArray, out: FloatArray) {
-    for (i in 0 until 3) for (j in 0 until 3) {
-        out[i * 3 + j] = a[i * 3] * b[j] + a[i * 3 + 1] * b[3 + j] + a[i * 3 + 2] * b[6 + j]
-    }
-}
-
-/** Turn about the y axis, row-major. */
-internal fun aboutY(angle: Float, out: FloatArray) {
-    val c = cos(angle)
-    val s = sin(angle)
-    out[0] = c; out[1] = 0f; out[2] = s
-    out[3] = 0f; out[4] = 1f; out[5] = 0f
-    out[6] = -s; out[7] = 0f; out[8] = c
-}
-
-/** Turn about the z axis, row-major. */
-internal fun aboutZ(angle: Float, out: FloatArray) {
-    val c = cos(angle)
-    val s = sin(angle)
-    out[0] = c; out[1] = -s; out[2] = 0f
-    out[3] = s; out[4] = c; out[5] = 0f
-    out[6] = 0f; out[7] = 0f; out[8] = 1f
 }

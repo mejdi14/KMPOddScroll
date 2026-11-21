@@ -1,9 +1,11 @@
 package io.github.mejdi14.oddscroll.cdrack
 
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import io.github.mejdi14.oddscroll.internal.clamped
 import io.github.mejdi14.oddscroll.internal.cubicBezierEase
@@ -53,189 +55,138 @@ private const val SAMPLES = 5
 private const val WINDOW = 0.1f
 
 /**
- * Taking a case out of the rack, in seconds: the rest of the row leaves over
- * the first part, and the case turns to face you and comes forward over the
- * second, the two overlapping. Putting it back runs the same backwards.
+ * Creates a [CdRackScrollState] that starts with case [initialIndex] in the
+ * slot.
  */
-internal const val EXIT_SECONDS = 0.9f
-internal const val COME_FROM = 0.45f
-internal const val COME_SECONDS = 0.7f
-internal const val FOCUS_SECONDS = COME_FROM + COME_SECONDS
-
-/** No case chosen. */
-internal const val NONE = Int.MIN_VALUE
+@Composable
+fun rememberCdRackScrollState(initialIndex: Int = 0): CdRackScrollState =
+    remember { CdRackScrollState(initialIndex) }
 
 /**
- * Where the rack has slid to, in tapes.
+ * Where the rack has slid to, and the way to slide it from outside.
  *
- * The rack is one number: tape `i` stands `i - position` pitches up the row
+ * The rack is one number: case `i` stands `i - position` places up the row
  * from the slot, and how high it is lifted is a fixed function of that. So
- * there is nothing per tape to animate — moving the number moves everything.
+ * there is nothing per case to animate — moving the number moves everything.
+ * The rack has no end, so every index here is wrapped into the list, and a
+ * run to one goes whichever way round the rack is shorter.
+ *
+ * Each call below takes over from a finger that is dragging the rack: the
+ * rest of that drag is ignored until it lifts.
  */
-class CdRackScrollState internal constructor(intro: Int) {
+class CdRackScrollState internal constructor(initialIndex: Int) {
 
-    /** Unbounded; wrapped only when a tape is drawn. */
-    internal var position = 0f
+    /** Unbounded; wrapped only when a case is drawn. */
+    internal var position = initialIndex.toFloat()
         private set
 
     /** Bumped once per frame, so the rack repaints while anything moves. */
     internal var tick by mutableIntStateOf(0)
         private set
 
+    /** How many cases the rack holds, as of its last composition. */
+    internal var count by mutableIntStateOf(0)
+
+    /** The case nearest the slot, unwrapped. Changes only as one passes it. */
+    private var slotted by mutableIntStateOf(initialIndex)
+
     /**
-     * How far the rack has got drawing its cases, from 0 to 1. Nothing can be
-     * taken out before it reaches 1; a host can cover the rack with its own
-     * loader until then.
+     * The case in the slot, or the one nearest it while the rack moves, in
+     * `0 until items.size`. Changes only as a case passes the slot.
+     */
+    val currentIndex: Int
+        get() {
+            val n = count
+            return if (n > 0) wrapCase(slotted, n) else slotted
+        }
+
+    /** Whether a finger is dragging the rack or it is on its way to a slot. */
+    var isScrollInProgress by mutableStateOf(false)
+        private set
+
+    /**
+     * How far the rack has got drawing its cases, from 0 to 1. Each case is
+     * drawn once, off the main thread, when the rack first has a size and
+     * again whenever that size changes; until this reaches 1, cases not drawn
+     * yet are missing from the row. A host that wants a loader can cover the
+     * rack with its own until then.
      */
     var loaded by mutableFloatStateOf(0f)
         internal set
 
-    /** The tape nearest the slot, unwrapped. Changes only as one passes it. */
-    var slotted by mutableIntStateOf(0)
-        private set
-
-    /**
-     * Whether a case has been taken out of the rack to look at — the rest of
-     * the row gone, the case turned to face you, there to drag round and open.
-     * [leave] puts it back.
-     */
-    var inspecting by mutableStateOf(false)
-        private set
-
-    /** The case taken out, unwrapped, while it is out or on its way out or back. */
-    internal var chosen = NONE
-        private set
-
-    /** Seconds into taking it out: 0 in the rack, [FOCUS_SECONDS] all the way out. */
-    internal var focus = 0f
-        private set
-
-    /** The case once it is out: its turn, its lid. */
-    internal val case = CdCaseState()
-
-    /** Tapped, and on its way to the slot to be taken out from there. */
-    internal var wanted by mutableIntStateOf(NONE)
-        private set
-
-    /**
-     * The case whose disc is baked for drawing out of the rack; one tapped
-     * waits in the slot for it, so the bake is not done in the frame it leaves.
-     */
-    internal var primed = NONE
-
-    /** Asked to go back while open: shutting first. */
-    private var leaving = false
-
-    /** The rack takes no input while a case is out, or going or coming. */
-    internal val racked: Boolean get() = !inspecting && focus <= 0f
-
     private var dragging = false
     private var moving = false
     private var from = 0f
-    private var target = 0
+    private var target = initialIndex
     private var seconds = 0f
     private var clock = 0f
     private var ease = travelEase
 
-    /** Tapes a second, as of the last frame — what a retarget starts from. */
+    /** Cases a second, as of the last frame — what a retarget starts from. */
     private var speed = 0f
 
     private val at = FloatArray(SAMPLES)
     private val of = FloatArray(SAMPLES)
     private var taken = 0
 
-    init {
-        if (intro != 0) aim(intro, 0f)
+    /** Puts case [index] in the slot at once, with no slide. */
+    fun scrollTo(index: Int) {
+        dragging = false
+        val to = nearest(index)
+        moving = false
+        speed = 0f
+        target = to
+        position = to.toFloat()
+        settle()
     }
 
-    /** Slides tape [index] into the slot. Unwrapped, so it can go either way round. */
-    fun scrollTo(index: Int) {
-        if (dragging || !racked) return
+    /** Slides case [index] into the slot with the rack's own ease-in-out. */
+    fun animateScrollTo(index: Int) {
+        dragging = false
+        aim(nearest(index), speed)
+    }
+
+    /**
+     * Slides the rack on by [by] cases from wherever it is heading — what a
+     * wheel notch does. Positive brings the cases further up the row down to
+     * the slot.
+     */
+    fun step(by: Int) {
+        if (by == 0) return
+        dragging = false
+        aim(heading() + by, speed)
+    }
+
+    /** Slides unwrapped case [index] into the slot, the way a tap on it does. */
+    internal fun travelTo(index: Int) {
+        if (dragging) return
         aim(index, speed)
     }
 
-    /** Slides the rack on by [by] tapes from wherever it is heading. */
-    fun step(by: Int) {
-        if (by == 0 || dragging || !racked) return
-        aim((if (moving) target else position.roundToInt()) + by, speed)
-    }
+    /** The case the rack is on its way to, or the one nearest the slot at rest; unwrapped. */
+    private fun heading(): Int = if (moving) target else position.roundToInt()
 
-    /**
-     * Takes case [index] out to look at: it slides to the slot if it is not
-     * there, then the rest of the row clears away and it turns to face you.
-     */
-    fun inspect(index: Int) {
-        if (!racked || dragging) return
-        wanted = index
-        if (moving || index.toFloat() != position) aim(index, speed)
-    }
-
-    /**
-     * Whether the case out of the rack is open with its cover still in the
-     * lid — what [inspectCover] takes out.
-     */
-    val canInspectCover: Boolean
-        get() = inspecting && case.isOpen && !case.coverOut && case.hasCover
-
-    /**
-     * Takes the cover out of the open case: it turns over and comes to rest
-     * under the case, which shuts and rises to make room. [leave], or a tap
-     * on either, puts it back.
-     */
-    fun inspectCover() {
-        if (inspecting && focus >= FOCUS_SECONDS) case.inspectCover()
-    }
-
-    /**
-     * Where the case out is in its run of steps — 0 shut, 1 open, 2 its cover
-     * out, then each spread of the cover's manual — and the last of them.
-     */
-    val step: Int get() = case.step
-    val lastStep: Int get() = case.lastStep
-
-    /** Goes on a step: opens the case, takes its cover out, turns the manual a leaf on. */
-    fun stepForward() {
-        if (inspecting && focus >= FOCUS_SECONDS) case.stepForward()
-    }
-
-    /** Goes back a step; from the shut case, [leave]s it. */
-    fun stepBack() {
-        if (!inspecting || focus < FOCUS_SECONDS) return
-        if (case.step == 0) leave() else case.stepBack()
-    }
-
-    /**
-     * Puts the case back in the rack, shutting it first if it is open; with
-     * its cover out, puts that back first, and with the cover's manual open,
-     * shuts that before anything.
-     */
-    fun leave() {
-        if (!inspecting) return
-        if (case.coverLoose) {
-            if (case.manualOpen) case.closeManual() else case.returnCover()
-            return
-        }
-        if (!case.shut) {
-            case.close()
-            leaving = true
-            return
-        }
-        inspecting = false
+    /** The unwrapped case nearest where the rack is heading that is case [index] of the list. */
+    private fun nearest(index: Int): Int {
+        val n = count
+        val here = heading()
+        if (n <= 0) return index
+        val ahead = wrapCase(index - here, n)
+        return here + if (ahead > n / 2) ahead - n else ahead
     }
 
     // --- input ---------------------------------------------------------------
 
     internal fun onDragStart(seconds: Float) {
-        if (!racked) return
-        wanted = NONE
         dragging = true
         moving = false
         speed = 0f
         taken = 0
         sample(seconds)
+        settle()
     }
 
-    /** [by] is the drag down the row, already in tapes. */
+    /** [by] is the drag down the row, already in cases. */
     internal fun onDrag(by: Float, seconds: Float) {
         if (!dragging) return
         position += by
@@ -257,6 +208,7 @@ class CdRackScrollState internal constructor(intro: Int) {
         if (abs(distance) < 1e-4f) {
             moving = false
             position = to.toFloat()
+            settle()
             return
         }
         moving = true
@@ -268,6 +220,7 @@ class CdRackScrollState internal constructor(intro: Int) {
             ease = travelEase
             seconds = (TRAVEL_SECONDS * sqrt(abs(distance))).clamped(0.35f, 2.2f)
         }
+        settle()
     }
 
     // --- frame ---------------------------------------------------------------
@@ -286,22 +239,15 @@ class CdRackScrollState internal constructor(intro: Int) {
             }
         }
         if (!dragging) speed = if (dt > 0f) (position - before) / dt else 0f
+        settle()
+    }
+
+    /** Brings the observable values up to date; each is written only when it changes. */
+    private fun settle() {
         val nearest = position.roundToInt()
         if (nearest != slotted) slotted = nearest
-
-        // Taking a case out, once it has come to rest in the slot.
-        if (wanted != NONE && primed == wanted && !moving && !dragging && position == wanted.toFloat()) {
-            chosen = wanted
-            wanted = NONE
-            inspecting = true
-        }
-        if (chosen != NONE) case.advance(dt, spinning = true)
-        if (leaving && case.shut) {
-            leaving = false
-            inspecting = false
-        }
-        focus = if (inspecting) minOf(focus + dt, FOCUS_SECONDS) else maxOf(focus - dt, 0f)
-        if (!inspecting && focus <= 0f) chosen = NONE
+        val busy = dragging || moving
+        if (busy != isScrollInProgress) isScrollInProgress = busy
     }
 
     // --- throw ---------------------------------------------------------------
@@ -312,7 +258,7 @@ class CdRackScrollState internal constructor(intro: Int) {
         taken++
     }
 
-    /** Tapes a second over the tail of the drag, as it was let go. */
+    /** Cases a second over the tail of the drag, as it was let go. */
     private fun partingSpeed(): Float {
         if (taken < 2) return 0f
         val newest = (taken - 1) % SAMPLES
@@ -327,5 +273,5 @@ class CdRackScrollState internal constructor(intro: Int) {
     }
 }
 
-/** Index of tape [index] of the endless rack, wrapped into [count]. */
+/** Index of case [index] of the endless rack, wrapped into [count]. */
 internal fun wrapCase(index: Int, count: Int): Int = ((index % count) + count) % count
