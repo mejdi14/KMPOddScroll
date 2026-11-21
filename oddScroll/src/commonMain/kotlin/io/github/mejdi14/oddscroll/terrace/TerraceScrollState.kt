@@ -3,6 +3,7 @@ package io.github.mejdi14.oddscroll.terrace
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import io.github.mejdi14.oddscroll.internal.frameRate
@@ -16,9 +17,9 @@ import kotlin.math.roundToInt
  * and a spring from rest would have to start eight frames before the stack
  * visibly moves. What it is is a first-order approach — the stack covers the
  * same share of what is left every frame — at 5.47 a second (5.03 to 5.97
- * over five separate settles, 0.3 px each).
+ * over five separate settles, 0.3 px each). The share a frame takes is the
+ * style's `settle` parameter, 0.0871 by default.
  */
-private const val SETTLE = 0.0871f
 
 /**
  * Seconds of parting speed a throw carries the stack on by. A first-order
@@ -39,8 +40,14 @@ private const val SAMPLES = 5
 /** Longest a sample stays worth counting towards the throw, in seconds. */
 private const val WINDOW = 0.1f
 
+/**
+ * Creates and remembers a [TerraceScrollState].
+ *
+ * @param initialIndex the item that starts at the front.
+ */
 @Composable
-fun rememberTerraceScrollState(): TerraceScrollState = remember { TerraceScrollState() }
+fun rememberTerraceScrollState(initialIndex: Int = 0): TerraceScrollState =
+    remember { TerraceScrollState(initialIndex) }
 
 /**
  * How far the stack has run, in cards.
@@ -52,21 +59,37 @@ fun rememberTerraceScrollState(): TerraceScrollState = remember { TerraceScrollS
  * A drag or the wheel moves the number directly, as the reference's wheel
  * does; once the input stops, the stack settles on the nearest card.
  */
-class TerraceScrollState internal constructor() {
+class TerraceScrollState internal constructor(initialIndex: Int = 0) {
 
-    internal var position = 0f
+    internal var position = initialIndex.toFloat()
         private set
+
+    /** How many items the stack is made of; set by the style from its list. */
+    internal var itemCount = 1
+
+    /** Share of the distance left that the stack covers each sixtieth of a second. */
+    internal var settle = 0.0871f
 
     /** Bumped once per frame, so the stack repaints while anything moves. */
     internal var tick by mutableIntStateOf(0)
         private set
 
     /** The card at the front, unwrapped. Changes only as one passes halfway. */
-    var front by mutableIntStateOf(0)
+    internal var front by mutableIntStateOf(initialIndex)
         private set
 
-    private var dragging = false
-    private var settling = false
+    /**
+     * Index, wrapped into the items, of the card at the front. It changes as
+     * a card passes halfway, so mid-run as well as at rest.
+     */
+    val currentIndex: Int get() = wrapCard(front, itemCount)
+
+    private var dragging by mutableStateOf(false)
+    private var settling by mutableStateOf(false)
+
+    /** True while the stack is dragged, thrown, scrolled or settling on a card. */
+    val isScrollInProgress: Boolean get() = dragging || settling
+
     private var target = 0f
     private var wheeling = false
     private var sinceWheel = 0f
@@ -75,11 +98,36 @@ class TerraceScrollState internal constructor() {
     private val of = FloatArray(SAMPLES)
     private var taken = 0
 
-    /** Brings card [index] to the front. Unwrapped, so it can go either way round. */
-    fun scrollTo(index: Int) {
+    /** Brings the unwrapped card [index] to the front, whichever way round it lies. */
+    internal fun goTo(index: Int) {
         if (dragging) return
         wheeling = false
         aim(index.toFloat())
+    }
+
+    /** Which way and how far, in cards, to run to reach item [index] from where it is heading. */
+    private fun distanceTo(index: Int): Int {
+        val from = (if (settling) target else position).roundToInt()
+        var by = wrapCard(index - from, itemCount)
+        if (by > itemCount / 2) by -= itemCount
+        return by
+    }
+
+    /** Runs the stack to item [index] with its own settle, the short way round. */
+    fun animateScrollTo(index: Int) {
+        if (dragging) return
+        step(distanceTo(index))
+    }
+
+    /** Puts item [index] at the front at once, the short way round. */
+    fun scrollTo(index: Int) {
+        if (dragging) return
+        wheeling = false
+        val to = (if (settling) target else position).roundToInt() + distanceTo(index)
+        target = to.toFloat()
+        position = target
+        settling = false
+        front = to
     }
 
     /** Runs the stack on by [by] cards from wherever it is heading. */
@@ -143,7 +191,7 @@ class TerraceScrollState internal constructor() {
             }
         }
         if (settling && !dragging) {
-            position += (target - position) * frameRate(SETTLE, deltaMs)
+            position += (target - position) * frameRate(settle, deltaMs)
             if (!wheeling && abs(target - position) < ARRIVED) {
                 position = target
                 settling = false

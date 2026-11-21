@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
@@ -66,7 +67,8 @@ data class TerraceItem(
  * The stack, in card widths, as measured off the reference. Every card edge in
  * 175 frames — widths, and the outer edge of each card where it shows past the
  * one in front — collapses onto one number per frame and five constants, to
- * 0.20 px (max 0.99 px over 2,409 edges). Card `i` is `d = i - position`
+ * 0.20 px (max 0.99 px over 2,409 edges). The measured numbers are the
+ * defaults of `shrink` (0.801) and `levelStep` (0.2070). Card `i` is `d = i - position`
  * levels from the front:
  *
  *   scale  = SHRINK^|d|
@@ -77,11 +79,6 @@ data class TerraceItem(
  * than 0.51 px with six more numbers — and its fitted slots come back as
  * 0.800, 0.641 and 0.511, which are 0.8, 0.8² and 0.8³ anyway.
  */
-private const val SHRINK = 0.801f
-private const val STEP = 0.2070f
-
-/** Height over width of a card. */
-private const val ASPECT = 1.384f
 
 /*
  * Each card throws a soft shadow down onto the ones behind it, scaled with the
@@ -90,7 +87,6 @@ private const val ASPECT = 1.384f
  * touch darker one level back than at the front — that is the shadow of the
  * card in front of it; nothing is dimmed.
  */
-private const val SHADOW_ALPHA = 0.20f
 private const val SHADOW_SIGMA = 0.070f
 private const val SHADOW_DROP = 0.065f
 
@@ -108,9 +104,6 @@ private const val SMALL_SIZE = 0.046f
 
 /** Card widths the frame must hold across: the card and a caption either side. */
 private const val FIT_ACROSS = 2.5f
-
-/** A drag of this many card heights runs the stack on one card. */
-private const val DRAG_PER_CARD = 0.5f
 
 private const val TAP_SLOP = 8f
 
@@ -131,6 +124,7 @@ private const val TAP_SLOP = 8f
  * on the nearest card.
  *
  * @param items cards, in order; the stack repeats, so it has no end.
+ * @param modifier applied to the whole page.
  * @param background page colour.
  * @param contentColor caption text; the index and subtitle are set in it at
  *   reduced strength.
@@ -138,6 +132,19 @@ private const val TAP_SLOP = 8f
  * @param captions the index of the front card to its left, its title and
  *   subtitle to its right.
  * @param depth levels shown either side of the front card.
+ * @param shrink how much of its size each level back keeps, as a share of the
+ *   level in front.
+ * @param levelStep distance between levels, in card widths.
+ * @param aspect height over width of a card.
+ * @param shadowAlpha darkness of the shadow at its densest.
+ * @param settle share of the distance left that the stack covers each
+ *   sixtieth of a second when it settles on a card; higher is snappier.
+ * @param dragPerCard how many card heights of drag run the stack on one card.
+ * @param userScrollEnabled false ignores drag, flick and wheel; the stack can
+ *   still be run through [state].
+ * @param onItemClick called with the index of the item on the tapped card.
+ *   When null a tap on a band brings that card to the front.
+ * @param state drives and reports the stack; see [TerraceScrollState].
  */
 @Composable
 fun TerraceScroll(
@@ -148,6 +155,14 @@ fun TerraceScroll(
     shadowColor: Color = Color.Black,
     captions: Boolean = true,
     depth: Int = 3,
+    shrink: Float = 0.801f,
+    levelStep: Float = 0.2070f,
+    aspect: Float = 1.384f,
+    shadowAlpha: Float = 0.20f,
+    settle: Float = 0.0871f,
+    dragPerCard: Float = 0.5f,
+    userScrollEnabled: Boolean = true,
+    onItemClick: ((index: Int) -> Unit)? = null,
     state: TerraceScrollState = rememberTerraceScrollState(),
 ) {
     if (items.isEmpty()) {
@@ -155,9 +170,14 @@ fun TerraceScroll(
         return
     }
 
-    val cards = remember(items) { items.map { cardBitmap(it.image, 1f / ASPECT, 0f) } }
-    val shadow = remember(shadowColor) { bakeShadow(shadowColor) }
+    val cards = remember(items, aspect) { items.map { cardBitmap(it.image, 1f / aspect, 0f) } }
+    val shadow = remember(shadowColor, shadowAlpha, aspect) { bakeShadow(shadowColor, shadowAlpha, aspect) }
     val reach = depth.coerceAtLeast(0) + 0.5f
+
+    SideEffect {
+        state.itemCount = items.size
+        state.settle = settle
+    }
 
     LaunchedEffect(state) {
         var previous = 0L
@@ -174,7 +194,7 @@ fun TerraceScroll(
         // The stack runs to 1.04 card widths either side of the middle at its
         // fullest, half a level past the last band, so it fits in 0.9 of the
         // height with room for the shadow under it.
-        val outer = outerEdge(reach)
+        val outer = outerEdge(reach, shrink, levelStep, aspect)
         val cardDp = min(maxWidth.value / FIT_ACROSS, maxHeight.value * 0.9f / (2f * outer))
         val density = LocalDensity.current.density
         val cardPx = cardDp * density
@@ -182,8 +202,8 @@ fun TerraceScroll(
         Canvas(
             Modifier
                 .fillMaxSize()
-                .pointerInput(state, cardPx, reach) {
-                    val dragPx = max(cardPx * ASPECT * DRAG_PER_CARD, 1f)
+                .pointerInput(state, cardPx, reach, shrink, levelStep, aspect, userScrollEnabled, onItemClick) {
+                    val dragPx = max(cardPx * aspect * dragPerCard, 1f)
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         var last = down.position.y
@@ -197,7 +217,7 @@ fun TerraceScroll(
                             val dy = change.position.y - last
                             last = change.position.y
                             travel += abs(dy) + abs(change.position.x - change.previousPosition.x)
-                            if (travel > TAP_SLOP) {
+                            if (travel > TAP_SLOP && userScrollEnabled) {
                                 if (!started) {
                                     state.onDragStart(change.uptimeMillis / 1000f)
                                     started = true
@@ -210,16 +230,21 @@ fun TerraceScroll(
                         }
                         if (started) {
                             state.onDragEnd()
-                        } else {
+                        } else if (travel <= TAP_SLOP) {
                             val hit = hitCard(
                                 down.position, state.position, cardPx,
                                 size.width / 2f, size.height / 2f, reach,
+                                shrink, levelStep, aspect,
                             )
-                            if (hit != null) state.scrollTo(hit)
+                            if (hit != null) {
+                                if (onItemClick != null) onItemClick(wrapCard(hit, items.size))
+                                else state.goTo(hit)
+                            }
                         }
                     }
                 }
-                .pointerInput(state) {
+                .pointerInput(state, userScrollEnabled) {
+                    if (!userScrollEnabled) return@pointerInput
                     awaitPointerEventScope {
                         while (true) {
                             val event = awaitPointerEvent()
@@ -233,7 +258,10 @@ fun TerraceScroll(
                 }
         ) {
             state.tick // read, so the stack repaints every frame
-            drawStack(cards, shadow, state.position, cardPx, size.width / 2f, size.height / 2f, reach)
+            drawStack(
+                cards, shadow, state.position, cardPx, size.width / 2f, size.height / 2f, reach,
+                shrink, levelStep, aspect,
+            )
         }
 
         if (captions) Caption(items, state, contentColor, cardDp, maxWidth.value)
@@ -243,7 +271,8 @@ fun TerraceScroll(
 // --- the stack ---------------------------------------------------------------
 
 /** How far a card [d] levels back reaches from the middle, in card widths. */
-private fun outerEdge(d: Float): Float = STEP * d + ASPECT / 2f * SHRINK.pow(d)
+private fun outerEdge(d: Float, shrink: Float, step: Float, aspect: Float): Float =
+    step * d + aspect / 2f * shrink.pow(d)
 
 private fun DrawScope.drawStack(
     cards: List<ImageBitmap>,
@@ -253,6 +282,9 @@ private fun DrawScope.drawStack(
     cx: Float,
     cy: Float,
     reach: Float,
+    shrink: Float,
+    levelStep: Float,
+    aspect: Float,
 ) {
     if (card <= 0f) return
     val first = ceil(position - reach).toInt()
@@ -276,11 +308,11 @@ private fun DrawScope.drawStack(
         }
         val d = index - position
         if (abs(d) > reach) continue
-        val scale = SHRINK.pow(abs(d))
+        val scale = shrink.pow(abs(d))
         val w = card * scale
-        val h = w * ASPECT
+        val h = w * aspect
         val left = cx - w / 2f
-        val top = cy + STEP * card * d - h / 2f
+        val top = cy + levelStep * card * d - h / 2f
 
         val k = w / SHADOW_BAKE
         withTransform({
@@ -318,6 +350,9 @@ private fun hitCard(
     cx: Float,
     cy: Float,
     reach: Float,
+    shrink: Float,
+    levelStep: Float,
+    aspect: Float,
 ): Int? {
     val nearest = floor(position + 0.5f).toInt()
     val levels = ceil(reach).toInt() + 1
@@ -325,9 +360,9 @@ private fun hitCard(
         val index = nearest + if (step % 2 == 0) step / 2 else -(step + 1) / 2
         val d = index - position
         if (abs(d) > reach) continue
-        val w = card * SHRINK.pow(abs(d))
-        val h = w * ASPECT
-        val top = cy + STEP * card * d - h / 2f
+        val w = card * shrink.pow(abs(d))
+        val h = w * aspect
+        val top = cy + levelStep * card * d - h / 2f
         if (at.x >= cx - w / 2f && at.x <= cx + w / 2f && at.y >= top && at.y <= top + h) {
             return index
         }
@@ -345,9 +380,9 @@ private class BakedShadow(val image: ImageBitmap, val pad: Float)
  * and one down, so it is laid in as a gradient across and then multiplied by
  * one down — two fills, once, rather than a blur anywhere.
  */
-private fun bakeShadow(color: Color): BakedShadow {
+private fun bakeShadow(color: Color, alpha: Float, aspect: Float): BakedShadow {
     val w = SHADOW_BAKE.toFloat()
-    val h = w * ASPECT
+    val h = w * aspect
     val sigma = SHADOW_SIGMA * w
     val pad = ceil(3f * sigma)
     val bw = (w + 2f * pad).toInt()
@@ -371,7 +406,7 @@ private fun bakeShadow(color: Color): BakedShadow {
         Size(bw.toFloat(), bh.toFloat()),
     ) {
         drawRect(
-            Brush.horizontalGradient(*profile(w, bw, SHADOW_ALPHA * color.alpha, color), endX = bw.toFloat()),
+            Brush.horizontalGradient(*profile(w, bw, alpha * color.alpha, color), endX = bw.toFloat()),
         )
         drawRect(
             Brush.verticalGradient(*profile(h, bh, 1f, Color.Black), endY = bh.toFloat()),
