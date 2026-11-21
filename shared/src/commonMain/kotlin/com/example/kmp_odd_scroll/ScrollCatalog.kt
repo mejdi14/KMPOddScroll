@@ -19,16 +19,20 @@ import com.example.kmp_odd_scroll.demos.TerraceDemoScreen
  *
  * [category] is the family the style belongs to; the gallery shows it beside
  * the title as "Category · Title".
+ *
+ * Only [ready] styles reach the gallery; the rest stay listed here but can't
+ * be opened until they're finished.
  */
 data class ScrollDemo(
     val route: String,
     val category: String,
     val title: String,
     val subtitle: String,
+    val ready: Boolean = false,
     val screen: @Composable () -> Unit,
 )
 
-val scrollDemos: List<ScrollDemo> = listOf(
+private val allScrollDemos: List<ScrollDemo> = listOf(
     ScrollDemo(
         route = "infinite_spiral",
         category = "Spatial",
@@ -48,6 +52,7 @@ val scrollDemos: List<ScrollDemo> = listOf(
         category = "Optical",
         title = "Flex Carousel",
         subtitle = "An infinite picture row flowing through invisible liquid glass",
+        ready = true,
         screen = { FlexCarouselDemoScreen() },
     ),
     ScrollDemo(
@@ -83,6 +88,7 @@ val scrollDemos: List<ScrollDemo> = listOf(
         category = "Oblique",
         title = "CD Rack",
         subtitle = "A row of clear CD cases on edge; tap one to take it out, turn it and open it",
+        ready = true,
         screen = { CdRackDemoScreen() },
     ),
     ScrollDemo(
@@ -107,3 +113,5 @@ val scrollDemos: List<ScrollDemo> = listOf(
         screen = { RunwayDemoScreen() },
     ),
 )
+
+val scrollDemos: List<ScrollDemo> = allScrollDemos.filter { it.ready }
