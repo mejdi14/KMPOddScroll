@@ -9,11 +9,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import io.github.mejdi14.oddscroll.internal.clamped
 import kotlin.math.abs
-import kotlin.math.cos
-import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.sin
 import kotlin.math.sqrt
 
 /** Total calibrated world travel from the top of the runway to the finish hold, in native page px (where page W = 993 px). */
@@ -32,61 +29,83 @@ internal const val RUNWAY_DEV_RESUME_PX = 36352.27f
 internal const val SETTLE_DAMPING = 0.7907f
 internal const val SETTLE_STIFFNESS = 275.37f
 
+/** Seconds of parting speed a throw carries before the settle spring takes over. */
+internal const val FLING_COAST_SEC = 0.42f
+
 /** Drag samples kept to read a throw off the end of a gesture. */
 private const val SAMPLES = 5
 private const val WINDOW = 0.1f
 private const val MAX_STEP = 0.004f
 
-/** Parting speed, in runway px a second, past which a release steps on rather than settling back. */
-private const val STEP_FLING = 300f
+/** Tour clock at which the finish hold ends and the tour rewinds to the top. */
+private const val TOUR_END_SEC = 24.433f
 
-/** The most of a throw a step keeps, so the spring lands on the stop instead of sailing past it. */
-private const val STEP_MAX_SPEED = 3500f
+/** Runway px ahead of the scroll position that counts as the middle of the runway, for the margin index. */
+private const val SECTION_LOOK_AHEAD_PX = 1450f
 
-/** Wheel travel that makes one step, and the pause before the wheel may step again. */
-private const val WHEEL_STEP_PX = 200f
-private const val WHEEL_STEP_COOLDOWN = 0.5f
-private const val WHEEL_IDLE_RESET = 0.25f
+/** How far before a section's start a margin-index jump lands, so the section sits mid-frame. */
+private const val SECTION_LEAD_PX = 450f
 
+/**
+ * Creates and remembers a [RunwayScrollState].
+ *
+ * @param initialIndex item the runway rests on at first, its card in the middle
+ *   of the frame. Used only when [autoplay] is off; the tour always starts at
+ *   the top of the runway.
+ * @param autoplay whether the measured reference tour plays on its own until the
+ *   first drag, wheel or programmatic scroll.
+ */
 @Composable
 fun rememberRunwayScrollState(
+    initialIndex: Int = 0,
     autoplay: Boolean = true,
-    initialScrollPx: Float = RUNWAY_START_2S_PX,
 ): RunwayScrollState = remember {
-    RunwayScrollState(autoplay = autoplay, initialScrollPx = initialScrollPx)
+    RunwayScrollState(initialIndex = initialIndex, autoplay = autoplay)
 }
 
 /**
  * State of [RunwayScroll].
  *
- * The entire scene — the colour-banded runway floor, the 500-px border ruler,
- * the 3D extruded card plinths, the inner UI panels, and the active section's
- * Bezier tether splines — is driven by a single scalar scroll coordinate
- * [scrollPx] in native runway pixels (`0 .. 44,071`, where the runway width is
- * `page W = 993 px`).
+ * The whole scene — the colour-banded runway floor, the 500-px border ruler,
+ * the raised card plinths and the margin index's tethers — is driven by one
+ * scroll coordinate, [scrollPx], in native runway pixels (`0 .. 44,071`, where
+ * the runway is 993 px wide).
+ *
+ * Items repeat down the runway to fill every section, so [currentIndex] and the
+ * scroll functions work in wrapped item indices (`0 until items.size`): the
+ * current item is the card nearest the middle of the frame, and [scrollTo] and
+ * [animateScrollTo] go to the nearest card showing that item. [step] moves in
+ * rows of cards, a left/right pair counting as one row.
+ *
+ * Programmatic scrolling works whether or not the user may scroll, and stops
+ * the autoplay tour.
  */
 class RunwayScrollState internal constructor(
+    initialIndex: Int = 0,
     autoplay: Boolean = true,
-    initialScrollPx: Float = RUNWAY_START_2S_PX,
 ) {
-    /** Current longitudinal scroll position in native runway pixels (`0 .. 44,071`). */
-    var scrollPx by mutableFloatStateOf(initialScrollPx.clamped(0f, RUNWAY_FINISH_PX))
-        internal set
+    /**
+     * Scroll position in native runway pixels (`0 .. 44,071`). It changes every
+     * frame while the runway moves, so read it while drawing or in a graphics
+     * layer, not in composition.
+     */
+    var scrollPx by mutableFloatStateOf(RUNWAY_START_2S_PX)
+        private set
 
-    /** Current instantaneous scroll speed in native runway pixels per second. */
-    var velocityPxPerSec by mutableFloatStateOf(0f)
-        internal set
-
-    /** Index of the currently active section (`0 .. 10`). */
+    /** Index of the section across the middle of the runway: the one the margin index tethers. */
     var activeSection by mutableIntStateOf(0)
-        internal set
+        private set
 
-    /** Whether the reference tour is playing automatically. */
+    /** Wrapped index of the item whose card is nearest the middle of the frame. */
+    var currentIndex by mutableIntStateOf(0)
+        private set
+
+    /** True while the runway is dragged, coasting, travelling to a target, or playing the tour. */
+    var isScrollInProgress by mutableStateOf(autoplay)
+        private set
+
+    /** Whether the reference tour is playing. A drag, wheel or programmatic scroll turns it off. */
     var autoplay by mutableStateOf(autoplay)
-
-    /** Progress (`0 .. 1`) of the end-of-runway `start ↑` button fold-and-launch sequence. */
-    var launchProgress by mutableFloatStateOf(0f)
-        internal set
 
     internal var tick by mutableIntStateOf(0)
         private set
@@ -94,97 +113,135 @@ class RunwayScrollState internal constructor(
     internal var dragging = false
         private set
 
+    /** Settle spring and throw, set by [RunwayScroll] from its parameters. */
+    internal var settleStiffness = SETTLE_STIFFNESS
+    internal var settleDampingRatio = SETTLE_DAMPING
+    internal var flingCoastSec = FLING_COAST_SEC
+
+    private var velocityPxPerSec = 0f
     private var settling = false
+    private var rewinding = false
     private var targetPx = scrollPx
 
     /** Clock for the measured reference tour (starts at t = 2.000s, ignoring the first 2s). */
     private var tourTimeSec = 2.0f
-    private var launching = false
-    private var launchClockSec = 0f
 
     /**
-     * Scroll positions the runway comes to rest on, ascending, and the section
-     * each belongs to. Empty means free scrolling.
+     * What the layout placed, as rest positions: the scroll position that puts
+     * each card, and each row, in the middle of the frame, pinned to the ends
+     * of the runway. See [bind].
      */
-    private var snapStops = FloatArray(0)
-    private var snapSections = IntArray(0)
-    private var minScrollPx = 0f
-    private var clockSec = 0f
-    private var wheelAcc = 0f
-    private var lastWheelSec = -10f
-    private var lastWheelStepSec = -10f
+    private var itemCount = 0
+    private var cardRests = FloatArray(0)
+    private var cardItems = IntArray(0)
+    private var rowRests = FloatArray(0)
+    private var sectionStarts = FloatArray(0)
+    private var pendingIndex: Int? = if (autoplay) null else initialIndex
 
     private val sampleTime = FloatArray(SAMPLES)
     private val samplePos = FloatArray(SAMPLES)
     private var sampleCount = 0
 
-    /**
-     * Turns step scrolling on ([stops] ascending, [sections] the section of
-     * each) or, with an empty array, back off. The first stop may sit before
-     * the top of the runway, which is how the first card gets to the middle
-     * of the frame.
-     */
-    internal fun setSnapStops(stops: FloatArray, sections: IntArray) {
-        if (stops.contentEquals(snapStops)) return
-        snapStops = stops
-        snapSections = sections
-        minScrollPx = if (stops.isEmpty()) 0f else min(0f, stops.first())
-        if (stops.isEmpty()) {
-            scrollPx = scrollPx.clamped(0f, RUNWAY_FINISH_PX)
-        } else if (!autoplay && !dragging) {
-            scrollPx = stops[nearestStop(scrollPx)]
-            targetPx = scrollPx
-            velocityPxPerSec = 0f
-            settling = false
-        }
-    }
-
-    private fun nearestStop(px: Float): Int {
-        var best = 0
-        for (i in 1 until snapStops.size) {
-            if (abs(snapStops[i] - px) < abs(snapStops[best] - px)) best = i
-        }
-        return best
-    }
-
-    /** Smoothly scrolls the runway to [target] (in `0 .. 44,071` native px). */
-    fun scrollToPx(target: Float) {
-        autoplay = false
-        launching = false
-        launchProgress = 0f
-        targetPx = if (snapStops.isEmpty()) {
-            target.clamped(0f, RUNWAY_FINISH_PX)
-        } else {
-            snapStops[nearestStop(target)]
-        }
-        settling = true
-    }
-
-    /** Smoothly scrolls the runway to the start of section [sectionIndex] (`0 .. 10`). */
-    fun scrollToSection(sectionIndex: Int) {
-        val first = snapSections.indexOf(sectionIndex)
-        if (first >= 0) {
-            scrollToPx(snapStops[first])
+    /** Jumps to the nearest card showing item [index], with no animation. */
+    fun scrollTo(index: Int) {
+        if (cardItems.isEmpty()) {
+            pendingIndex = index
             return
         }
-        val idx = sectionIndex.coerceIn(0, SECTION_STARTS_PX.lastIndex)
-        scrollToPx(SECTION_STARTS_PX[idx])
+        stopAutoplay()
+        val px = itemTarget(index) ?: return
+        scrollPx = px
+        targetPx = px
+        velocityPxPerSec = 0f
+        settling = false
+        updateDerived()
     }
 
-    /** Triggers the end-of-runway `start ↑` button fold and reverse launch back to the top. */
-    fun triggerLaunch() {
+    /** Travels to the nearest card showing item [index] on the settle spring. */
+    fun animateScrollTo(index: Int) {
+        if (cardItems.isEmpty()) {
+            pendingIndex = index
+            return
+        }
+        travelTo(itemTarget(index) ?: return)
+    }
+
+    /** Travels [by] rows of cards: positive further down the runway, negative back toward the top. */
+    fun step(by: Int) {
+        if (rowRests.isEmpty()) return
+        val from = nearest(rowRests, if (settling) targetPx else scrollPx)
+        val to = (from + by).coerceIn(0, rowRests.lastIndex)
+        travelTo(rowRests[to])
+    }
+
+    /** Travels to [target], in native runway px (`0 .. 44,071`), on the settle spring. */
+    fun animateScrollToPx(target: Float) = travelTo(target)
+
+    /** Travels to the start of section [sectionIndex], as a tap on the margin index does. */
+    fun animateScrollToSection(sectionIndex: Int) {
+        if (sectionStarts.isEmpty()) return
+        val i = sectionIndex.coerceIn(0, sectionStarts.lastIndex)
+        travelTo(if (i == 0) RUNWAY_START_2S_PX else sectionStarts[i] - SECTION_LEAD_PX)
+    }
+
+    /**
+     * Hands the state what the layout placed: how many items there are, the
+     * middle and item of every card, the middle of every row, the sections'
+     * starts, and the runway coordinate of the middle of the frame relative to
+     * [scrollPx].
+     */
+    internal fun bind(
+        itemCount: Int,
+        cardAnchors: FloatArray,
+        cardItems: IntArray,
+        rowAnchors: FloatArray,
+        sectionStarts: FloatArray,
+        focusXi: Float,
+    ) {
+        // Cards too near the top to reach the middle of the frame all rest at 0; the first of them counts there.
+        this.itemCount = itemCount
+        this.cardRests = FloatArray(cardAnchors.size) { (cardAnchors[it] - focusXi).clamped(0f, RUNWAY_FINISH_PX) }
+        this.cardItems = cardItems
+        this.rowRests = FloatArray(rowAnchors.size) { (rowAnchors[it] - focusXi).clamped(0f, RUNWAY_FINISH_PX) }
+        this.sectionStarts = sectionStarts
+        pendingIndex?.let {
+            pendingIndex = null
+            scrollTo(it)
+        }
+        updateDerived()
+    }
+
+    /** Travels to placed card [card] (an index into the layout, not an item index). */
+    internal fun animateScrollToCard(card: Int) {
+        if (card in cardRests.indices) travelTo(cardRests[card])
+    }
+
+    private fun itemTarget(index: Int): Float? {
+        val item = index.mod(max(itemCount, 1))
+        var best = -1
+        for (i in cardItems.indices) {
+            if (cardItems[i] != item) continue
+            if (best < 0 || abs(cardRests[i] - scrollPx) < abs(cardRests[best] - scrollPx)) best = i
+        }
+        return if (best < 0) null else cardRests[best]
+    }
+
+    private fun travelTo(target: Float) {
+        stopAutoplay()
+        targetPx = target.clamped(0f, RUNWAY_FINISH_PX)
+        settling = true
+        updateDerived()
+    }
+
+    private fun stopAutoplay() {
         autoplay = false
-        settling = false
-        launching = true
-        launchClockSec = 0f
+        rewinding = false
     }
 
     internal fun onDragStart(seconds: Float) {
         dragging = true
-        autoplay = false
+        stopAutoplay()
         settling = false
-        launching = false
-        launchProgress = 0f
         velocityPxPerSec = 0f
         sampleCount = 0
         recordSample(seconds)
@@ -192,7 +249,7 @@ class RunwayScrollState internal constructor(
 
     internal fun onDrag(deltaWorldPx: Float, seconds: Float) {
         if (!dragging) return
-        scrollPx = (scrollPx + deltaWorldPx).clamped(minScrollPx, RUNWAY_FINISH_PX)
+        scrollPx = (scrollPx + deltaWorldPx).clamped(0f, RUNWAY_FINISH_PX)
         recordSample(seconds)
     }
 
@@ -200,43 +257,15 @@ class RunwayScrollState internal constructor(
         if (!dragging) return
         dragging = false
         val v = partingSpeed()
-        if (snapStops.isNotEmpty()) {
-            // A step: rest on the nearest stop, or the next one along if the release was a flick.
-            var i = nearestStop(scrollPx)
-            if (v > STEP_FLING && snapStops[i] < scrollPx) i++
-            if (v < -STEP_FLING && snapStops[i] > scrollPx) i--
-            targetPx = snapStops[i.coerceIn(0, snapStops.lastIndex)]
-            velocityPxPerSec = v.clamped(-STEP_MAX_SPEED, STEP_MAX_SPEED)
-            settling = true
-            return
-        }
         velocityPxPerSec = v
-        // Aim a throw forward by 0.42s of parting speed and let the measured settle spring bring it to rest.
-        targetPx = (scrollPx + v * 0.42f).clamped(0f, RUNWAY_FINISH_PX)
+        // Aim a throw forward by the coast time of parting speed and let the settle spring bring it to rest.
+        targetPx = (scrollPx + v * flingCoastSec).clamped(0f, RUNWAY_FINISH_PX)
         settling = true
     }
 
     internal fun onWheel(deltaWorldPx: Float) {
         if (dragging) return
-        autoplay = false
-        launching = false
-        launchProgress = 0f
-        if (snapStops.isNotEmpty()) {
-            // One step per push of the wheel: a trackpad's long tail of small deltas is
-            // gathered up, spent on a single step, and ignored until the pause is over.
-            if (clockSec - lastWheelSec > WHEEL_IDLE_RESET) wheelAcc = 0f
-            lastWheelSec = clockSec
-            if (clockSec - lastWheelStepSec < WHEEL_STEP_COOLDOWN) return
-            wheelAcc += deltaWorldPx
-            if (abs(wheelAcc) < WHEEL_STEP_PX) return
-            val from = nearestStop(if (settling) targetPx else scrollPx)
-            val to = (from + if (wheelAcc > 0f) 1 else -1).coerceIn(0, snapStops.lastIndex)
-            wheelAcc = 0f
-            lastWheelStepSec = clockSec
-            targetPx = snapStops[to]
-            settling = true
-            return
-        }
+        stopAutoplay()
         if (!settling) targetPx = scrollPx
         targetPx = (targetPx + deltaWorldPx).clamped(0f, RUNWAY_FINISH_PX)
         settling = true
@@ -245,70 +274,70 @@ class RunwayScrollState internal constructor(
     internal fun advance(deltaMs: Float) {
         tick++
         val dt = (deltaMs / 1000f).clamped(0.0005f, 0.05f)
-        clockSec += dt
 
-        if (launching) {
-            launchClockSec += dt
-            // Measured Segment 3 (0.00..0.73s fold) + Segment 4 (0.73..2.37s launch) then reset to top
-            val fold = (launchClockSec / 0.733f).clamped(0f, 1f)
-            launchProgress = fold
-            if (launchClockSec in 0.733f..2.367f) {
-                val tau = ((launchClockSec - 0.733f) / 1.633f).clamped(0f, 1f)
-                val p = evalCubicBezier(tau, 0.6282f, 0.4770f, 0.8539f, 1.0878f)
-                val prev = scrollPx
-                scrollPx = RUNWAY_FINISH_PX - 676.96f * p
-                velocityPxPerSec = (scrollPx - prev) / dt
-            } else if (launchClockSec > 2.367f) {
-                // Loop cleanly back to the t = 2.000s start of the runway tour
-                launching = false
-                launchProgress = 0f
-                tourTimeSec = 2.0f
-                if (snapStops.isNotEmpty()) {
-                    // Stepping has no tour to resume: land back on the first stop.
-                    scrollPx = snapStops.first()
-                    targetPx = scrollPx
-                    velocityPxPerSec = 0f
-                } else {
-                    scrollPx = RUNWAY_START_2S_PX
-                    autoplay = true
-                }
-            }
-        } else if (autoplay && !dragging) {
+        if (autoplay && !dragging) {
             val prev = scrollPx
             tourTimeSec += dt
             scrollPx = evalMeasuredTourPx(tourTimeSec)
             velocityPxPerSec = (scrollPx - prev) / dt
-            if (tourTimeSec >= 24.433f) {
-                // Hold at the finish line for 0.73s, then fold & launch and loop
-                launching = true
-                launchClockSec = 0f
+            if (tourTimeSec >= TOUR_END_SEC) {
+                // After the finish hold, rewind to the top on the settle spring and play again.
+                autoplay = false
+                rewinding = true
+                targetPx = RUNWAY_START_2S_PX
+                settling = true
             }
         } else if (settling && !dragging) {
-            // Integrate the measured damped spring: omega_n = 16.5944 rad/s, zeta = 0.7907
-            val omega = sqrt(SETTLE_STIFFNESS)
+            // Integrate the damped settle spring.
+            val omega = sqrt(settleStiffness)
             val steps = (dt / MAX_STEP).toInt().coerceIn(1, 16)
             val h = dt / steps
             repeat(steps) {
-                val acc = -omega * omega * (scrollPx - targetPx) - 2f * SETTLE_DAMPING * omega * velocityPxPerSec
+                val acc = -omega * omega * (scrollPx - targetPx) - 2f * settleDampingRatio * omega * velocityPxPerSec
                 velocityPxPerSec += acc * h
-                scrollPx = (scrollPx + velocityPxPerSec * h).clamped(minScrollPx, RUNWAY_FINISH_PX)
+                scrollPx = (scrollPx + velocityPxPerSec * h).clamped(0f, RUNWAY_FINISH_PX)
             }
             if (abs(velocityPxPerSec) < 2f && abs(scrollPx - targetPx) < 0.5f) {
                 scrollPx = targetPx
                 velocityPxPerSec = 0f
                 settling = false
+                if (rewinding) {
+                    rewinding = false
+                    tourTimeSec = 2.0f
+                    autoplay = true
+                }
             }
         } else if (!dragging) {
             velocityPxPerSec = 0f
         }
 
-        // Update active section from the section visible across the middle of the runway (s = scrollPx + 1450)
-        val lookAtS = scrollPx + 1450f
+        updateDerived()
+    }
+
+    private fun updateDerived() {
+        val moving = dragging || settling || autoplay
+        if (isScrollInProgress != moving) isScrollInProgress = moving
+
+        // The section across the middle of the runway.
+        val lookAtS = scrollPx + SECTION_LOOK_AHEAD_PX
         var sec = 0
-        for (i in 0 until SECTION_BOUNDARIES_PX.size) {
-            if (lookAtS >= SECTION_BOUNDARIES_PX[i]) sec = i + 1 else break
+        for (i in 1 until sectionStarts.size) {
+            if (lookAtS >= sectionStarts[i]) sec = i else break
         }
         if (activeSection != sec) activeSection = sec
+
+        if (cardRests.isNotEmpty()) {
+            val item = cardItems[nearest(cardRests, scrollPx)]
+            if (currentIndex != item) currentIndex = item
+        }
+    }
+
+    private fun nearest(anchors: FloatArray, px: Float): Int {
+        var best = 0
+        for (i in 1 until anchors.size) {
+            if (abs(anchors[i] - px) < abs(anchors[best] - px)) best = i
+        }
+        return best
     }
 
     private fun recordSample(seconds: Float) {
@@ -386,32 +415,3 @@ internal fun evalCubicBezier(tau: Float, x1: Float, y1: Float, x2: Float, y2: Fl
     val om = 1f - s
     return 3f * om * om * s * y1 + 3f * om * s * s * y2 + s * s * s
 }
-
-/** Calibrated world coordinates of the 10 section boundaries (in native runway px out of 44,071 px). */
-internal val SECTION_BOUNDARIES_PX = floatArrayOf(
-    7151.5f,   // 01 Agentic -> 02 Sidekick
-    9997.4f,   // 02 Sidekick -> 03 Online
-    13343.6f,  // 03 Online -> 04 Merchandising
-    15927.3f,  // 04 Merchandising -> 05 Retail
-    19360.8f,  // 05 Retail -> 06 Payments
-    24839.8f,  // 06 Payments -> 07 Operations
-    28799.4f,  // 07 Operations -> 08 Shop
-    31847.5f,  // 08 Shop -> 09 Marketing
-    34389.4f,  // 09 Marketing -> 10 Fulfillment
-    37802.3f,  // 10 Fulfillment -> 11 Developer
-)
-
-/** Scroll targets for jumping to each of the 11 sections. */
-internal val SECTION_STARTS_PX = floatArrayOf(
-    RUNWAY_START_2S_PX,
-    6700f,
-    9550f,
-    12900f,
-    15500f,
-    18900f,
-    24400f,
-    28350f,
-    31400f,
-    33950f,
-    37350f,
-)

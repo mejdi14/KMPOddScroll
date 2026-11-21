@@ -7,8 +7,12 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -37,7 +41,6 @@ import io.github.mejdi14.oddscroll.internal.PI_F
 import io.github.mejdi14.oddscroll.internal.cardBitmap
 import io.github.mejdi14.oddscroll.internal.clamped
 import io.github.mejdi14.oddscroll.internal.lerp
-import io.github.mejdi14.oddscroll.internal.smoothstep
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.cos
@@ -46,7 +49,6 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
-import kotlin.math.sqrt
 
 /** Which lateral slot a [RunwayItem] occupies on the runway. */
 enum class RunwaySpan {
@@ -58,7 +60,20 @@ enum class RunwaySpan {
     Right,
 }
 
-/** One raised 3D card plinth on the runway. */
+/**
+ * One raised 3D card plinth on the runway.
+ *
+ * The runway lays its rows out by itself, filling the sections in order and
+ * alternating full-width rows with left/right pairs, so [sectionIndex] and
+ * [span] describe where the item belongs but are not read by the layout.
+ *
+ * @property image artwork warped onto the plinth's top face, cropped to 1.45:1.
+ * @property title bold line at the top of the plinth.
+ * @property subtitle smaller line under the title; empty draws none.
+ * @property callout text on the leader line off the plinth's top corner.
+ * @property sectionIndex section the item belongs to.
+ * @property span lateral slot the item belongs in.
+ */
 data class RunwayItem(
     val image: ImageBitmap,
     val title: String,
@@ -68,7 +83,14 @@ data class RunwayItem(
     val span: RunwaySpan = RunwaySpan.Full,
 )
 
-/** One of the 11 colour-coded sections tiling the runway. */
+/**
+ * One colour band tiling the runway, named in the margin index.
+ *
+ * @property name the section's title on the runway and in the margin index.
+ * @property color the band's floor colour.
+ * @property startPx where the band starts along the runway, in native px (`0 .. 44,071`).
+ * @property endPx where it ends.
+ */
 data class RunwaySection(
     val name: String,
     val color: Color,
@@ -115,7 +137,6 @@ val DefaultRunwaySections: List<RunwaySection> = listOf(
 private const val RAIL_OUTER_U = 0.369f
 private const val RAIL_GUTTER_U = 0.0074f
 private const val PLINTH_THICKNESS_NORM = 20.0f / 1080.0f
-internal const val PAGE_WIDTH_PX = 993.0f
 private const val TAP_SLOP = 8f
 
 /** Left-margin HUD index dot column and vertical row pitch on the 1080x1080 reference frame. */
@@ -123,72 +144,48 @@ private const val HUD_DOT_X_NORM = 116.0f / 1080.0f
 private const val HUD_TOP_Y_NORM = 404.0f / 1080.0f
 private const val HUD_ROW_PITCH_NORM = 26.0f / 1080.0f
 
-/*
- * Paper buildings. With them on, the runway is retiled into one band of colour
- * per item, no two neighbours alike, and each band holds one platform with a
- * paper pagoda on its centre. Flat, the pagoda is its own plan drawn on the
- * platform; as the platform comes to the middle of the frame it telescopes up
- * storey by storey, and it folds back down as the platform leaves. Nothing is
- * written anywhere: the runway is only the bands, the platforms and the towers.
- */
+/** Screen row, as a share of the height, that counts as the middle of the frame for the current item. */
+private const val FOCUS_YN = 0.5f
 
-/** Screen row a pagoda's axis rests on when its platform is the one in focus. */
-private const val FOCUS_AXIS_YN = 0.60f
-
-/** Runway px from the focus row inside which a pagoda stands square, and past which it is flat. */
-private const val FOLD_UP_PX = 140f
-private const val FOLD_FLAT_PX = 780f
-
-/** Length of one band, and how many bare bands run up to the first so the runway has a far end to show. */
-private const val PAPER_BAND_PX = 1500f
-private const val PAPER_LEAD_IN_BANDS = 2
-
-/** A platform: half its width in runway widths, and its length in runway px. */
-private const val PAPER_PLATFORM_U = 0.28f
-private const val PAPER_PLATFORM_PX = 600f
-
-/** Storeys above the hall, item by item, so that no pagoda is its neighbour's twin. */
-private val PAGODA_STOREYS = intArrayOf(4, 3, 4, 2, 4, 3)
-
-/** Colours close enough to pass for one another on two bands side by side. */
-private fun alike(a: Color, b: Color): Boolean =
-    abs(a.red - b.red) + abs(a.green - b.green) + abs(a.blue - b.blue) < 0.12f
+/** Card artwork crop (width over height) and corner rounding as a share of its shorter side. */
+private const val IMAGE_RATIO = 1.45f
+private const val IMAGE_CORNER = 0.045f
 
 /**
- * The runway of [sections] cut again into equal bands, taking the sections'
- * colours in turn and passing over any that would repeat the band before.
- */
-private fun paperBands(sections: List<RunwaySection>): List<RunwaySection> {
-    val count = ceil(sections.last().endPx / PAPER_BAND_PX).toInt()
-    val bands = ArrayList<RunwaySection>(count + PAPER_LEAD_IN_BANDS)
-    var pick = 0
-    for (k in -PAPER_LEAD_IN_BANDS until count) {
-        var section = sections[pick++ % sections.size]
-        var passes = 0
-        while (bands.isNotEmpty() && alike(section.color, bands.last().color) && passes++ < sections.size) {
-            section = sections[pick++ % sections.size]
-        }
-        bands.add(RunwaySection(section.name, section.color, k * PAPER_BAND_PX, (k + 1) * PAPER_BAND_PX))
-    }
-    return bands
-}
-
-/**
- * A colour-banded 3D perspective runway of raised architectural card plinths
- * that curves upward into the distance, flanked by a 500-px coordinate ruler,
- * wireframe callouts, and a left-margin section index tethered to the active
+ * A colour-banded 3D perspective runway of raised card plinths that curves
+ * upward into the distance, flanked by a 500-px coordinate ruler and wireframe
+ * callouts, with a left-margin section index tethered to the active section's
  * cards by live Bezier splines.
  *
  * Drag up or down to run along the 44,071-px runway, flick to coast and settle
- * on the measured damped spring (`zeta = 0.791, stiffness = 275.4`), scroll with
- * a wheel or trackpad, tap any section in the left-margin index to jump there,
- * or tap the `start ↑` plinth at the finish line to fold it and launch.
+ * on a damped spring, scroll with a wheel or trackpad, or tap a section in the
+ * margin index to travel there. Items fill the [sections] in order and repeat
+ * until every section is full, alternating full-width rows with left/right
+ * pairs of half-width plinths in the longer sections.
  *
- * With [paperBuildings] the runway becomes a street of paper pagodas: one band
- * of colour per item, one platform on it, and a pagoda that lies flat as its
- * own plan until the platform nears the middle of the frame and folds up to
- * stand there. The runway then scrolls in steps, one platform at a time, and
- * draws no text at all. Pair it with `rememberRunwayScrollState(autoplay = false)`.
+ * @param items the cards; they repeat down the runway to fill every section.
+ * @param sections the colour bands tiling the runway, far end first, each with
+ *   its name in the margin index.
+ * @param background colour behind the runway.
+ * @param contentColor ink for every line, label, ruler tick, plinth edge, the
+ *   margin index and its tethers.
+ * @param shadowColor colour of the plinths' front walls and the drop shadow
+ *   under each card's artwork.
+ * @param captions whether text is drawn: card titles, subtitles and callouts,
+ *   section titles, ruler numbers, the margin index's names and the scenery's
+ *   labels. Without it the runway keeps its shapes and the index its dots.
+ * @param settleStiffness stiffness of the spring a throw, wheel or travel
+ *   settles on.
+ * @param settleDampingRatio damping ratio of that spring; below 1 it overshoots
+ *   a little before it rests.
+ * @param flingCoast seconds of parting speed a throw carries before it settles.
+ * @param wheelSpeed runway px travelled per unit of wheel or trackpad delta.
+ * @param userScrollEnabled false ignores drag, fling, wheel and margin-index
+ *   taps; scrolling through [state] still works and item taps are still
+ *   reported.
+ * @param onItemClick called with the wrapped item index of a tapped card. When
+ *   null, a tap on a card travels to that card.
+ * @param state scroll position, current item and programmatic scrolling.
  */
 @Composable
 fun RunwayScroll(
@@ -196,8 +193,16 @@ fun RunwayScroll(
     modifier: Modifier = Modifier,
     sections: List<RunwaySection> = DefaultRunwaySections,
     background: Color = Color(0xFF050507),
+    contentColor: Color = Color.White,
+    shadowColor: Color = Color.Black,
+    captions: Boolean = true,
+    settleStiffness: Float = 275.37f,
+    settleDampingRatio: Float = 0.7907f,
+    flingCoast: Float = 0.42f,
+    wheelSpeed: Float = 320f,
+    userScrollEnabled: Boolean = true,
+    onItemClick: ((index: Int) -> Unit)? = null,
     state: RunwayScrollState = rememberRunwayScrollState(),
-    paperBuildings: Boolean = false,
 ) {
     if (items.isEmpty() || sections.isEmpty()) {
         Box(modifier)
@@ -205,26 +210,32 @@ fun RunwayScroll(
     }
 
     val measurer = rememberTextMeasurer()
-    val bakedImages = remember(items, paperBuildings) {
-        if (paperBuildings) emptyList() else items.map { cardBitmap(it.image, 1.45f, 0.045f) }
-    }
-    val bands = remember(sections, paperBuildings) { if (paperBuildings) paperBands(sections) else sections }
-    val layout = remember(items, bands, paperBuildings) { RunwayLayout(items, bands, paperBuildings) }
+    val bakedImages = remember(items) { items.map { cardBitmap(it.image, IMAGE_RATIO, IMAGE_CORNER) } }
+    val layout = remember(items, sections) { RunwayLayout(items, sections) }
     val projector = remember { RunwayProjector() }
-    val pagoda = remember { PaperPagoda() }
+    val scrollEnabled by rememberUpdatedState(userScrollEnabled)
+    val clickHandler by rememberUpdatedState(onItemClick)
+    val wheel by rememberUpdatedState(wheelSpeed)
 
-    LaunchedEffect(state, layout, paperBuildings) {
-        if (paperBuildings) {
-            // One stop per platform, where its pagoda's axis sits on the focus row, and a last one at the finish.
-            val focusXi = projector.evalPhiCard(FOCUS_AXIS_YN)
-            val rows = layout.rowAnchors.size
-            state.setSnapStops(
-                FloatArray(rows + 1) { if (it < rows) layout.rowAnchors[it] - focusXi else RUNWAY_FINISH_PX },
-                IntArray(rows + 1) { if (it < rows) layout.rowSections[it] else bands.lastIndex },
-            )
-        } else {
-            state.setSnapStops(FloatArray(0), IntArray(0))
-        }
+    SideEffect {
+        state.settleStiffness = settleStiffness
+        state.settleDampingRatio = settleDampingRatio
+        state.flingCoastSec = flingCoast
+    }
+
+    // Bound when the composition applies, so an initial index lands before the first frame is drawn.
+    DisposableEffect(state, layout) {
+        state.bind(
+            itemCount = items.size,
+            cardAnchors = FloatArray(layout.placedCards.size) {
+                0.5f * (layout.placedCards[it].sTop + layout.placedCards[it].sBot)
+            },
+            cardItems = IntArray(layout.placedCards.size) { layout.placedCards[it].itemIndex },
+            rowAnchors = layout.rowAnchors,
+            sectionStarts = FloatArray(sections.size) { sections[it].startPx },
+            focusXi = projector.evalPhiCard(FOCUS_YN),
+        )
+        onDispose { }
     }
 
     LaunchedEffect(state) {
@@ -242,7 +253,7 @@ fun RunwayScroll(
         Canvas(
             Modifier
                 .fillMaxSize()
-                .pointerInput(state) {
+                .pointerInput(state, layout) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         var lastY = down.position.y
@@ -256,7 +267,7 @@ fun RunwayScroll(
                             val dy = change.position.y - lastY
                             lastY = change.position.y
                             travel += abs(dy) + abs(change.position.x - change.previousPosition.x)
-                            if (travel > TAP_SLOP) {
+                            if (travel > TAP_SLOP && (started || scrollEnabled)) {
                                 if (!started) {
                                     state.onDragStart(change.uptimeMillis / 1000f)
                                     started = true
@@ -270,8 +281,18 @@ fun RunwayScroll(
                         }
                         if (started) {
                             state.onDragEnd()
-                        } else {
-                            handleTap(down.position, size.width.toFloat(), size.height.toFloat(), if (paperBuildings) 0 else sections.size, state)
+                        } else if (travel <= TAP_SLOP) {
+                            handleTap(
+                                pos = down.position,
+                                width = size.width.toFloat(),
+                                height = size.height.toFloat(),
+                                sectionCount = sections.size,
+                                layout = layout,
+                                projector = projector,
+                                state = state,
+                                scrollEnabled = scrollEnabled,
+                                onItemClick = clickHandler,
+                            )
                         }
                     }
                 }
@@ -279,10 +300,10 @@ fun RunwayScroll(
                     awaitPointerEventScope {
                         while (true) {
                             val event = awaitPointerEvent()
-                            if (event.type != PointerEventType.Scroll) continue
+                            if (event.type != PointerEventType.Scroll || !scrollEnabled) continue
                             val scrollY = event.changes.firstOrNull()?.scrollDelta?.y ?: continue
                             if (scrollY == 0f) continue
-                            state.onWheel(scrollY * 320f)
+                            state.onWheel(scrollY * wheel)
                             event.changes.forEach { it.consume() }
                         }
                     }
@@ -293,10 +314,12 @@ fun RunwayScroll(
                 state = state,
                 layout = layout,
                 bakedImages = bakedImages,
-                sections = bands,
+                sections = sections,
                 projector = projector,
                 measurer = measurer,
-                pagoda = if (paperBuildings) pagoda else null,
+                ink = contentColor,
+                shadow = shadowColor,
+                labels = captions,
             )
         }
     }
@@ -307,25 +330,31 @@ private fun handleTap(
     width: Float,
     height: Float,
     sectionCount: Int,
+    layout: RunwayLayout,
+    projector: RunwayProjector,
     state: RunwayScrollState,
+    scrollEnabled: Boolean,
+    onItemClick: ((Int) -> Unit)?,
 ) {
     if (width <= 0f || height <= 0f) return
     val xNorm = pos.x / width
     val yNorm = pos.y / height
 
-    // 1. Check tap on the left-margin HUD index rows
-    if (xNorm <= 0.16f) {
+    // 1. A row of the left-margin index travels to its section.
+    if (scrollEnabled && xNorm <= 0.16f) {
         val rowFloat = (yNorm - HUD_TOP_Y_NORM) / HUD_ROW_PITCH_NORM
         val idx = rowFloat.roundToInt()
         if (idx in 0 until sectionCount && abs(rowFloat - idx) <= 0.65f) {
-            state.scrollToSection(idx)
+            state.animateScrollToSection(idx)
             return
         }
     }
 
-    // 2. Check tap on the end-of-runway `start ↑` plinth when near the finish
-    if (state.scrollPx >= RUNWAY_FINISH_PX - 1200f && xNorm in 0.34f..0.66f && yNorm in 0.52f..0.82f) {
-        state.triggerLaunch()
+    // 2. A card: its top face and front wall, with the same projection the draw pass uses.
+    val card = layout.cardAt(pos, width, height, state.scrollPx, projector) ?: return
+    when {
+        onItemClick != null -> onItemClick(layout.placedCards[card].itemIndex)
+        scrollEnabled -> state.animateScrollToCard(card)
     }
 }
 
@@ -391,11 +420,7 @@ internal class RunwayProjector {
         return card * 0.960424f
     }
 
-    fun dPhiCardDyNorm(yNorm: Float): Float {
-        val eps = 0.002f
-        return (evalPhiCard(yNorm + eps) - evalPhiCard(yNorm - eps)) / (2f * eps)
-    }
-
+    /** Runway px of floor per unit of normalized screen height at [yNorm]: how far a drag moves the runway. */
     fun dPhiFloorDyNorm(yNorm: Float): Float {
         val eps = 0.002f
         return (evalPhiFloor(yNorm + eps) - evalPhiFloor(yNorm - eps)) / (2f * eps)
@@ -438,40 +463,17 @@ internal class PlacedCard(
 internal class RunwayLayout(
     items: List<RunwayItem>,
     val sections: List<RunwaySection>,
-    paper: Boolean = false,
 ) {
     val placedCards: List<PlacedCard>
 
-    /** The middle and section of each row of cards, far to near; a pair of half-cards is one row. */
+    /** The middle of each row of cards, far to near; a pair of half-cards is one row. */
     val rowAnchors: FloatArray
-    val rowSections: IntArray
 
     init {
         val list = ArrayList<PlacedCard>(items.size * 3)
-        // Populate each of the 11 sections with raised 3D card plinths (alternating full-width and paired half-width plinths)
+        // Fill each section with raised card plinths, alternating full-width rows and paired half-width plinths.
         var cursor = 0
-        if (paper) {
-            // One platform in the middle of every band that lies on the runway proper.
-            for (secIdx in sections.indices) {
-                val sec = sections[secIdx]
-                if (sec.startPx < 0f) continue
-                val middle = 0.5f * (sec.startPx + sec.endPx)
-                list.add(
-                    PlacedCard(
-                        itemIndex = cursor,
-                        item = items[cursor % items.size],
-                        sectionIndex = secIdx,
-                        sTop = middle - PAPER_PLATFORM_PX * 0.5f,
-                        sBot = middle + PAPER_PLATFORM_PX * 0.5f,
-                        uLeft = -PAPER_PLATFORM_U,
-                        uRight = PAPER_PLATFORM_U,
-                        calloutRight = false,
-                    )
-                )
-                cursor++
-            }
-        }
-        for (secIdx in if (paper) IntRange.EMPTY else sections.indices) {
+        for (secIdx in sections.indices) {
             val sec = sections[secIdx]
             val spanPx = sec.endPx - sec.startPx
             var s = sec.startPx + 620f
@@ -536,9 +538,38 @@ internal class RunwayLayout(
         placedCards = list
         val rows = list.filterIndexed { i, card -> i == 0 || card.sTop != list[i - 1].sTop }
         rowAnchors = FloatArray(rows.size) { 0.5f * (rows[it].sTop + rows[it].sBot) }
-        rowSections = IntArray(rows.size) { rows[it].sectionIndex }
+    }
+
+    /**
+     * The placed card under [pos] on a [w] by [h] frame scrolled to [scrollPx],
+     * nearest first, taking in its top face and front wall.
+     */
+    fun cardAt(pos: Offset, w: Float, h: Float, scrollPx: Float, projector: RunwayProjector): Int? {
+        val cx = w * 0.5f
+        val scale = runwayScale(w, h)
+        val yn = pos.y / h
+        for (i in placedCards.indices.reversed()) {
+            val card = placedCards[i]
+            val xiTop = card.sTop - scrollPx
+            val xiBot = card.sBot - scrollPx
+            if (xiBot < projector.xiCardMin || xiTop > projector.xiCardMax) continue
+            val ynTop = projector.xiToYNormCard(xiTop)
+            val ynBot = projector.xiToYNormCard(xiBot)
+            val wall = plinthThicknessPx(ynBot, h) / h
+            if (yn < ynTop || yn > ynBot + wall) continue
+            val across = projector.widthFraction(min(yn, ynBot) + PLINTH_THICKNESS_NORM) * scale
+            if (pos.x in (cx + card.uLeft * across)..(cx + card.uRight * across)) return i
+        }
+        return null
     }
 }
+
+/** Horizontal span the runway's width fraction is a share of, so portrait and landscape both frame cleanly. */
+private fun runwayScale(w: Float, h: Float): Float = min(w, h * 1.12f)
+
+/** Screen height of a plinth's front wall whose near edge sits on row [ynBot]. */
+private fun plinthThicknessPx(ynBot: Float, h: Float): Float =
+    (PLINTH_THICKNESS_NORM * h * (0.55f + 0.65f * ynBot)).clamped(6f, 32f)
 
 // --- Scene Drawing -----------------------------------------------------------
 
@@ -549,7 +580,9 @@ private fun DrawScope.drawRunwayScene(
     sections: List<RunwaySection>,
     projector: RunwayProjector,
     measurer: TextMeasurer,
-    pagoda: PaperPagoda?,
+    ink: Color,
+    shadow: Color,
+    labels: Boolean,
 ) {
     val w = size.width
     val h = size.height
@@ -557,15 +590,13 @@ private fun DrawScope.drawRunwayScene(
 
     val S = state.scrollPx
     val cx = w * 0.5f
-    // Scale horizontal span proportionally to the smaller dimension so portrait and landscape both frame cleanly
-    val runwayScale = min(w, h * 1.12f)
+    val runwayScale = runwayScale(w, h)
 
     fun xAt(u: Float, yNorm: Float): Float =
         cx + u * projector.widthFraction(yNorm) * runwayScale
 
     // 1. Background 3D ground grid, twin curved trajectory arcs, wireframe blocks & math equations
-    val labels = pagoda == null
-    drawGroundEnvironment(S, w, h, cx, runwayScale, projector, measurer, labels, ::xAt)
+    drawGroundEnvironment(S, w, h, runwayScale, projector, measurer, ink, labels, ::xAt)
 
     // 2. Runway floor polygon & colour-banded sections
     val runwayClip = Path().apply {
@@ -601,7 +632,7 @@ private fun DrawScope.drawRunwayScene(
                 // Thin crisp section divider line
                 if (xiStart in projector.xiFloorMin..projector.xiFloorMax) {
                     drawLine(
-                        color = Color.White.copy(alpha = 0.28f),
+                        color = ink.copy(alpha = 0.28f),
                         start = Offset(0f, yTop),
                         end = Offset(w, yTop),
                         strokeWidth = 1.2f,
@@ -620,7 +651,7 @@ private fun DrawScope.drawRunwayScene(
                 val ry = yn * h
                 if (i == 0) railPath.moveTo(rx, ry) else railPath.lineTo(rx, ry)
             }
-            drawPath(railPath, Color.White.copy(alpha = 0.08f), style = Stroke(1f))
+            drawPath(railPath, ink.copy(alpha = 0.08f), style = Stroke(1f))
         }
     }
 
@@ -641,30 +672,19 @@ private fun DrawScope.drawRunwayScene(
             rightBorder.lineTo(xR, yPx)
         }
     }
-    drawPath(leftBorder, Color.White.copy(alpha = 0.42f), style = Stroke(1.4f))
-    drawPath(rightBorder, Color.White.copy(alpha = 0.42f), style = Stroke(1.4f))
+    drawPath(leftBorder, ink.copy(alpha = 0.42f), style = Stroke(1.4f))
+    drawPath(rightBorder, ink.copy(alpha = 0.42f), style = Stroke(1.4f))
 
     // 3. 500-px coordinate ruler ticks & labels on both outside borders of the runway
-    drawBorderRulerTicks(S, h, projector, measurer, labels, ::xAt)
+    drawBorderRulerTicks(S, h, projector, measurer, ink, labels, ::xAt)
 
     // 4. Section titles, constellation node clusters & 4-column feature bullets on the runway floor
     val tetherTargets = ArrayList<Offset>(8)
-    drawSectionHeadersAndClusters(S, h, sections, state.activeSection, projector, measurer, labels, ::xAt, tetherTargets)
+    drawSectionHeadersAndClusters(S, h, sections, state.activeSection, projector, measurer, ink, labels, ::xAt, tetherTargets)
 
     // 5. Raised 3D card plinths, wireframe dimension callouts & projective-warped images (drawn back-to-front: top of screen to bottom)
     val corners = FloatArray(8)
     val matrix = Matrix()
-
-    // Pagodas: where the focus row is along the runway, and how many screen px a runway px of
-    // height is worth. Heights are drawn straight up the screen at the scale of the ground they
-    // stand on. A flat plane seen at the focus row's pitch makes a standing wall 1.6 times as tall
-    // as the same wall lying down; a tall frame stretches the floor, and the towers take half of
-    // that stretch rather than all of it, which would leave them needles.
-    val focusXi = projector.evalPhiCard(FOCUS_AXIS_YN)
-    val lateral = projector.widthFraction(FOCUS_AXIS_YN + PLINTH_THICKNESS_NORM) * runwayScale / PAGE_WIDTH_PX
-    val longitudinal = h / max(projector.dPhiCardDyNorm(FOCUS_AXIS_YN), 1f)
-    val pagodaLift = runwayScale / PAGE_WIDTH_PX *
-        (0.95f * sqrt(1.6f * longitudinal / max(lateral, 1e-3f))).clamped(0.7f, 1.5f)
 
     for (card in layout.placedCards) {
         val xiTop = card.sTop - S
@@ -684,35 +704,10 @@ private fun DrawScope.drawRunwayScene(
             corners = corners,
             matrix = matrix,
             measurer = measurer,
+            ink = ink,
+            shadow = shadow,
             labels = labels,
         )
-
-        if (pagoda != null) {
-            // The pagoda takes the runway's projection as linear about its own axis: the row the
-            // axis stands on, and how fast rows and the runway's width change toward the viewer.
-            val xi = 0.5f * (card.sTop + card.sBot) - S
-            val yn = projector.xiToYNormCard(xi)
-            val ynPerS = (projector.xiToYNormCard(xi + 150f) - projector.xiToYNormCard(xi - 150f)) / 300f
-            val ground = yn + PLINTH_THICKNESS_NORM
-            val widthPerYn = (projector.widthFraction(ground + 0.01f) - projector.widthFraction(ground - 0.01f)) / 0.02f
-            val storeys = PAGODA_STOREYS[card.itemIndex % PAGODA_STOREYS.size]
-            pagoda.draw(
-                scope = this,
-                fold = 1f - smoothstep(FOLD_UP_PX, FOLD_FLAT_PX, abs(xi - focusXi)),
-                storeys = storeys,
-                // A tenth over life size fills the platform; the shorter towers are drawn a little
-                // larger again, so theirs never looks under-filled.
-                scale = 1.1f * (1f + 0.07f * (PAGODA_MAX_STOREYS - storeys)),
-                originX = cx,
-                u = 0.5f * (card.uLeft + card.uRight),
-                yn = yn,
-                ynPerS = ynPerS,
-                widthFraction = projector.widthFraction(ground),
-                widthPerS = widthPerYn * ynPerS,
-                across = runwayScale,
-                lift = pagodaLift,
-            )
-        }
 
         if (card.sectionIndex == state.activeSection && ynTop in 0.05f..0.92f) {
             val ynMid = 0.5f * (ynTop + ynBot)
@@ -720,11 +715,8 @@ private fun DrawScope.drawRunwayScene(
         }
     }
 
-    // 6. End-of-runway `start ↑` plinth and 3D control bar at s = 44,071 px
-    drawFinishControlBar(state, S, w, h, projector, measurer, labels, ::xAt)
-
-    // 7. Left-margin 11-section HUD index and dynamic Bezier spline tethers to active section elements
-    if (labels) drawLeftHudAndTethers(state.activeSection, sections, w, h, measurer, tetherTargets)
+    // 6. Left-margin section index and Bezier spline tethers to the active section's elements
+    drawLeftHudAndTethers(state.activeSection, sections, w, h, measurer, ink, labels, tetherTargets)
 }
 
 private fun stepsToFloat(n: Int): Float = max(n, 1).toFloat()
@@ -742,15 +734,15 @@ private fun DrawScope.drawGroundEnvironment(
     S: Float,
     w: Float,
     h: Float,
-    cx: Float,
     runwayScale: Float,
     projector: RunwayProjector,
     measurer: TextMeasurer,
+    ink: Color,
     labels: Boolean,
     xAt: (Float, Float) -> Float,
 ) {
-    val gridColor = Color.White.copy(alpha = 0.07f)
-    val arcColor = Color.White.copy(alpha = 0.32f)
+    val gridColor = ink.copy(alpha = 0.07f)
+    val arcColor = ink.copy(alpha = 0.32f)
 
     // Twin curved trajectory rails flanking the runway on both sides
     for (uArc in floatArrayOf(-0.68f, -0.84f, 0.68f, 0.84f)) {
@@ -769,12 +761,12 @@ private fun DrawScope.drawGroundEnvironment(
     val firstGrid = (floor((S + projector.xiFloorMin) / 1000f).toInt() * 1000).coerceAtLeast(0)
     val lastGrid = ceil((S + projector.xiFloorMax) / 1000f).toInt() * 1000
     val formulaStyle = TextStyle(
-        color = Color.White.copy(alpha = 0.36f),
+        color = ink.copy(alpha = 0.36f),
         fontSize = 9.sp,
         fontFamily = FontFamily.Monospace,
     )
     val dimStyle = TextStyle(
-        color = Color.White.copy(alpha = 0.42f),
+        color = ink.copy(alpha = 0.42f),
         fontSize = 8.sp,
         fontFamily = FontFamily.Monospace,
     )
@@ -802,13 +794,13 @@ private fun DrawScope.drawGroundEnvironment(
                 val topY = yPx - bh
                 // Front & side wireframe box
                 drawRect(
-                    color = Color.White.copy(alpha = 0.22f),
+                    color = ink.copy(alpha = 0.22f),
                     topLeft = Offset(bx - bw * 0.5f, topY),
                     size = Size(bw, bh),
                     style = Stroke(1f),
                 )
                 drawRect(
-                    color = Color.White.copy(alpha = 0.14f),
+                    color = ink.copy(alpha = 0.14f),
                     topLeft = Offset(bx - bw * 0.5f + depth, topY - abs(depth) * 0.4f),
                     size = Size(bw, bh),
                     style = Stroke(1f),
@@ -840,17 +832,18 @@ private fun DrawScope.drawBorderRulerTicks(
     h: Float,
     projector: RunwayProjector,
     measurer: TextMeasurer,
+    ink: Color,
     labels: Boolean,
     xAt: (Float, Float) -> Float,
 ) {
     val firstTick = (floor((S + projector.xiFloorMin) / 500f).toInt() * 500).coerceAtLeast(0)
     val lastTick = (ceil((S + projector.xiFloorMax) / 500f).toInt() * 500).coerceAtMost(45000)
     val tickStyle = TextStyle(
-        color = Color.White.copy(alpha = 0.40f),
+        color = ink.copy(alpha = 0.40f),
         fontSize = 8.5.sp,
         fontFamily = FontFamily.Monospace,
     )
-    val tickColor = Color.White.copy(alpha = 0.45f)
+    val tickColor = ink.copy(alpha = 0.45f)
 
     var sTick = firstTick
     while (sTick <= lastTick) {
@@ -884,6 +877,7 @@ private fun DrawScope.drawSectionHeadersAndClusters(
     activeSection: Int,
     projector: RunwayProjector,
     measurer: TextMeasurer,
+    ink: Color,
     labels: Boolean,
     xAt: (Float, Float) -> Float,
     tetherTargets: MutableList<Offset>,
@@ -905,11 +899,11 @@ private fun DrawScope.drawSectionHeadersAndClusters(
                     val dist = rScale * (0.45f + 0.55f * ((k * 7 + secIdx * 3) % 5) / 4f)
                     val nx = cx + cos(angle) * dist
                     val ny = cy + sin(angle) * dist * 0.52f
-                    drawLine(Color.White.copy(alpha = 0.28f), Offset(cx, cy), Offset(nx, ny), strokeWidth = 1f)
-                    drawCircle(Color.White.copy(alpha = 0.75f), radius = 2.2f, center = Offset(nx, ny))
+                    drawLine(ink.copy(alpha = 0.28f), Offset(cx, cy), Offset(nx, ny), strokeWidth = 1f)
+                    drawCircle(ink.copy(alpha = 0.75f), radius = 2.2f, center = Offset(nx, ny))
                 }
                 drawRect(
-                    color = Color.White,
+                    color = ink,
                     topLeft = Offset(cx - 5f, cy - 5f),
                     size = Size(10f, 10f),
                 )
@@ -926,7 +920,7 @@ private fun DrawScope.drawSectionHeadersAndClusters(
                 val ty = yn * h
                 val fontScale = (0.55f + 0.75f * yn).clamped(0.55f, 1.25f)
                 val titleStyle = TextStyle(
-                    color = Color.White,
+                    color = ink,
                     fontSize = (22f * fontScale).sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.SansSerif,
@@ -939,14 +933,14 @@ private fun DrawScope.drawSectionHeadersAndClusters(
                 val colUs = floatArrayOf(-0.34f, -0.16f, 0.02f, 0.20f)
                 for (uCol in colUs) {
                     val bx = xAt(uCol, ynBullets)
-                    drawCircle(Color.White, radius = 2.8f, center = Offset(bx, yBulletsPx))
+                    drawCircle(ink, radius = 2.8f, center = Offset(bx, yBulletsPx))
                     // Simulated crisp multi-line blueprint spec bars beside each bullet dot
                     val barW = (xAt(uCol + 0.12f, ynBullets) - bx).coerceAtLeast(18f)
                     for (line in 0..3) {
                         val ly = yBulletsPx + line * 4.5f * fontScale
                         val lw = barW * (if (line == 3) 0.62f else 0.92f)
                         drawLine(
-                            color = Color.White.copy(alpha = if (line == 0) 0.55f else 0.26f),
+                            color = ink.copy(alpha = if (line == 0) 0.55f else 0.26f),
                             start = Offset(bx + 6f, ly),
                             end = Offset(bx + 6f + lw, ly),
                             strokeWidth = 1.4f,
@@ -973,11 +967,13 @@ private fun DrawScope.drawCardPlinth(
     corners: FloatArray,
     matrix: Matrix,
     measurer: TextMeasurer,
+    ink: Color,
+    shadow: Color,
     labels: Boolean,
 ) {
     val yTopPx = ynTop * h
     val yBotPx = ynBot * h
-    val thicknessPx = (PLINTH_THICKNESS_NORM * h * (0.55f + 0.65f * ynBot)).clamped(6f, 32f)
+    val thicknessPx = plinthThicknessPx(ynBot, h)
 
     // Raised top face of the plinth has its effective width evaluated at yn + PLINTH_THICKNESS_NORM
     val ynTopEff = ynTop + PLINTH_THICKNESS_NORM
@@ -1000,8 +996,8 @@ private fun DrawScope.drawCardPlinth(
         lineTo(xBL, yBotPx)
         close()
     }
-    drawPath(topFace, Color.White.copy(alpha = 0.08f))
-    drawPath(topFace, Color.White.copy(alpha = 0.38f), style = Stroke(1.2f))
+    drawPath(topFace, ink.copy(alpha = 0.08f))
+    drawPath(topFace, ink.copy(alpha = 0.38f), style = Stroke(1.2f))
 
     // 2. Plinth front vertical wall (`z(t)`) between yBotPx and yBaseBotPx
     val frontFace = Path().apply {
@@ -1011,14 +1007,14 @@ private fun DrawScope.drawCardPlinth(
         lineTo(xBL, yBaseBotPx)
         close()
     }
-    drawPath(frontFace, Color.Black.copy(alpha = 0.28f))
-    drawPath(frontFace, Color.White.copy(alpha = 0.42f), style = Stroke(1.2f))
+    drawPath(frontFace, shadow.copy(alpha = 0.28f))
+    drawPath(frontFace, ink.copy(alpha = 0.42f), style = Stroke(1.2f))
 
     // Wireframe vertical corner struts & `Δx`, `z(t)` dimension lines
-    drawLine(Color.White.copy(alpha = 0.30f), Offset(xTL, yTopPx), Offset(xTL, yBaseTopPx), strokeWidth = 1f)
-    drawLine(Color.White.copy(alpha = 0.30f), Offset(xTR, yTopPx), Offset(xTR, yBaseTopPx), strokeWidth = 1f)
+    drawLine(ink.copy(alpha = 0.30f), Offset(xTL, yTopPx), Offset(xTL, yBaseTopPx), strokeWidth = 1f)
+    drawLine(ink.copy(alpha = 0.30f), Offset(xTR, yTopPx), Offset(xTR, yBaseTopPx), strokeWidth = 1f)
     drawLine(
-        Color.White.copy(alpha = 0.22f),
+        ink.copy(alpha = 0.22f),
         Offset(xBL, yBaseBotPx + 5f),
         Offset(xBR, yBaseBotPx + 5f),
         strokeWidth = 1f,
@@ -1054,7 +1050,7 @@ private fun DrawScope.drawCardPlinth(
             lineTo(corners[6] + 4f, corners[7] + 5f)
             close()
         }
-        drawPath(shadowPath, Color.Black.copy(alpha = 0.35f))
+        drawPath(shadowPath, shadow.copy(alpha = 0.35f))
     }
 
     if (image != null && quadMatrix(corners, image.width.toFloat(), image.height.toFloat(), matrix)) {
@@ -1076,7 +1072,7 @@ private fun DrawScope.drawCardPlinth(
     val padY = (yBotPx - yTopPx) * 0.10f
     if (labels && yBotPx - yTopPx > 28f && xTR - xTL > 70f) {
         val cardTitleStyle = TextStyle(
-            color = Color.White.copy(alpha = 0.92f),
+            color = ink.copy(alpha = 0.92f),
             fontSize = (11f * scale).sp,
             fontWeight = FontWeight.SemiBold,
             fontFamily = FontFamily.SansSerif,
@@ -1089,7 +1085,7 @@ private fun DrawScope.drawCardPlinth(
         )
         if (card.item.subtitle.isNotEmpty() && yBotPx - yTopPx > 54f) {
             val subStyle = TextStyle(
-                color = Color.White.copy(alpha = 0.68f),
+                color = ink.copy(alpha = 0.68f),
                 fontSize = (8.5f * scale).sp,
                 fontFamily = FontFamily.SansSerif,
             )
@@ -1114,12 +1110,12 @@ private fun DrawScope.drawCardPlinth(
             (elbowX - 115f * scale).coerceAtLeast(8f)
         }
 
-        drawCircle(Color.White.copy(alpha = 0.75f), radius = 2.4f, center = Offset(anchorX, anchorY))
-        drawLine(Color.White.copy(alpha = 0.50f), Offset(anchorX, anchorY), Offset(elbowX, elbowY), strokeWidth = 1f)
-        drawLine(Color.White.copy(alpha = 0.50f), Offset(elbowX, elbowY), Offset(endX, elbowY), strokeWidth = 1f)
+        drawCircle(ink.copy(alpha = 0.75f), radius = 2.4f, center = Offset(anchorX, anchorY))
+        drawLine(ink.copy(alpha = 0.50f), Offset(anchorX, anchorY), Offset(elbowX, elbowY), strokeWidth = 1f)
+        drawLine(ink.copy(alpha = 0.50f), Offset(elbowX, elbowY), Offset(endX, elbowY), strokeWidth = 1f)
 
         val calloutStyle = TextStyle(
-            color = Color.White.copy(alpha = 0.92f),
+            color = ink.copy(alpha = 0.92f),
             fontSize = (9.5f * scale).sp,
             fontWeight = FontWeight.Medium,
             fontFamily = FontFamily.SansSerif,
@@ -1134,126 +1130,6 @@ private fun DrawScope.drawCardPlinth(
     }
 }
 
-// --- Finish `start ↑` Plinth & 3D Wireframe Control Bar ----------------------
-
-private fun DrawScope.drawFinishControlBar(
-    state: RunwayScrollState,
-    S: Float,
-    w: Float,
-    h: Float,
-    projector: RunwayProjector,
-    measurer: TextMeasurer,
-    labels: Boolean,
-    xAt: (Float, Float) -> Float,
-) {
-    val sFinish = 45000f
-    val xiFinish = sFinish - S
-    if (xiFinish > projector.xiFloorMax + 600f) return
-
-    val ynFinish = projector.xiToYNormFloor(xiFinish.clamped(projector.xiFloorMin, projector.xiFloorMax))
-    val fold = state.launchProgress
-
-    // 1. White `start ↑` block sitting centred below the 45000 finish line
-    val ynBtnTop = (ynFinish + 0.08f + 0.04f * fold).clamped(0.05f, 0.92f)
-    val ynBtnBot = (ynFinish + 0.145f - 0.018f * fold).clamped(ynBtnTop + 0.008f, 0.95f)
-    val yBtnTop = ynBtnTop * h
-    val yBtnBot = ynBtnBot * h
-    val xBtnL = xAt(-0.134f, ynBtnBot)
-    val xBtnR = xAt(0.134f, ynBtnBot)
-
-    drawRect(
-        color = Color(0xFFF2F2F2),
-        topLeft = Offset(xBtnL, yBtnTop),
-        size = Size(xBtnR - xBtnL, yBtnBot - yBtnTop),
-    )
-    drawRect(
-        color = Color(0xFF3A3A3E),
-        topLeft = Offset(xBtnL, yBtnBot),
-        size = Size(xBtnR - xBtnL, 6f * (1f - 0.6f * fold)),
-    )
-    if (!labels) {
-        // No lettering: the block says "back to the start" with an arrow, and the bar of keys is left out.
-        val midX = (xBtnL + xBtnR) * 0.5f
-        val midY = (yBtnTop + yBtnBot) * 0.5f
-        val reach = ((yBtnBot - yBtnTop) * 0.28f).clamped(3f, 12f)
-        val ink = Color(0xFF111114)
-        drawLine(ink, Offset(midX, midY + reach), Offset(midX, midY - reach), strokeWidth = 2f)
-        drawLine(ink, Offset(midX, midY - reach), Offset(midX - reach * 0.7f, midY - reach * 0.3f), strokeWidth = 2f)
-        drawLine(ink, Offset(midX, midY - reach), Offset(midX + reach * 0.7f, midY - reach * 0.3f), strokeWidth = 2f)
-        return
-    }
-    if (yBtnBot - yBtnTop > 18f) {
-        val startStyle = TextStyle(
-            color = Color(0xFF111114),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-            fontFamily = FontFamily.Monospace,
-        )
-        drawText(
-            textMeasurer = measurer,
-            text = "start  \u2191",
-            topLeft = Offset((xBtnL + xBtnR) * 0.5f - 28f, (yBtnTop + yBtnBot) * 0.5f - 8f),
-            style = startStyle,
-        )
-    }
-
-    // 2. 3D wireframe control bar below the `start ↑` button (`page W = 993 px`, `to the finish: ↑ 44,071 px`)
-    val ynBarTop = (ynFinish + 0.19f).clamped(0.10f, 0.94f)
-    val ynBarBot = (ynBarTop + 0.055f).clamped(ynBarTop + 0.02f, 0.98f)
-    if (ynBarTop < 0.92f) {
-        val barL = w * 0.102f
-        val barR = w * 0.898f
-        val barTop = ynBarTop * h
-        val barBot = ynBarBot * h
-        val barW = barR - barL
-        val barH = barBot - barTop
-
-        drawRect(
-            color = Color(0xFF0A0A0D).copy(alpha = 0.88f),
-            topLeft = Offset(barL, barTop),
-            size = Size(barW, barH),
-        )
-        drawRect(
-            color = Color.White.copy(alpha = 0.55f),
-            topLeft = Offset(barL, barTop),
-            size = Size(barW, barH),
-            style = Stroke(1.2f),
-        )
-
-        val headers = arrayOf("hop", "steer", "faster", "brake", "speed", "to the finish")
-        val speedVal = max(350, state.velocityPxPerSec.roundToInt().let { if (it == 0) 350 else abs(it) })
-        val values = arrayOf(
-            "space",
-            "\u2190 \u2192 A D",
-            "\u2191 W scroll up",
-            "\u2193 S scroll down",
-            "v \u2265 $speedVal px/s",
-            "\u2191 ${state.scrollPx.roundToInt()} / 44,071 px",
-        )
-        val colFracs = floatArrayOf(0f, 0.11f, 0.24f, 0.43f, 0.65f, 0.82f, 1f)
-        val headStyle = TextStyle(color = Color.White.copy(alpha = 0.48f), fontSize = 8.5.sp, fontFamily = FontFamily.Monospace)
-        val valStyle = TextStyle(color = Color.White.copy(alpha = 0.88f), fontSize = 9.5.sp, fontFamily = FontFamily.Monospace)
-
-        for (c in headers.indices) {
-            val cx0 = barL + colFracs[c] * barW
-            if (c > 0) {
-                drawLine(Color.White.copy(alpha = 0.22f), Offset(cx0, barTop), Offset(cx0, barBot), strokeWidth = 1f)
-            }
-            drawText(measurer, headers[c], Offset(cx0 + 8f, barTop + 5f), style = headStyle)
-            drawText(measurer, values[c], Offset(cx0 + 8f, barTop + barH * 0.52f), style = valStyle)
-        }
-
-        // `page W = 993 px` dimension line underneath
-        val pageStyle = TextStyle(color = Color.White.copy(alpha = 0.45f), fontSize = 8.5.sp, fontFamily = FontFamily.Monospace)
-        drawText(
-            measurer,
-            "page  W = ${PAGE_WIDTH_PX.roundToInt()} px",
-            Offset(w * 0.5f - 46f, (barBot + 10f).coerceAtMost(h - 14f)),
-            style = pageStyle,
-        )
-    }
-}
-
 // --- Left-Margin HUD Index & Dynamic Bezier Tether Splines -------------------
 
 private fun DrawScope.drawLeftHudAndTethers(
@@ -1262,6 +1138,8 @@ private fun DrawScope.drawLeftHudAndTethers(
     w: Float,
     h: Float,
     measurer: TextMeasurer,
+    ink: Color,
+    labels: Boolean,
     tetherTargets: List<Offset>,
 ) {
     val dotX = HUD_DOT_X_NORM * w
@@ -1270,19 +1148,21 @@ private fun DrawScope.drawLeftHudAndTethers(
     for (i in sections.indices) {
         val rowY = (HUD_TOP_Y_NORM + i * HUD_ROW_PITCH_NORM) * h
         val isActive = i == activeSection
-        val textStyle = TextStyle(
-            color = Color.White.copy(alpha = if (isActive) 0.95f else 0.45f),
-            fontSize = 9.5.sp,
-            fontFamily = FontFamily.Monospace,
-            fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
-        )
-        drawText(measurer, sections[i].name, Offset(labelX, rowY - 6f), style = textStyle)
+        if (labels) {
+            val textStyle = TextStyle(
+                color = ink.copy(alpha = if (isActive) 0.95f else 0.45f),
+                fontSize = 9.5.sp,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
+            )
+            drawText(measurer, sections[i].name, Offset(labelX, rowY - 6f), style = textStyle)
+        }
 
         if (isActive) {
-            drawCircle(Color.White, radius = 3.2f, center = Offset(dotX, rowY))
+            drawCircle(ink, radius = 3.2f, center = Offset(dotX, rowY))
         } else {
             drawCircle(
-                color = Color.White.copy(alpha = 0.48f),
+                color = ink.copy(alpha = 0.48f),
                 radius = 2.4f,
                 center = Offset(dotX, rowY),
                 style = Stroke(1.1f),
@@ -1307,7 +1187,7 @@ private fun DrawScope.drawLeftHudAndTethers(
                     target.y,
                 )
             }
-            drawPath(path, Color.White.copy(alpha = 0.58f), style = Stroke(1.15f))
+            drawPath(path, ink.copy(alpha = 0.58f), style = Stroke(1.15f))
         }
     }
 }
