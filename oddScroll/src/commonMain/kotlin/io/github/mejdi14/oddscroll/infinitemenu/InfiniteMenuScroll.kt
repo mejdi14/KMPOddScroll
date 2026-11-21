@@ -46,8 +46,11 @@ import kotlin.math.tan
 
 /** One entry of the menu. */
 data class InfiniteMenuItem(
+    /** The picture, cropped square onto its tile. */
     val image: ImageBitmap,
+    /** Caption line shown while this item's tile is at the front. */
     val title: String = "",
+    /** Smaller line under [title]. */
     val description: String = "",
 )
 
@@ -59,12 +62,23 @@ private const val BACK_CUTOFF = 0.004f
 
 private const val CLICK_SLOP = 8f
 
+/**
+ * Remembers an [InfiniteMenuScrollState].
+ *
+ * @param tileCount how many tiles the sphere carries; keep it equal to the
+ *   composable's `tileCount`.
+ * @param itemCount how many items the pictures repeat from.
+ * @param initialIndex item whose tile starts at the front.
+ */
 @Composable
 fun rememberInfiniteMenuScrollState(
     tileCount: Int,
     itemCount: Int,
+    initialIndex: Int = 0,
 ): InfiniteMenuScrollState = remember(tileCount, itemCount) {
-    InfiniteMenuScrollState(tileCount.coerceIn(6, 400), itemCount.coerceAtLeast(1))
+    InfiniteMenuScrollState(
+        tileCount.coerceIn(6, 400), itemCount.coerceAtLeast(1), initialIndex,
+    )
 }
 
 /**
@@ -87,21 +101,36 @@ fun rememberInfiniteMenuScrollState(
  * settles, so a throw opens the whole of it out and resting on one tile brings
  * that tile close.
  *
+ * A tap on a tile reports its item through [onItemClick]. With no callback, a
+ * tap on any tile but the front one brings it round to the front instead.
+ *
  * Every part of this is geometry, so it is drawn with one image per tile and
  * needs no shader on any platform.
  *
  * @param items pictures and their captions; they repeat around the sphere.
+ * @param modifier applied to the frame.
+ * @param background the page colour; tiles at the back are dimmed toward it.
+ * @param contentColor colour of the caption text.
  * @param tileCount how many tiles the sphere carries, 6 to 400.
  * @param tileSize tile size as a share of its own share of the sphere.
  * @param roundness corner rounding, 0 square to 1 circular.
  * @param zoom how much of the frame the front tile fills.
  * @param pullBack how far the camera backs off while the sphere is moving.
  * @param stretch how far tiles smear along their travel while it spins.
+ * @param dragSpeed how far a drag turns the sphere, as a multiple of the
+ *   default. A drag across the short side of the frame is a bit under half a turn
+ *   at 1.
  * @param inertia how long a throw runs for, 0 to 1.
  * @param autoplay seconds at rest before stepping on. 0 never does.
  * @param grayscale drain the colour from everything but the front tile.
  * @param dim how far the tiles behind are taken toward [background].
  * @param captions draw the front tile's title and description.
+ * @param userScrollEnabled false ignores drag and throw; autoplay, taps and
+ *   programmatic scrolling through [state] still work.
+ * @param onItemClick called with the index into [items] of the tapped tile.
+ *   When null, a tap brings the tapped tile to the front.
+ * @param state which way the sphere is facing; also drives programmatic
+ *   scrolling. Its tile count must match [tileCount].
  */
 @Composable
 fun InfiniteMenuScroll(
@@ -115,11 +144,13 @@ fun InfiniteMenuScroll(
     zoom: Float = 1.65f,
     pullBack: Float = 1f,
     stretch: Float = 0.6f,
+    dragSpeed: Float = 1f,
     inertia: Float = 0.6f,
     autoplay: Float = 3f,
     grayscale: Boolean = true,
     dim: Float = 0.5f,
     captions: Boolean = true,
+    userScrollEnabled: Boolean = true,
     onItemClick: ((Int) -> Unit)? = null,
     state: InfiniteMenuScrollState =
         rememberInfiniteMenuScrollState(tileCount, items.size),
@@ -139,12 +170,13 @@ fun InfiniteMenuScroll(
     val shades = remember(grayscale, dim, background) {
         buildShades(grayscale, dim.clamped(0f, 1f), background)
     }
-    val settings = remember(tileCount, tileSize, zoom, pullBack, inertia, autoplay) {
+    val settings = remember(tileCount, tileSize, zoom, pullBack, dragSpeed, inertia, autoplay) {
         MenuSettings(
             tileCount = tileCount.coerceIn(6, 400),
             tileSize = tileSize.coerceIn(0.2f, 1.2f),
             zoom = zoom.coerceIn(0.2f, 4f),
             pullBack = pullBack.coerceIn(0f, 3f),
+            dragSpeed = max(0f, dragSpeed),
             inertia = inertia.coerceIn(0f, 1f),
             autoplaySeconds = max(0f, autoplay),
         )
@@ -166,10 +198,10 @@ fun InfiniteMenuScroll(
         Canvas(
             Modifier
                 .fillMaxSize()
-                .pointerInput(state, onItemClick) {
+                .pointerInput(state, onItemClick, userScrollEnabled, items.size) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
-                        state.onDragStart()
+                        if (userScrollEnabled) state.onDragStart()
                         var last = down.position
                         var travel = 0f
                         while (true) {
@@ -182,19 +214,19 @@ fun InfiniteMenuScroll(
                             val dy = change.position.y - last.y
                             last = change.position
                             travel += hypot(dx, dy)
-                            if (travel > CLICK_SLOP) {
+                            if (userScrollEnabled && travel > CLICK_SLOP) {
                                 state.onDrag(dx, dy)
                                 change.consume()
                             }
                         }
-                        state.onDragEnd()
+                        if (userScrollEnabled) state.onDragEnd()
                         if (travel <= CLICK_SLOP) {
                             val hit = state.pick(down.position)
                             if (hit >= 0) {
-                                if (hit == state.front) {
-                                    onItemClick?.invoke(state.active)
-                                } else {
-                                    state.goTo(hit)
+                                if (onItemClick != null) {
+                                    onItemClick(hit % items.size)
+                                } else if (hit != state.front) {
+                                    state.aimAt(hit)
                                 }
                             }
                         }
@@ -209,7 +241,7 @@ fun InfiniteMenuScroll(
         }
 
         if (captions) {
-            val item = items[state.active.coerceIn(items.indices)]
+            val item = items[state.currentIndex.coerceIn(items.indices)]
             Caption(item.title, item.description, contentColor, state.settle)
         }
     }
@@ -250,7 +282,7 @@ private fun DrawScope.drawSphere(
         // The back of the sphere is not drawn at all. These tiles are behind
         // the ones in front of them and would only be paid for to be thrown
         // away by the fade.
-        val alpha = smoothstep(0.02f, 0.4f, cz) * state.reveal
+        val alpha = smoothstep(0.02f, 0.4f, cz)
         if (alpha < BACK_CUTOFF) continue
 
         order.add(TileDraw(i, cx, cy, cz, alpha))

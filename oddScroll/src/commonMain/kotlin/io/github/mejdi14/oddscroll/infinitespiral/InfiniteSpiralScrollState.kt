@@ -2,12 +2,17 @@ package io.github.mejdi14.oddscroll.infinitespiral
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Offset
+import io.github.mejdi14.oddscroll.internal.PI_F
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 /** How fast the drift gets up to speed, and how fast it gives way to a hand. */
 private const val SPEED_BLEND = 7f
@@ -27,13 +32,20 @@ private const val FOLLOW_DRAGGING = 22f
  * Position is unbounded and wrapped only when a card is placed, so the spiral
  * has no end to reach and nothing to reset.
  */
-class InfiniteSpiralScrollState internal constructor() {
-    internal var progress = 0f
+class InfiniteSpiralScrollState internal constructor(initialIndex: Int) {
+    internal var progress = initialIndex.toFloat()
         private set
 
-    /** Card currently nearest the middle. */
-    var active by mutableIntStateOf(0)
-        internal set
+    /** Wrapped index of the card nearest the middle. */
+    var currentIndex by mutableIntStateOf(initialIndex.coerceAtLeast(0))
+        private set
+
+    /** True while a drag is held or the spiral is still catching up to where it is aimed. */
+    var isScrollInProgress by mutableStateOf(false)
+        private set
+
+    /** Cards in the spiral, so an index can be wrapped. Kept up to date by the composable. */
+    internal var itemCount = 0
 
     /** Bumped once per frame, so the spiral repaints while it turns. */
     internal var tick by mutableIntStateOf(0)
@@ -42,7 +54,7 @@ class InfiniteSpiralScrollState internal constructor() {
     internal var dragging = false
         private set
 
-    private var target = 0f
+    private var target = initialIndex.toFloat()
     private var autoSpeed = 0f
 
     // --- input ---------------------------------------------------------------
@@ -67,9 +79,62 @@ class InfiniteSpiralScrollState internal constructor() {
         target += (delta * speedScale / max(spacing * 2f, 1f)).coerceIn(-1.5f, 1.5f)
     }
 
-    /** Turn by [by] cards. Public so a host can drive it from its own chrome. */
+    /** Turns the spiral by [by] cards, easing there. Negative goes the other way. */
     fun step(by: Int) {
         target += by.toFloat()
+    }
+
+    /**
+     * Puts card [index] at the middle with no animation, taking the way round
+     * that is nearest to where the spiral is now.
+     */
+    fun scrollTo(index: Int) {
+        if (itemCount <= 0) return
+        progress += wrapHalf(index - progress, itemCount.toFloat())
+        target = progress
+        wrapIndexNow()
+    }
+
+    /**
+     * Turns the spiral to put card [index] at the middle, by the nearer way
+     * round and with the spiral's own easing.
+     */
+    fun animateScrollTo(index: Int) {
+        if (itemCount <= 0) return
+        target += wrapHalf(index - target, itemCount.toFloat())
+    }
+
+    /** Card whose centre contains [at], in dp, nearest to the viewer first; -1 if none. */
+    internal fun pick(at: Offset): Int {
+        var found = -1
+        // Drawn far side first, so the last match is the one on top.
+        for (hit in hits) {
+            val dx = at.x - hit.x
+            val dy = at.y - hit.y
+            val a = -hit.tilt * PI_F / 180f
+            val lx = dx * cos(a) - dy * sin(a)
+            val ly = dx * sin(a) + dy * cos(a)
+            if (abs(lx) <= hit.halfW && abs(ly) <= hit.halfH) found = hit.index
+        }
+        return found
+    }
+
+    /** Where the cards landed last frame, in dp, in the order they were drawn. */
+    internal val hits = ArrayList<Hit>()
+
+    internal class Hit(
+        val index: Int,
+        val x: Float,
+        val y: Float,
+        val halfW: Float,
+        val halfH: Float,
+        val tilt: Float,
+    )
+
+    private fun wrapIndexNow() {
+        if (itemCount <= 0) return
+        val near = ((progress.roundToInt() % itemCount) + itemCount) % itemCount
+        if (currentIndex != near) currentIndex = near
     }
 
     // --- frame ---------------------------------------------------------------
@@ -85,10 +150,10 @@ class InfiniteSpiralScrollState internal constructor() {
         val follow = 1f - exp(-dt * if (dragging) FOLLOW_DRAGGING else FOLLOW)
         progress += (target - progress) * follow
 
-        if (count > 0) {
-            val near = ((progress.roundToInt() % count) + count) % count
-            if (active != near) active = near
-        }
+        itemCount = count
+        wrapIndexNow()
+        val moving = dragging || abs(target - progress) > 0.01f
+        if (isScrollInProgress != moving) isScrollInProgress = moving
     }
 }
 

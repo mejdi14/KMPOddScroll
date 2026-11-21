@@ -3,6 +3,7 @@ package io.github.mejdi14.oddscroll.infinitemenu
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import io.github.mejdi14.oddscroll.internal.PI_F
@@ -32,7 +33,6 @@ private const val PULL_SPEED = 1.4f
 private const val PULL_RATE = 8f
 private const val AIMED_PULL_RATE = 6f
 
-private const val REVEAL_SECONDS = 0.7f
 private const val CAMERA_RATE = 4.5f
 
 /** Over this the sphere counts as moving and the caption steps out of the way. */
@@ -50,6 +50,7 @@ private const val MOVING_ANGLE = 0.01f
 class InfiniteMenuScrollState internal constructor(
     internal val tileCount: Int,
     private val itemCount: Int,
+    initialIndex: Int = 0,
 ) {
     /** Unit directions of every tile, before the sphere is turned. */
     internal val tiles: FloatArray = fibonacciSphere(tileCount)
@@ -60,9 +61,13 @@ class InfiniteMenuScrollState internal constructor(
     internal var front = 0
         private set
 
-    /** Which item that tile shows. */
-    var active by mutableIntStateOf(0)
-        internal set
+    /** Wrapped index of the item shown by the tile at the front. */
+    var currentIndex by mutableIntStateOf(0)
+        private set
+
+    /** True while the sphere is being dragged, still spinning, or still turning onto a tile. */
+    var isScrollInProgress by mutableStateOf(false)
+        private set
 
     /** 1 when the sphere has come to rest, 0 while it moves. Drives the caption. */
     internal var settle by mutableFloatStateOf(0f)
@@ -70,9 +75,6 @@ class InfiniteMenuScrollState internal constructor(
 
     /** Bumped once per frame, so the sphere repaints while it turns. */
     internal var tick by mutableIntStateOf(0)
-        private set
-
-    internal var reveal = 0f
         private set
 
     internal var camera = 0f
@@ -124,6 +126,10 @@ class InfiniteMenuScrollState internal constructor(
     private var idle = 0f
     private val scratch = FloatArray(3)
 
+    init {
+        if (initialIndex != 0) scrollTo(initialIndex)
+    }
+
     // --- input ---------------------------------------------------------------
 
     internal fun onDragStart() {
@@ -142,18 +148,58 @@ class InfiniteMenuScrollState internal constructor(
         dragging = false
     }
 
-    /** Brings [index] round to the front along the shortest arc. */
-    fun goTo(index: Int) {
-        if (index in 0 until tileCount) target = index
+    /** Brings tile [tile] round to the front along the shortest arc. */
+    internal fun aimAt(tile: Int) {
+        if (tile in 0 until tileCount) target = tile
+    }
+
+    /** The tile showing item [index] that already sits nearest the front. */
+    private fun tileFor(index: Int): Int {
+        val item = ((index % itemCount) + itemCount) % itemCount
+        var best = item.coerceIn(0, tileCount - 1)
+        var bestZ = -2f
+        var tile = item
+        while (tile < tileCount) {
+            val z = orientation.rotatedZ(tiles[tile * 3], tiles[tile * 3 + 1], tiles[tile * 3 + 2])
+            if (z > bestZ) {
+                bestZ = z
+                best = tile
+            }
+            tile += itemCount
+        }
+        return best
     }
 
     /**
-     * The tile one step away in a screen direction. Used by autoplay, and by a
-     * host that wants arrow keys: there is no "next" on a sphere, so the
-     * neighbour is whichever tile sits nearest a point stepped off the front by
-     * roughly one tile's spacing.
+     * Turns the sphere to face the tile showing item [index], with no
+     * animation. A sphere has no order to step through, so there is no `step`;
+     * this and [animateScrollTo] are the programmatic controls.
      */
-    fun neighbour(dx: Float, dy: Float): Int {
+    fun scrollTo(index: Int) {
+        val tile = tileFor(index)
+        orientation.rotate(tiles[tile * 3], tiles[tile * 3 + 1], tiles[tile * 3 + 2], scratch)
+        val angle = acos(scratch[2].clamped(-1f, 1f))
+        val ax = scratch[1]
+        val ay = -scratch[0]
+        val length = hypot(ax, ay)
+        if (length > 1e-6f) orientation.turn(ax / length, ay / length, 0f, angle)
+        speed = 0f
+        target = -1
+        front = tile
+        currentIndex = tile % itemCount
+    }
+
+    /** Turns the sphere to face the tile showing item [index], along the shortest arc. */
+    fun animateScrollTo(index: Int) {
+        aimAt(tileFor(index))
+    }
+
+    /**
+     * The tile one step away in a screen direction, for autoplay: there is no
+     * "next" on a sphere, so the neighbour is whichever tile sits nearest a
+     * point stepped off the front by roughly one tile's spacing.
+     */
+    internal fun neighbour(dx: Float, dy: Float): Int {
         val spacing = sqrt(4f * PI_F / tileCount.coerceAtLeast(1))
         val length = hypot(dx, dy)
         if (length <= 1e-5f) return front
@@ -169,13 +215,12 @@ class InfiniteMenuScrollState internal constructor(
     internal fun advance(deltaMs: Float, settings: MenuSettings) {
         tick++
         val dt = (deltaMs / 1000f).clamped(0.001f, 0.05f)
-        reveal = min(1f, reveal + dt / REVEAL_SECONDS)
 
         val minSide = min(viewportWidth, viewportHeight)
         if (dragging) {
             if ((pendingX != 0f || pendingY != 0f) && minSide > 0f) {
                 val length = hypot(pendingX, pendingY)
-                val angle = length / minSide * DRAG_TURN
+                val angle = length / minSide * DRAG_TURN * settings.dragSpeed
                 // The axis is the drag turned a quarter: pulling right spins the
                 // sphere about its vertical, pulling down about its horizontal.
                 val ax = pendingY / length
@@ -241,23 +286,24 @@ class InfiniteMenuScrollState internal constructor(
         // once it settles, so a throw opens the whole of it out and reading one
         // tile brings that tile close.
         val pullAmount = (if (dragging) 1f else speed / 2.2f).clamped(0f, 1f)
-        val wanted = rest + settings.pullBack * pullAmount * SPHERE_RADIUS * 1.25f +
-            (1f - reveal) * SPHERE_RADIUS * 1.5f
-        if (camera == 0f) camera = wanted + SPHERE_RADIUS
+        val wanted = rest + settings.pullBack * pullAmount * SPHERE_RADIUS * 1.25f
+        if (camera == 0f) camera = wanted
         camera += (wanted - camera) * (1f - exp(-dt * CAMERA_RATE))
 
         if (settings.autoplaySeconds > 0f && !moving) {
             idle += dt
             if (idle >= settings.autoplaySeconds) {
                 idle = 0f
-                goTo(neighbour(1f, 0f))
+                aimAt(neighbour(1f, 0f))
             }
         } else {
             idle = 0f
         }
 
         val item = if (itemCount > 0) front % itemCount else 0
-        if (active != item) active = item
+        if (currentIndex != item) currentIndex = item
+        val inProgress = moving || target >= 0
+        if (isScrollInProgress != inProgress) isScrollInProgress = inProgress
     }
 
     private fun normalizeAxis() {
@@ -293,6 +339,7 @@ internal class MenuSettings(
     val tileSize: Float,
     val zoom: Float,
     val pullBack: Float,
+    val dragSpeed: Float,
     val inertia: Float,
     val autoplaySeconds: Float,
 )

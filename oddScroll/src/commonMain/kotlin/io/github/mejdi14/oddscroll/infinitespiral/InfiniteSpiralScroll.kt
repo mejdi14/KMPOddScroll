@@ -7,7 +7,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -36,6 +39,7 @@ import io.github.mejdi14.oddscroll.internal.PI_F
 import io.github.mejdi14.oddscroll.internal.clamped
 import io.github.mejdi14.oddscroll.internal.softCopy
 import kotlin.math.abs
+import kotlin.math.hypot
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
@@ -44,8 +48,9 @@ import kotlin.math.sin
 
 /** One card of the spiral. */
 data class InfiniteSpiralItem(
+    /** The picture, cover-fitted into the card. */
     val image: ImageBitmap,
-    /** Read out in place of the picture. */
+    /** A name for the card. The spiral itself draws no text. */
     val label: String = "",
 )
 
@@ -69,9 +74,15 @@ private const val SOFT_SIZE = 160
 
 private const val DRAG_SLOP = 3f
 
+/**
+ * Remembers an [InfiniteSpiralScrollState].
+ *
+ * @param initialIndex card that starts at the middle.
+ */
 @Composable
-fun rememberInfiniteSpiralScrollState(): InfiniteSpiralScrollState =
-    remember { InfiniteSpiralScrollState() }
+fun rememberInfiniteSpiralScrollState(
+    initialIndex: Int = 0,
+): InfiniteSpiralScrollState = remember { InfiniteSpiralScrollState(initialIndex) }
 
 /**
  * A column of cards wound onto a spiral, turning endlessly.
@@ -87,6 +98,9 @@ fun rememberInfiniteSpiralScrollState(): InfiniteSpiralScrollState =
  * direction.
  *
  * @param items cards wound onto the spiral, in order.
+ * @param modifier applied to the frame.
+ * @param background the page colour behind the cards.
+ * @param borderColor hairline drawn round each card, before its own fade.
  * @param motion what moves it — drift, hand, or both.
  * @param speed cards a second while drifting.
  * @param direction which way the drift runs.
@@ -103,12 +117,20 @@ fun rememberInfiniteSpiralScrollState(): InfiniteSpiralScrollState =
  * @param edgeFade share of the run over which the ends fade out.
  * @param edgeBlur how soft the ends go.
  * @param grayscale drain the colour, 0 to 1.
+ * @param wheelSpeed how far a notch of the mouse wheel turns the spiral, as a
+ *   multiple of the default.
+ * @param userScrollEnabled false ignores drag and wheel, whatever [motion] is;
+ *   the drift and programmatic scrolling through [state] still work.
+ * @param onItemClick called with the index into [items] of the tapped card.
+ *   A tap does nothing when this is null.
+ * @param state where the spiral has turned to; also drives programmatic scrolling.
  */
 @Composable
 fun InfiniteSpiralScroll(
     items: List<InfiniteSpiralItem>,
     modifier: Modifier = Modifier,
     background: Color = Color(0xFF07070A),
+    borderColor: Color = Color.White,
     motion: SpiralMotion = SpiralMotion.Both,
     speed: Float = 0.55f,
     direction: SpiralDirection = SpiralDirection.Up,
@@ -125,6 +147,9 @@ fun InfiniteSpiralScroll(
     edgeFade: Float = 0.3f,
     edgeBlur: Dp = 6.dp,
     grayscale: Float = 0f,
+    wheelSpeed: Float = 1f,
+    userScrollEnabled: Boolean = true,
+    onItemClick: ((index: Int) -> Unit)? = null,
     state: InfiniteSpiralScrollState = rememberInfiniteSpiralScrollState(),
 ) {
     if (items.isEmpty()) {
@@ -149,7 +174,10 @@ fun InfiniteSpiralScroll(
     }
 
     val drift = motion == SpiralMotion.Drift || motion == SpiralMotion.Both
-    val byHand = motion == SpiralMotion.Hand || motion == SpiralMotion.Both
+    val byHand = userScrollEnabled &&
+        (motion == SpiralMotion.Hand || motion == SpiralMotion.Both)
+    val click by rememberUpdatedState(onItemClick)
+    SideEffect { state.itemCount = items.size }
     val signedSpeed = if (direction == SpiralDirection.Down) -speed else speed
 
     LaunchedEffect(state, signedSpeed, drift, items.size) {
@@ -169,12 +197,13 @@ fun InfiniteSpiralScroll(
             Modifier
                 .fillMaxSize()
                 .pointerInput(state, byHand, verticalSpacing, density) {
-                    if (!byHand) return@pointerInput
                     val spacing = verticalSpacing.value * density
+                    val slop = viewConfiguration.touchSlop
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
-                        state.onDragStart()
+                        if (byHand) state.onDragStart()
                         var last = down.position.y
+                        var travel = 0f
                         while (true) {
                             val event = awaitPointerEvent()
                             if (event.type == PointerEventType.Release) break
@@ -182,16 +211,22 @@ fun InfiniteSpiralScroll(
                                 ?: break
                             if (!change.pressed) break
                             val dy = change.position.y - last
+                            travel = max(travel, hypot(change.position.x - down.position.x, change.position.y - down.position.y))
                             last = change.position.y
-                            if (abs(dy) > DRAG_SLOP) {
+                            if (byHand && abs(dy) > DRAG_SLOP) {
                                 state.onDrag(dy, spacing)
                                 change.consume()
                             }
                         }
-                        state.onDragEnd()
+                        if (byHand) state.onDragEnd()
+                        val callback = click
+                        if (callback != null && travel <= slop) {
+                            val hit = state.pick(down.position / density)
+                            if (hit >= 0) callback(hit)
+                        }
                     }
                 }
-                .pointerInput(state, byHand, verticalSpacing, density, speed) {
+                .pointerInput(state, byHand, verticalSpacing, density, speed, wheelSpeed) {
                     if (!byHand) return@pointerInput
                     val spacing = verticalSpacing.value * density
                     awaitPointerEventScope {
@@ -201,7 +236,7 @@ fun InfiniteSpiralScroll(
                             val scroll = event.changes.firstOrNull()?.scrollDelta?.y
                                 ?: continue
                             if (scroll == 0f) continue
-                            state.onWheel(scroll * 60f, spacing, max(speed, 0f) / 0.55f)
+                            state.onWheel(scroll * 60f, spacing, max(speed, 0f) / 0.55f * wheelSpeed)
                             event.changes.forEach { it.consume() }
                         }
                     }
@@ -217,6 +252,7 @@ fun InfiniteSpiralScroll(
                     soft = soft,
                     state = state,
                     wash = wash,
+                    border = borderColor,
                     width = size.width / density,
                     height = size.height / density,
                     radius = radius.value,
@@ -244,6 +280,7 @@ private fun DrawScope.drawSpiral(
     soft: List<ImageBitmap>,
     state: InfiniteSpiralScrollState,
     wash: ColorFilter?,
+    border: Color,
     width: Float,
     height: Float,
     radius: Float,
@@ -270,6 +307,7 @@ private fun DrawScope.drawSpiral(
     val fadeFrom = (1f - edgeFade).clamped(0f, 0.98f)
 
     val placed = ArrayList<SpiralCard>(count)
+    state.hits.clear()
     for (index in items.indices) {
         val offset = wrapHalf(index - state.progress, count.toFloat())
         val edge = min(abs(offset) / max(half, 1f), 1f)
@@ -302,6 +340,11 @@ private fun DrawScope.drawSpiral(
 
     val outline = Path()
     for (card in placed) {
+        state.hits.add(
+            InfiniteSpiralScrollState.Hit(
+                card.index, card.x, card.y, cardW * card.scale / 2f, cardH * card.scale / 2f, tilt,
+            )
+        )
         withTransform({
             translate(card.x, card.y)
             if (tilt != 0f) rotate(tilt, Offset.Zero)
@@ -325,7 +368,7 @@ private fun DrawScope.drawSpiral(
                 }
             }
             drawRoundRect(
-                color = Color.White.copy(alpha = 0.25f * card.alpha),
+                color = border.copy(alpha = 0.25f * card.alpha * border.alpha),
                 size = Size(cardW, cardH),
                 cornerRadius = CornerRadius(corner, corner),
                 style = Stroke(width = 1f),

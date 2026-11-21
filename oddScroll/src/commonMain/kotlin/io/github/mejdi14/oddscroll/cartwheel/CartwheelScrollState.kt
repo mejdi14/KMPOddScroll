@@ -2,11 +2,15 @@ package io.github.mejdi14.oddscroll.cartwheel
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.runtime.setValue
 import io.github.mejdi14.oddscroll.internal.clamped
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.roundToInt
+import kotlin.math.sin
 import kotlin.math.sqrt
 
 /** Drag samples kept to read a throw off the end of a gesture. */
@@ -38,14 +42,22 @@ class CartwheelScrollState internal constructor(
     internal var dampingRatio: Float,
     internal var stiffness: Float,
     internal var throwSeconds: Float,
+    initialIndex: Int,
 ) {
     /** Wheel angle, in cards. */
-    internal var phase = 0f
+    internal var phase = initialIndex.toFloat()
         private set
 
-    /** Card currently nearest the middle. */
-    var active by mutableIntStateOf(0)
-        internal set
+    /** Wrapped index of the card nearest the middle. */
+    var currentIndex by mutableIntStateOf(initialIndex.coerceAtLeast(0))
+        private set
+
+    /** True while a drag is held or the wheel is still coasting to where it was aimed. */
+    var isScrollInProgress by mutableStateOf(false)
+        private set
+
+    /** Cards on the wheel, so an index can be wrapped. Kept up to date by the composable. */
+    internal var itemCount = 0
 
     /** Bumped once per frame, so the wheel repaints while it turns. */
     internal var tick by mutableIntStateOf(0)
@@ -55,7 +67,7 @@ class CartwheelScrollState internal constructor(
         private set
 
     private var velocity = 0f
-    private var target = 0f
+    private var target = initialIndex.toFloat()
     private var settling = false
 
     private val at = FloatArray(SAMPLES)
@@ -67,6 +79,7 @@ class CartwheelScrollState internal constructor(
     internal fun onDragStart(seconds: Float) {
         dragging = true
         settling = false
+        isScrollInProgress = true
         velocity = 0f
         taken = 0
         sample(seconds)
@@ -83,6 +96,7 @@ class CartwheelScrollState internal constructor(
         velocity = partingSpeed()
         target = phase + velocity * throwSeconds
         settling = true
+        isScrollInProgress = true
     }
 
     internal fun onWheel(by: Float) {
@@ -91,13 +105,70 @@ class CartwheelScrollState internal constructor(
         aim(by)
     }
 
-    /** Turn by [by] cards. Public so a host can drive it from its own chrome. */
+    /** Turns the wheel by [by] cards, with the same spring a throw settles on. */
     fun step(by: Int) = aim(by.toFloat())
+
+    /**
+     * Puts card [index] at the middle with no animation, taking the way round
+     * that is nearest to where the wheel is now.
+     */
+    fun scrollTo(index: Int) {
+        if (itemCount <= 0) return
+        phase += wrapHalf(index - phase, itemCount)
+        velocity = 0f
+        settling = false
+        if (!dragging) isScrollInProgress = false
+        updateIndex()
+    }
+
+    /**
+     * Turns the wheel to put card [index] at the middle, by the nearer way
+     * round and on the same spring a throw settles on.
+     */
+    fun animateScrollTo(index: Int) {
+        if (itemCount <= 0) return
+        if (!settling) target = phase
+        aim(wrapHalf(index - target, itemCount))
+    }
 
     private fun aim(by: Float) {
         if (!settling) target = phase
         target += by
         settling = true
+        isScrollInProgress = true
+    }
+
+    /** Card whose square contains [at], in dp; the nearest one if they overlap; -1 if none. */
+    internal fun pick(at: Offset): Int {
+        var found = -1
+        // Drawn in order, so the last match is the one on top.
+        for (hit in hits) {
+            val dx = at.x - hit.x
+            val dy = at.y - hit.y
+            val c = cos(-hit.angle)
+            val s = sin(-hit.angle)
+            val lx = dx * c - dy * s
+            val ly = dx * s + dy * c
+            if (abs(lx) <= hit.half && abs(ly) <= hit.half) found = hit.index
+        }
+        return found
+    }
+
+    /** Where the cards landed last frame, in dp, in the order they were drawn. */
+    internal val hits = ArrayList<Hit>()
+
+    internal class Hit(
+        val index: Int,
+        val x: Float,
+        val y: Float,
+        val half: Float,
+        val angle: Float,
+    )
+
+    private fun updateIndex() {
+        if (itemCount <= 0) return
+        val near = ((phase.roundToInt() % itemCount) + itemCount) % itemCount
+        if (currentIndex != near) currentIndex = near
     }
 
     // --- frame ---------------------------------------------------------------
@@ -121,12 +192,11 @@ class CartwheelScrollState internal constructor(
                 phase = target
                 velocity = 0f
                 settling = false
+                if (!dragging) isScrollInProgress = false
             }
         }
-        if (count > 0) {
-            val near = ((phase.roundToInt() % count) + count) % count
-            if (active != near) active = near
-        }
+        itemCount = count
+        updateIndex()
     }
 
     // --- throw ---------------------------------------------------------------
@@ -150,6 +220,12 @@ class CartwheelScrollState internal constructor(
         val span = at[newest] - at[oldest]
         return if (span <= 1e-4f) 0f else (of[newest] - of[oldest]) / span
     }
+}
+
+/** Signed distance from [value] to zero around a cycle of [size]. */
+private fun wrapHalf(value: Float, size: Int): Float {
+    val half = size / 2f
+    return ((value + half) % size + size) % size - half
 }
 
 /** Index of the card [steps] along from the wheel's zero, wrapped into [count]. */

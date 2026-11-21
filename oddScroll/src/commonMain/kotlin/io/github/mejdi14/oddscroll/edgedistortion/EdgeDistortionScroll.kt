@@ -7,7 +7,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -19,8 +22,11 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import io.github.mejdi14.oddscroll.internal.cardBitmap
 import io.github.mejdi14.oddscroll.internal.clamped
+import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.hypot
+import kotlin.math.round
 
 /** The reference lattice repeats on this period, as the original's wrap does. */
 private const val BLOCK = 5
@@ -32,10 +38,17 @@ private const val BLOCK = 5
 @Composable
 internal expect fun Modifier.edgeDistortion(strength: Float, aberration: Float): Modifier
 
+/**
+ * Remembers an [EdgeDistortionScrollState].
+ *
+ * @param drift idle movement per second, as a share of the viewport's height.
+ * @param initialOffset where the camera starts, in lattice pixels.
+ */
 @Composable
 fun rememberEdgeDistortionScrollState(
     drift: Offset = Offset(0.03f, 0.015f),
-): EdgeDistortionScrollState = remember(drift) { EdgeDistortionScrollState(drift) }
+    initialOffset: Offset = Offset.Zero,
+): EdgeDistortionScrollState = remember { EdgeDistortionScrollState(drift, initialOffset) }
 
 /**
  * An endless lattice of cards, panned freely on both axes, bending away at the
@@ -58,6 +71,7 @@ fun rememberEdgeDistortionScrollState(
  * else behaves the same: see [edgeDistortion].
  *
  * @param images pictures to lay over the lattice, cover-fitted to [cardRatio].
+ * @param modifier applied to the frame.
  * @param background the page colour behind the cards.
  * @param cardHeight card height as a share of the viewport's height.
  * @param cardRatio card width / height.
@@ -68,7 +82,16 @@ fun rememberEdgeDistortionScrollState(
  * @param aberration colour fringe offset in uv, so 0.008 is eight pixels across
  *   a thousand-pixel frame. 0 drops it.
  * @param panSpeed lattice pixels moved per pixel of drag.
+ * @param wheelSpeed lattice pixels moved per notch of the mouse wheel or
+ *   trackpad.
  * @param drift idle movement per second, as a share of the viewport's height.
+ *   [Offset.Zero] stops the drift.
+ * @param userScrollEnabled false ignores drag and wheel; the drift and
+ *   programmatic scrolling through [state] still work.
+ * @param onItemClick called with the index into [images] of the picture on the
+ *   tapped card. The test ignores the distortion, so near the borders it can be
+ *   a little off the card the eye sees. A tap does nothing when this is null.
+ * @param state where the camera is; also drives programmatic scrolling.
  */
 @Composable
 fun EdgeDistortionScroll(
@@ -83,7 +106,10 @@ fun EdgeDistortionScroll(
     distortion: Float = 0.3f,
     aberration: Float = 0.008f,
     panSpeed: Float = 1.5f,
+    wheelSpeed: Float = 60f,
     drift: Offset = Offset(0.03f, 0.015f),
+    userScrollEnabled: Boolean = true,
+    onItemClick: ((index: Int) -> Unit)? = null,
     state: EdgeDistortionScrollState = rememberEdgeDistortionScrollState(drift),
 ) {
     if (images.isEmpty()) {
@@ -91,9 +117,12 @@ fun EdgeDistortionScroll(
         return
     }
 
+    SideEffect { state.drift = drift }
+
     val cards = remember(images, cardRatio, corner) {
         images.map { cardBitmap(it, cardRatio, corner) }
     }
+    val click by rememberUpdatedState(onItemClick)
 
     LaunchedEffect(state) {
         var previous = 0L
@@ -112,29 +141,45 @@ fun EdgeDistortionScroll(
             Modifier
                 .fillMaxSize()
                 .edgeDistortion(distortion, aberration)
-                .pointerInput(state, panSpeed) {
+                .pointerInput(
+                    state, panSpeed, userScrollEnabled, cards.size,
+                    cardHeight, cardRatio, gapX, gapY,
+                ) {
+                    val slop = viewConfiguration.touchSlop
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
-                        state.onDragStart()
+                        if (userScrollEnabled) state.onDragStart()
                         var last = down.position
+                        var travel = 0f
                         while (true) {
                             val event = awaitPointerEvent()
                             if (event.type == PointerEventType.Release) break
                             val change = event.changes.firstOrNull { it.id == down.id }
                                 ?: break
                             if (!change.pressed) break
-                            state.onDrag(
-                                change.position.x - last.x,
-                                change.position.y - last.y,
-                                panSpeed,
-                            )
+                            val dx = change.position.x - last.x
+                            val dy = change.position.y - last.y
+                            travel += hypot(dx, dy)
+                            if (userScrollEnabled) {
+                                state.onDrag(dx, dy, panSpeed)
+                                change.consume()
+                            }
                             last = change.position
-                            change.consume()
                         }
-                        state.onDragEnd()
+                        if (userScrollEnabled) state.onDragEnd()
+                        val callback = click
+                        if (callback != null && travel <= slop) {
+                            val hit = pictureAt(
+                                down.position, size.width.toFloat(), size.height.toFloat(),
+                                state.cameraX, state.cameraY,
+                                cardHeight, cardRatio, gapX, gapY, cards.size,
+                            )
+                            if (hit >= 0) callback(hit)
+                        }
                     }
                 }
-                .pointerInput(state) {
+                .pointerInput(state, userScrollEnabled, wheelSpeed) {
+                    if (!userScrollEnabled) return@pointerInput
                     awaitPointerEventScope {
                         while (true) {
                             val event = awaitPointerEvent()
@@ -142,7 +187,7 @@ fun EdgeDistortionScroll(
                             val scroll = event.changes.firstOrNull()?.scrollDelta
                                 ?: continue
                             if (scroll.x == 0f && scroll.y == 0f) continue
-                            state.offsetBy(scroll.x * 60f, scroll.y * 60f)
+                            state.scrollBy(Offset(scroll.x * wheelSpeed, scroll.y * wheelSpeed))
                             event.changes.forEach { it.consume() }
                         }
                     }
@@ -156,6 +201,33 @@ fun EdgeDistortionScroll(
             drawLattice(cards, state, cardHeight, cardRatio, gapX, gapY)
         }
     }
+}
+
+/** Picture on the card under [at], or -1 if the point falls in a gap. */
+private fun pictureAt(
+    at: Offset,
+    width: Float,
+    height: Float,
+    cameraX: Float,
+    cameraY: Float,
+    cardHeight: Float,
+    cardRatio: Float,
+    gapX: Float,
+    gapY: Float,
+    count: Int,
+): Int {
+    val cardH = cardHeight * height
+    val cardW = cardH * cardRatio
+    val stepX = cardW * (1f + gapX)
+    val stepY = cardH * (1f + gapY)
+    if (stepX <= 0f || stepY <= 0f || count == 0) return -1
+    val sceneX = cameraX + at.x - width / 2f
+    val sceneY = cameraY + at.y - height / 2f
+    val cellX = round(sceneX / stepX).toInt()
+    val cellY = round(sceneY / stepY).toInt()
+    if (abs(sceneX - cellX * stepX) > cardW / 2f) return -1
+    if (abs(sceneY - cellY * stepY) > cardH / 2f) return -1
+    return pictureFor(cellX, cellY, count)
 }
 
 // --- the lattice -------------------------------------------------------------
