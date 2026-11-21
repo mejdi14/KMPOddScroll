@@ -29,10 +29,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import io.github.mejdi14.oddscroll.cdrack.CdManual
-import io.github.mejdi14.oddscroll.cdrack.CdRackItem
-import io.github.mejdi14.oddscroll.cdrack.CdRackScroll
-import io.github.mejdi14.oddscroll.cdrack.rememberCdRackScrollState
+import com.example.kmp_odd_scroll.showcase.cdrack.CdManual
+import com.example.kmp_odd_scroll.showcase.cdrack.CdRackItem
+import com.example.kmp_odd_scroll.showcase.cdrack.CdRackScroll
+import com.example.kmp_odd_scroll.showcase.cdrack.rememberCdRackScrollState
 import kmpoddscroll.shared.generated.resources.Res
 import kmpoddscroll.shared.generated.resources.allDrawableResources
 import kotlinx.coroutines.async

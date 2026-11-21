@@ -4,10 +4,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import io.github.mejdi14.oddscroll.runway.RunwayItem
-import io.github.mejdi14.oddscroll.runway.RunwayScroll
-import io.github.mejdi14.oddscroll.runway.RunwaySpan
-import io.github.mejdi14.oddscroll.runway.rememberRunwayScrollState
+import com.example.kmp_odd_scroll.showcase.runway.RunwayItem
+import com.example.kmp_odd_scroll.showcase.runway.RunwayScroll
+import com.example.kmp_odd_scroll.showcase.runway.RunwaySpan
+import com.example.kmp_odd_scroll.showcase.runway.rememberRunwayScrollState
 import kmpoddscroll.shared.generated.resources.Res
 import kmpoddscroll.shared.generated.resources.wide_basalt
 import kmpoddscroll.shared.generated.resources.wide_falls

@@ -10,9 +10,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.example.kmp_odd_scroll.LocalPalette
-import io.github.mejdi14.oddscroll.flexcarousel.FlexCarouselItem
-import io.github.mejdi14.oddscroll.flexcarousel.FlexCarouselScroll
-import io.github.mejdi14.oddscroll.flexcarousel.FlexFit
+import com.example.kmp_odd_scroll.showcase.flexcarousel.FlexCarouselItem
+import com.example.kmp_odd_scroll.showcase.flexcarousel.FlexCarouselScroll
+import com.example.kmp_odd_scroll.showcase.flexcarousel.FlexFit
 import kmpoddscroll.shared.generated.resources.Res
 import kmpoddscroll.shared.generated.resources.art_cowherd
 import kmpoddscroll.shared.generated.resources.art_cypresses
