@@ -20,8 +20,7 @@ internal interface GlassShader {
      * centred on [centreX], [centreY], [halfWidth] by [halfHeight], square
      * cornered, with a band [refraction] wide round its edge that bends the
      * painting under it, split into colours; the bend starts turning round
-     * each corner [turn] from it. [edges] is how much the lit rim along the
-     * edge shows, and [rim] is how wide it is.
+     * each corner [turn] from it.
      */
     fun brush(
         image: ImageBitmap,
@@ -37,8 +36,6 @@ internal interface GlassShader {
         halfHeight: Float,
         turn: Float,
         refraction: Float,
-        edges: Float,
-        rim: Float,
     ): Brush
 }
 

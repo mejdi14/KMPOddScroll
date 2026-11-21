@@ -1,21 +1,11 @@
 package io.github.mejdi14.oddscroll.gallerywall
 
-import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -23,7 +13,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.withFrameNanos
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -41,10 +30,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.clipRect
-import androidx.compose.ui.graphics.drawscope.rotate
-import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.withTransform
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -58,7 +44,6 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.mejdi14.oddscroll.internal.clamped
 import kotlin.math.PI
@@ -79,7 +64,9 @@ import kotlin.random.Random
 data class GalleryWallItem(
     /** Hung whole, at its own aspect. */
     val image: ImageBitmap,
+    /** The first line of its wall label, in italic; empty for none. */
     val title: String = "",
+    /** The label's lines under the title, in grey; each left out when empty. */
     val artist: String = "",
     val date: String = "",
     val medium: String = "",
@@ -91,23 +78,6 @@ data class GalleryWallItem(
     val scale: Float = 1f,
     /** Its own frame, in place of the one [GalleryWallScroll] hangs every painting in; null for that one. */
     val frame: GalleryWallFrame? = null,
-    /**
-     * The back of the canvas, shown when it is turned over out of its frame,
-     * stretched to the painting's size; null for the painting again.
-     */
-    val back: ImageBitmap? = null,
-    /**
-     * How near each part of the scene is, for stepping inside the painting:
-     * white near, black far, any size — what a single-image depth model writes
-     * out. Null guesses it from the painting itself.
-     */
-    val depth: ImageBitmap? = null,
-    /**
-     * The painting rebuilt as a place to walk into, in place of [depth]:
-     * stepping inside walks a route into it, where a drag turns within its
-     * bounds and a scroll walks on or back. Null steps inside on [depth].
-     */
-    val scene: GalleryWallScene? = null,
 )
 
 /** What is carved into a [GalleryWallFrame]'s moulding. */
@@ -151,6 +121,8 @@ enum class GalleryWallOrnament {
  * and the default stands four and a half centimetres deep, room for the glass,
  * a gap behind it, the canvas and its backing. The frame hangs outside the
  * canvas, so a framed painting stands that much bigger.
+ *
+ * @param width the moulding, across.
  */
 data class GalleryWallFrame(
     val width: Float = 0.06f,
@@ -185,9 +157,9 @@ data class GalleryWallFrame(
      * little square on and more and more as the wall turns away, and the lit
      * doorway behind you shows in it as a soft glow that stays put while the
      * paintings slide under it. Where the platform has the shader for it, the
-     * pane is liquid glass whose edges, hidden under the moulding, bend
-     * the painting under them, and show as it slides away once the frame
-     * comes off.
+     * pane is liquid glass: a touch more vivid than the bare canvas, with a
+     * white haze, and edges, hidden under the moulding, that bend the
+     * painting under them.
      */
     val glass: Boolean = true,
 )
@@ -202,23 +174,9 @@ data class GalleryWallFrame(
  * is flat across the middle, then rises in proportion to the distance from the
  * centre of the frame, which is what a wall running straight at the eye does:
  * a back wall square to the view, side walls running towards it, and a rounded
- * corner between. That shape puts the curve to 0.37 px.
+ * corner between. That shape puts the curve to 0.37 px. The defaults of
+ * [GalleryWallScroll]'s room parameters are those measurements.
  */
-
-/** From the eye to the back wall. */
-private const val DEPTH = 6.954f
-
-/** From the middle to either side wall. */
-private const val HALF_WIDTH = 1.101f
-
-/** Radius of the rounded corners. */
-private const val CORNER = 0.644f
-
-/**
- * Between one painting and the next, edge to edge along the wall: the same
- * from the back wall round the corners and down the sides, to 2.6%.
- */
-private const val GAP = 0.564f
 
 /**
  * The eye's focal length, in widths of the frame — fixed by the paintings
@@ -228,11 +186,11 @@ private const val GAP = 0.564f
 private const val FOCAL = 1.400f
 private const val FOCAL_PER_HEIGHT = 2.2f
 
-/** The eye level, down the frame. The middles of the paintings sit on it. */
-private const val HORIZON = 0.45f
-
 /** Nothing closer than this is drawn; the side walls run on past the eye. */
 private const val NEAR = 0.6f
+
+/** The narrowest room and the tightest corner taken, so the walls never fold onto themselves. */
+private const val MIN_WALL = 0.01f
 
 /*
  * The label under each painting, on the wall with it: set left, the title in
@@ -247,83 +205,15 @@ private const val LABEL_GREY = 0.45f
 /** Corner arcs are cut into chords this many to the quarter turn — under half a pixel off. */
 private const val ARC_CHORDS = 12
 
-private const val FLAT = HALF_WIDTH - CORNER
-private const val ARC = CORNER * (PI.toFloat() / 2f)
-
 /** Painting pixels per card height, against the back wall's own on screen; the edges come in 2.3x nearer. */
 private const val BITMAP_SCALE = 1.6f
 
-/** A notch of the wheel, in card heights along the wall. */
-private const val WHEEL_STEP = 0.6f
-
 private const val TAP_SLOP = 8f
 
-/*
- * Walking up to a painting. The eye goes straight in along the middle of the
- * room until the painting fills most of the frame, at a visitor's unhurried
- * pace: a slow first step, a glide, and a long ease to a stop. The steps
- * themselves show as a bob and a sway of the head, and a little roll with
- * each, fading in as the walk gets going and out as it arrives.
- */
-
-/** How much of the frame the painting fills, across and down, once there. */
-private const val FILL_WIDTH = 0.86f
-private const val FILL_HEIGHT = 0.7f
-
-private val WALK_EASE = CubicBezierEasing(0.45f, 0f, 0.15f, 1f)
-
-/** Footfalls on the way. */
-private const val STEPS = 4
-
-/**
- * The room is first seen from this far back, in card heights, and walked into
- * the same way, over a few more steps.
- */
-private const val ENTER_FROM = 3.5f
-private const val ENTRY_STEPS = 5
-
-/** The head's rise each step, and its sway to either side each stride, in card heights. */
-private const val BOB = 0.03f
-private const val SWAY = 0.02f
-
-/** The head's roll with the sway, in degrees. */
-private const val ROLL = 0.35f
-
-/*
- * Inspecting. The frame cracks along its mitres, its four sticks parting a
- * little, then each flies off the screen past its own edge, gathering speed;
- * the label and the shadow fade as they part. With the frame gone the glass
- * slides straight up and out of the top.
- */
-
-/** How far the sticks part, in card heights, over this first stretch of their time. */
-private const val CRACK = 0.04f
-private const val CRACK_TO = 0.3f
-
-/** Past the edge of the screen, in card heights, before a stick or the glass is out of it. */
-private const val CLEAR = 0.05f
-
-private val LIFT_EASE = CubicBezierEasing(0.45f, 0f, 0.8f, 0.35f)
-
-/**
- * Nearly there, the paintings either side slide away along the walls, this
- * many card heights, between these two points of the walk in time — round the
- * corners and down the side walls, out of the frame.
- */
-private const val PART = 2.5f
-private const val PART_FROM = 0.35f
-private const val PART_TO = 0.9f
-
-/**
- * The painting walked up to comes off the wall's curve and hangs flat, square
- * to the eye, over this first stretch of the walk in time.
- */
-private const val FLATTEN_TO = 0.25f
-
-/** [walkIn] starts the eye back in the doorway, and walks it into the room. */
+/** [initialIndex] is the painting, of the items, in the middle of the back wall at first. */
 @Composable
-fun rememberGalleryWallScrollState(walkIn: Boolean = true): GalleryWallScrollState =
-    remember { GalleryWallScrollState(walkIn) }
+fun rememberGalleryWallScrollState(initialIndex: Int = 0): GalleryWallScrollState =
+    remember { GalleryWallScrollState(initialIndex) }
 
 /**
  * Paintings hung round the inside of a room — a back wall facing you, side
@@ -340,39 +230,35 @@ fun rememberGalleryWallScrollState(walkIn: Boolean = true): GalleryWallScrollSta
  * corner.
  *
  * Drag along it, or scroll, and the hang springs after, coming to rest with
- * a painting in the middle; tap a painting to bring it to the middle. Once
- * the hang has stood still for two seconds, [lookLabel] offers to walk up to
- * the painting in the middle. Up close, [exitLabel] steps back and
- * [inspectLabel] takes the painting out of its frame: the four sticks fly off
- * past the four edges of the screen, and then the glass slides up out of the
- * top. Both go back on as it is stepped away from. With them gone, [flipLabel]
- * turns the bare painting over like a sheet of paper — a crease sweeping in
- * from the lower left corner, ripples settling behind it — to its
- * [GalleryWallItem.back], and again turns it back. Up close, framed or bare,
- * [stepInsideLabel] goes into the painting: it takes on depth, the room fades
- * to dark round it and the eye goes in, where a drag looks round and a scroll
- * walks in or back, until [exitLabel] steps back out. The room opens with a
- * walk in from the doorway, unless the state was made without one.
+ * a painting in the middle; tap a painting to bring it to the middle.
+ *
+ * Sizes are in heights of the tallest painting, framed.
  *
  * @param items paintings, in order; the hang repeats, so it has no end.
  * @param background the wall.
  * @param contentColor the labels.
  * @param frame the frame round each painting that has none of its own, or
  *   null to hang those bare.
- * @param lookLabel the button that walks up to a painting, or null for none —
- *   a host can show its own off [GalleryWallScrollState.canLook].
- * @param exitLabel the button, bottom left up close, that steps back, or null
- *   for none, when a tap anywhere does.
- * @param inspectLabel the button, bottom right up close, that takes the frame
- *   and the glass off, or null for none — a host can show its own off
- *   [GalleryWallScrollState.canInspect].
- * @param flipLabel the button, bottom right once the frame and glass are off,
- *   that turns the painting over and back, or null for none — a host can show its own
- *   off [GalleryWallScrollState.canFlip].
- * @param stepInsideLabel the button, bottom right up close above the others, that goes into
- *   the painting, or null for none — a host can show its own off
- *   [GalleryWallScrollState.canStepInside].
- * @param state also lets a host's own controls move it.
+ * @param labels a label on the wall under each painting — its title, artist,
+ *   date and medium — or none.
+ * @param roomDepth from the eye to the back wall. Further makes every painting
+ *   smaller and the side walls longer.
+ * @param roomHalfWidth from the middle to either side wall.
+ * @param cornerRadius the rounded corners between the back wall and the
+ *   sides, up to [roomHalfWidth]; near 0 for square ones.
+ * @param gap between one painting and the next, edge to edge along the wall:
+ *   the same from the back wall round the corners and down the sides, to 2.6%.
+ * @param eyeLevel how far down the frame the eye is, 0 to 1; the middles of
+ *   the paintings sit on it.
+ * @param wheelStep a notch of the wheel, along the wall.
+ * @param stiffness of the critically damped spring the hang follows the input
+ *   on, as Compose's `spring(stiffness = ...)` has it; higher is snappier.
+ * @param userScrollEnabled false ignores drags and the wheel, and taps no
+ *   longer bring a painting to the middle; the state still moves it.
+ * @param onItemClick called with the index, of the items, of a painting
+ *   tapped, in place of bringing it to the middle — the host can call
+ *   [GalleryWallScrollState.animateScrollTo] itself. Null keeps the travel.
+ * @param state where the hang is, and how a host moves it.
  */
 @Composable
 fun GalleryWallScroll(
@@ -381,11 +267,16 @@ fun GalleryWallScroll(
     background: Color = Color(0xFFFFFFFF),
     contentColor: Color = Color(0xFF1A1A1A),
     frame: GalleryWallFrame? = null,
-    lookLabel: String? = "Take a look",
-    exitLabel: String? = "Exit",
-    inspectLabel: String? = "Inspect",
-    flipLabel: String? = "Flip",
-    stepInsideLabel: String? = "Step inside",
+    labels: Boolean = true,
+    roomDepth: Float = 6.954f,
+    roomHalfWidth: Float = 1.101f,
+    cornerRadius: Float = 0.644f,
+    gap: Float = 0.564f,
+    eyeLevel: Float = 0.45f,
+    wheelStep: Float = 0.6f,
+    stiffness: Float = 45.5f,
+    userScrollEnabled: Boolean = true,
+    onItemClick: ((index: Int) -> Unit)? = null,
     state: GalleryWallScrollState = rememberGalleryWallScrollState(),
 ) {
     if (items.isEmpty()) {
@@ -394,13 +285,14 @@ fun GalleryWallScroll(
     }
 
     val measurer = rememberTextMeasurer()
-    val hang = remember(items, frame) { Hang(items, frame) }
-    val art = remember(items, contentColor, frame, measurer) { WallArt(items, contentColor, frame, measurer) }
+    val hang = remember(items, frame, gap) { Hang(items, frame, gap) }
+    val art = remember(items, contentColor, frame, labels, measurer) { WallArt(items, contentColor, frame, labels, measurer) }
     val room = remember { Room() }
-    val inside = remember { StepInside() }
-    val enter = remember { EnterPainting() }
-    val canvas = remember { FloatArray(4) }
-    SideEffect { state.hang = hang }
+    val click by rememberUpdatedState(onItemClick)
+    SideEffect {
+        state.attach(hang)
+        state.omega = sqrt(stiffness.coerceAtLeast(1f))
+    }
 
     LaunchedEffect(state) {
         var previous = 0L
@@ -413,181 +305,69 @@ fun GalleryWallScroll(
         }
     }
 
-    Box(modifier.background(background).fillMaxSize()) {
-        Canvas(
-            Modifier
-                .fillMaxSize()
-                .pointerInput(state, exitLabel != null) {
-                    awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false)
-                        state.press()
-                        var last = down.position
-                        var travel = 0f
-                        var dragging = false
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            if (event.type == PointerEventType.Release) break
-                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                            if (!change.pressed) break
-                            val dx = change.position.x - last.x
-                            val dy = change.position.y - last.y
-                            travel += abs(dx) + abs(dy)
-                            last = change.position
-                            if (travel > TAP_SLOP) dragging = true
-                            if (dragging) {
-                                // The back wall follows the finger, pixel for
-                                // pixel; inside a painting, the scene does.
-                                if (state.inside) state.lookAround(dx, dy, if (state.scene != null) enter.focal else room.focal)
-                                else if (!state.looking) state.nudge(-dx / room.backPx)
-                                change.consume()
-                            }
+    Canvas(
+        modifier
+            .background(background)
+            .fillMaxSize()
+            .pointerInput(state, hang, userScrollEnabled) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    if (userScrollEnabled) state.press()
+                    var last = down.position
+                    var travel = 0f
+                    var dragging = false
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        if (event.type == PointerEventType.Release) break
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) break
+                        val dx = change.position.x - last.x
+                        val dy = change.position.y - last.y
+                        travel += abs(dx) + abs(dy)
+                        last = change.position
+                        if (travel > TAP_SLOP) dragging = true
+                        if (dragging && userScrollEnabled) {
+                            // The back wall follows the finger, pixel for pixel.
+                            state.nudge(-dx / room.backPx)
+                            change.consume()
                         }
-                        state.release(dragging)
-                        if (state.looking) {
-                            // Without the button, a tap anywhere steps back.
-                            if (!dragging && exitLabel == null) state.leave()
-                        } else if (!dragging) {
-                            val hit = room.hit(down.position.x, down.position.y, state.position, hang)
-                            if (hit != null) state.scrollTo(hit)
+                    }
+                    if (userScrollEnabled) state.release(dragging)
+                    if (!dragging) {
+                        val hit = room.hit(down.position.x, down.position.y, state.position, hang)
+                        if (hit != null) {
+                            val onClick = click
+                            if (onClick != null) onClick(hang.wrap(hit)) else if (userScrollEnabled) state.travel(hit)
                         }
                     }
                 }
-                .pointerInput(state) {
-                    awaitPointerEventScope {
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            if (event.type != PointerEventType.Scroll) continue
-                            val scroll = event.changes.firstOrNull()?.scrollDelta ?: continue
-                            val by = scroll.x + scroll.y
-                            if (by == 0f) continue
-                            if (state.inside) state.walkInside(by) else state.nudge(by * WHEEL_STEP)
-                            event.changes.forEach { it.consume() }
-                        }
-                    }
-                }
-        ) {
-            state.tick // read, so the wall repaints as the hang moves
-            room.fit(size.width, size.height)
-            art.ensure(room.backPx * BITMAP_SCALE)
-            val subject = state.subject
-            room.stroll(state.entry, state.walk, state.apart, state.lift, state.fold, state.over, hang, subject)
-            // The painting up close is drawn again at the size it will end at,
-            // and taken apart, as soon as it can be walked up to, so neither
-            // the walk nor the inspection starts on a dropped frame.
-            val close = if (state.canLook || state.walk > 0f) {
-                art.close(hang.wrap(subject), room.closePx).also { it.bare; it.sticks; it.reverse; it.sides }
-            } else {
-                null
             }
-            val item = items[hang.wrap(subject)]
-            // Its depth is worked out as soon as it can be stepped into, so the step does not start on a dropped frame.
-            val scene = item.scene
-            state.scene = scene
-            if (state.canStepInside || state.stepIn > 0f) {
-                if (scene != null) enter.prepare(scene) else inside.prepare(item.image, item.depth)
-            }
-            val veil = veil(state.stepIn)
-            rotate(room.roll, Offset(room.cx, room.cy)) {
-                if (veil < 1f) {
-                    drawWall(art, hang, room, state.position, close.takeIf { room.zoom > BITMAP_SCALE }, subject, background)
-                }
-                if (state.stepIn > 0f) {
-                    drawRect(INSIDE_DARK, alpha = veil)
-                    val card = close ?: art.cards[hang.wrap(subject)]
-                    if (canvasOnScreen(card, hang.start(subject) - state.position, room, item, canvas) && scene != null) {
-                        enter.draw(
-                            this, scene, item.image, canvas[0], canvas[1], canvas[2], canvas[3],
-                            state.stepIn, state.route, state.yaw, state.pitch, state.insideTime,
-                        )
-                    } else if (canvasOnScreen(card, hang.start(subject) - state.position, room, item, canvas)) {
-                        inside.draw(
-                            this, canvas[0], canvas[1], canvas[2], canvas[3], room.cx, room.cy, room.focal,
-                            state.stepIn, state.yaw, state.pitch, state.wander, state.insideTime,
-                        )
+            .pointerInput(state, userScrollEnabled, wheelStep) {
+                if (!userScrollEnabled) return@pointerInput
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        if (event.type != PointerEventType.Scroll) continue
+                        val scroll = event.changes.firstOrNull()?.scrollDelta ?: continue
+                        val by = scroll.x + scroll.y
+                        if (by == 0f) continue
+                        state.nudge(by * wheelStep)
+                        event.changes.forEach { it.consume() }
                     }
                 }
             }
-        }
-
-        if (lookLabel != null) {
-            HudButton(lookLabel, state.canLook, background, contentColor, Modifier.align(Alignment.BottomCenter).padding(bottom = HUD_BOTTOM)) {
-                state.look()
-            }
-        }
-        if (exitLabel != null) {
-            HudButton(exitLabel, state.arrived, background, contentColor, Modifier.align(Alignment.BottomStart).padding(start = HUD_SIDE, bottom = HUD_BOTTOM)) {
-                state.leave()
-            }
-        }
-        // Stepping inside stands over inspecting and flipping, on the right, so
-        // all three fit beside the way back on a narrow phone.
-        Column(
-            Modifier.align(Alignment.BottomEnd).padding(end = HUD_SIDE, bottom = HUD_BOTTOM),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalAlignment = Alignment.End,
-        ) {
-            if (stepInsideLabel != null) {
-                HudButton(stepInsideLabel, state.canStepInside, background, contentColor, Modifier) {
-                    state.stepInside()
-                }
-            }
-            Box(contentAlignment = Alignment.CenterEnd) {
-                if (inspectLabel != null) {
-                    HudButton(inspectLabel, state.canInspect, background, contentColor, Modifier) {
-                        state.inspect()
-                    }
-                }
-                if (flipLabel != null) {
-                    HudButton(flipLabel, state.canFlip, background, contentColor, Modifier) {
-                        state.flip()
-                    }
-                }
-            }
-        }
+    ) {
+        state.tick // read, so the wall repaints as the hang moves
+        room.fit(size.width, size.height, roomDepth, roomHalfWidth, cornerRadius, eyeLevel)
+        art.ensure(room.backPx * BITMAP_SCALE)
+        drawWall(art, hang, room, state.position, background)
     }
-}
-
-private val HUD_SIDE = 28.dp
-private val HUD_BOTTOM = 48.dp
-
-@Composable
-private fun HudButton(
-    label: String,
-    shown: Boolean,
-    background: Color,
-    contentColor: Color,
-    modifier: Modifier,
-    onTap: () -> Unit,
-) {
-    val tap by rememberUpdatedState(onTap)
-    val reveal by animateFloatAsState(if (shown) 1f else 0f, tween(if (shown) 450 else 200))
-    val shape = RoundedCornerShape(50)
-    BasicText(
-        text = label,
-        style = TextStyle(
-            color = contentColor,
-            fontSize = 15.sp,
-            fontFamily = FontFamily.Serif,
-            fontStyle = FontStyle.Italic,
-            letterSpacing = 0.6.sp,
-        ),
-        modifier = modifier
-            .graphicsLayer {
-                alpha = reveal
-                translationY = (1f - reveal) * 10.dp.toPx()
-            }
-            // Only while it shows, or it would take taps meant for the wall.
-            .then(if (shown) Modifier.pointerInput(Unit) { detectTapGestures { tap() } } else Modifier)
-            .background(background.copy(alpha = 0.9f), shape)
-            .border(1.dp, contentColor.copy(alpha = 0.5f), shape)
-            .padding(horizontal = 26.dp, vertical = 11.dp),
-    )
 }
 
 // --- the hang ----------------------------------------------------------------
 
 /** Where each painting hangs along the wall, in card heights, with the hang at rest; frames included. */
-internal class Hang(items: List<GalleryWallItem>, frame: GalleryWallFrame? = null) {
+internal class Hang(items: List<GalleryWallItem>, frame: GalleryWallFrame?, gap: Float) {
     val count = items.size
     private val borders = FloatArray(count) { i -> 2f * ((items[i].frame ?: frame)?.width ?: 0f) }
     val heights = FloatArray(count) { i -> items[i].scale + borders[i] }
@@ -606,7 +386,7 @@ internal class Hang(items: List<GalleryWallItem>, frame: GalleryWallFrame? = nul
         var s = -widths[0] / 2f
         for (i in 0 until count) {
             starts[i] = s
-            s += widths[i] + GAP
+            s += widths[i] + max(gap, 0f)
         }
         lap = s - starts[0]
     }
@@ -617,9 +397,6 @@ internal class Hang(items: List<GalleryWallItem>, frame: GalleryWallFrame? = nul
     fun centre(index: Int): Float = start(index) + widths[wrap(index)] / 2f
 
     fun wrap(index: Int): Int = ((index % count) + count) % count
-
-    /** Painting [index] hangs in a frame, so it comes out of one bare when inspected. */
-    fun framed(index: Int): Boolean = borders[wrap(index)] > 0f
 
     /** The painting whose middle is nearest [position], unwrapped. */
     fun nearest(position: Float): Int {
@@ -641,7 +418,7 @@ private fun floorDiv(a: Int, b: Int): Int = floor(a.toFloat() / b).toInt()
 
 // --- the room ----------------------------------------------------------------
 
-/** The camera on the room, worked out once per size. */
+/** The camera on the room, and the room's walls, worked out once per size and shape. */
 private class Room {
     var width = -1f
     var height = -1f
@@ -649,126 +426,68 @@ private class Room {
     var cx = 0f
     var cy = 0f
 
+    /** The room's shape as last asked for, to tell when it changes. */
+    private var depth = -1f
+    private var halfWidth = -1f
+    private var corner = -1f
+    private var eyeLevel = -1f
+
+    /**
+     * The walls as drawn, the asked-for shape held to a room that closes: from
+     * the middle to either side wall, the corners' radius, and from the eye to
+     * the back wall.
+     */
+    private var wallX = 1f
+    private var wallR = 0.5f
+    private var wallZ = 1f
+
+    /** Half the back wall's straight stretch, and the length of a corner's arc. */
+    var flat = 0f
+    var arc = 0f
+
+    /** Breaks along the wall where it changes from flat to curved. */
+    val bends = FloatArray(4)
+
     /** Screen pixels to a card height, on the back wall. */
     var backPx = 1f
 
     /** How far along the wall either way anything can be seen. */
     var reach = 0f
 
-    /** Where the side walls are first seen from, ahead of the eye. */
-    private var sideFrom = 0f
-
-    /** The eye, walked forward from where the room is seen from: across, up and in. */
-    var eyeX = 0f
-    var eyeY = 0f
-    var eyeZ = 0f
-
-    /** Its roll, in degrees. */
-    var roll = 0f
-
-    /** How much bigger the back wall looks than from where the walk began. */
-    var zoom = 1f
-
-    /** Bitmap pixels to a card height that the painting walked up to wants. */
-    var closePx = 1f
-
-    /**
-     * How much of the doorway shows in the glass: all of it from across the
-     * room, none once walked up, where the visitor stands in its way.
-     */
-    var glare = 1f
-
-    /**
-     * The painting walked up to, being inspected: its frame off at all, how far
-     * the sticks have cracked apart and then flown, how much of the label and
-     * shadow is left, and how far the glass has slid, each eased, 0 to 1.
-     */
-    var unframed = false
-    var crack = 0f
-    var fly = 0f
-    var label = 1f
-    var lift = 0f
-
-    /** How far the bare painting has turned over, linear in time; 0 lying still. */
-    var fold = 0f
-
-    /** The bare painting lies turned over, its back showing. */
-    var over = false
-
-    /** How far the paintings either side of it have slid away, in card heights. */
-    var part = 0f
-
-    /** How far it has come off the wall's curve, 0 to 1. */
-    var flat = 0f
-
     private val point = FloatArray(2)
 
-    fun fit(w: Float, h: Float) {
-        if (w == width && h == height) return
+    fun fit(w: Float, h: Float, depth: Float, halfWidth: Float, corner: Float, eyeLevel: Float) {
+        if (w == width && h == height && depth == this.depth && halfWidth == this.halfWidth &&
+            corner == this.corner && eyeLevel == this.eyeLevel
+        ) {
+            return
+        }
         width = w
         height = h
+        this.depth = depth
+        this.halfWidth = halfWidth
+        this.corner = corner
+        this.eyeLevel = eyeLevel
+        val side = max(halfWidth, MIN_WALL)
+        val round = corner.coerceIn(MIN_WALL, side)
+        val back = max(depth, round + NEAR)
+        wallX = side
+        wallR = round
+        wallZ = back
+        flat = side - round
+        arc = round * (PI.toFloat() / 2f)
+        bends[0] = -flat - arc
+        bends[1] = -flat
+        bends[2] = flat
+        bends[3] = flat + arc
         focal = min(FOCAL * w, FOCAL_PER_HEIGHT * h)
         cx = w / 2f
-        cy = h * HORIZON
-        backPx = focal / DEPTH
-        // Where the side walls leave the frame, with a margin past it.
-        val leaves = focal * HALF_WIDTH / max(w / 2f, 1f) * 0.9f
-        sideFrom = max(leaves, NEAR)
-        eyeZ = Float.NaN
-    }
-
-    /**
-     * Puts the eye [entry] of the way into the room and [walk] of the way up to
-     * painting [index], whose frame is [apart] of the way off, its glass
-     * [glass] of the way away and the painting itself [fold] of the way over,
-     * from its back if it lies [over].
-     */
-    fun stroll(entry: Float, walk: Float, apart: Float, glass: Float, fold: Float, over: Boolean, hang: Hang, index: Int) {
-        val i = hang.wrap(index)
-        // Near enough that the painting fills the frame one way or the other.
-        val stand = max(
-            focal * hang.widths[i] / (FILL_WIDTH * width),
-            focal * hang.heights[i] / (FILL_HEIGHT * height),
-        ).coerceAtMost(DEPTH)
-        closePx = focal / stand * 1.05f
-        val eased = WALK_EASE.transform(walk)
-        glare = 1f - eased
-        unframed = apart > 0f
-        val cracked = (apart / CRACK_TO).coerceIn(0f, 1f)
-        crack = cracked * cracked * (3f - 2f * cracked)
-        label = 1f - crack
-        val flown = ((apart - CRACK_TO) / (1f - CRACK_TO)).coerceIn(0f, 1f)
-        fly = flown * flown
-        lift = LIFT_EASE.transform(glass)
-        this.fold = fold
-        this.over = over
-        val away = ((walk - PART_FROM) / (PART_TO - PART_FROM)).coerceIn(0f, 1f)
-        part = PART * away * away * (3f - 2f * away)
-        val straight = (walk / FLATTEN_TO).coerceIn(0f, 1f)
-        flat = straight * straight * (3f - 2f * straight)
-        val z = (DEPTH - stand) * eased - ENTER_FROM * (1f - WALK_EASE.transform(entry))
-        // The two walks never overlap, so their steps simply add.
-        eyeX = 0f
-        eyeY = 0f
-        roll = 0f
-        step(walk, STEPS)
-        step(entry, ENTRY_STEPS)
-        if (z == eyeZ) return
-        eyeZ = z
-        zoom = DEPTH / (DEPTH - z)
-        // The side walls leave the frame as far ahead of the eye as ever, so
-        // further down the room; walked far enough, they are out of it.
-        reach = FLAT + ARC + max(0f, DEPTH - CORNER - (sideFrom + z))
-    }
-
-    /** Adds the head's bob, sway and roll at [p] of a walk of [steps] footfalls. */
-    private fun step(p: Float, steps: Int) {
-        val envelope = sin(PI.toFloat() * p)
-        if (envelope <= 0f) return
-        val stride = PI.toFloat() * steps * p
-        eyeX += SWAY * envelope * sin(stride)
-        eyeY -= BOB * envelope * sin(stride) * sin(stride)
-        roll += ROLL * envelope * sin(stride)
+        cy = h * eyeLevel.clamped(0f, 1f)
+        backPx = focal / back
+        // Where the side walls leave the frame, with a margin past it; past
+        // that, along them, nothing shows.
+        val leaves = focal * side / max(w / 2f, 1f) * 0.9f
+        reach = flat + arc + max(0f, back - round - max(leaves, NEAR))
     }
 
     /** The painting under a tap, unwrapped, or null. */
@@ -792,15 +511,15 @@ private class Room {
     private fun along(u: Float): Float? {
         val a = abs(u) / focal
         val z: Float = when {
-            a * DEPTH <= FLAT -> DEPTH
-            a > 0f && HALF_WIDTH / a <= DEPTH - CORNER -> HALF_WIDTH / a
+            a * wallZ <= flat -> wallZ
+            a > 0f && wallX / a <= wallZ - wallR -> wallX / a
             else -> {
                 // Far crossing of the ray x = a z with the corner's circle.
-                val ox = FLAT
-                val oz = DEPTH - CORNER
+                val ox = flat
+                val oz = wallZ - wallR
                 val qa = a * a + 1f
                 val qb = -2f * (a * ox + oz)
-                val qc = ox * ox + oz * oz - CORNER * CORNER
+                val qc = ox * ox + oz * oz - wallR * wallR
                 val disc = qb * qb - 4f * qa * qc
                 if (disc < 0f) return null
                 (-qb + sqrt(disc)) / (2f * qa)
@@ -808,104 +527,70 @@ private class Room {
         }
         val x = a * z
         val s = when {
-            z >= DEPTH -> x
-            x >= HALF_WIDTH -> FLAT + ARC + (DEPTH - CORNER - z)
-            else -> FLAT + CORNER * atan2(x - FLAT, z - (DEPTH - CORNER))
+            z >= wallZ -> x
+            x >= wallX -> flat + arc + (wallZ - wallR - z)
+            else -> flat + wallR * atan2(x - flat, z - (wallZ - wallR))
         }
         return if (u < 0f) -s else s
     }
-}
 
-/**
- * The wall at [s] along it, from the middle of the back wall, or [inset] in
- * from it towards the room: x and depth into [out].
- */
-private fun wallPoint(s: Float, out: FloatArray, inset: Float = 0f) {
-    val a = abs(s)
-    val x: Float
-    val z: Float
-    when {
-        a <= FLAT -> {
-            x = a
-            z = DEPTH - inset
+    /**
+     * The wall at [s] along it, from the middle of the back wall, or [inset] in
+     * from it towards the room: x and depth into [out].
+     */
+    fun wallPoint(s: Float, out: FloatArray, inset: Float = 0f) {
+        val a = abs(s)
+        val x: Float
+        val z: Float
+        when {
+            a <= flat -> {
+                x = a
+                z = wallZ - inset
+            }
+            a <= flat + arc -> {
+                val turn = (a - flat) / wallR
+                val r = wallR - inset
+                x = flat + r * sin(turn)
+                z = wallZ - wallR + r * cos(turn)
+            }
+            else -> {
+                x = wallX - inset
+                z = wallZ - wallR - (a - flat - arc)
+            }
         }
-        a <= FLAT + ARC -> {
-            val turn = (a - FLAT) / CORNER
-            val r = CORNER - inset
-            x = FLAT + r * sin(turn)
-            z = DEPTH - CORNER + r * cos(turn)
-        }
-        else -> {
-            x = HALF_WIDTH - inset
-            z = DEPTH - CORNER - (a - FLAT - ARC)
-        }
+        out[0] = if (s < 0f) -x else x
+        out[1] = z
     }
-    out[0] = if (s < 0f) -x else x
-    out[1] = z
-}
 
-/** The wall's normal at [s] along it, pointing into the room: x and depth into [out]. */
-private fun wallNormal(s: Float, out: FloatArray) {
-    val a = abs(s)
-    val x: Float
-    val z: Float
-    when {
-        a <= FLAT -> {
-            x = 0f
-            z = -1f
+    /** The wall's normal at [s] along it, pointing into the room: x and depth into [out]. */
+    fun wallNormal(s: Float, out: FloatArray) {
+        val a = abs(s)
+        val x: Float
+        val z: Float
+        when {
+            a <= flat -> {
+                x = 0f
+                z = -1f
+            }
+            a <= flat + arc -> {
+                val turn = (a - flat) / wallR
+                x = -sin(turn)
+                z = -cos(turn)
+            }
+            else -> {
+                x = -1f
+                z = 0f
+            }
         }
-        a <= FLAT + ARC -> {
-            val turn = (a - FLAT) / CORNER
-            x = -sin(turn)
-            z = -cos(turn)
-        }
-        else -> {
-            x = -1f
-            z = 0f
-        }
+        out[0] = if (s < 0f) -x else x
+        out[1] = z
     }
-    out[0] = if (s < 0f) -x else x
-    out[1] = z
-}
-
-/**
- * How far the sheets being drawn are taken off the wall's curve and laid flat
- * across the back wall's plane, square to the eye.
- */
-private var flat = 0f
-
-/** [wallPoint], [flat] of the way to the back wall's plane. */
-private fun sheetPoint(s: Float, out: FloatArray, inset: Float = 0f) {
-    wallPoint(s, out, inset)
-    if (flat <= 0f) return
-    out[0] += (s - out[0]) * flat
-    out[1] += (DEPTH - inset - out[1]) * flat
-}
-
-/** [wallNormal], [flat] of the way to the back wall's. */
-private fun sheetNormal(s: Float, out: FloatArray) {
-    wallNormal(s, out)
-    if (flat <= 0f) return
-    out[0] -= out[0] * flat
-    out[1] += (-1f - out[1]) * flat
 }
 
 // --- drawing -----------------------------------------------------------------
 
-/**
- * [close], when there is one, stands in for painting [closeIndex] (unwrapped),
- * the one walked up to, which is taken apart and from which the rest slide
- * away; [wall] is what the glass throws back.
- */
-private fun DrawScope.drawWall(
-    art: WallArt,
-    hang: Hang,
-    room: Room,
-    position: Float,
-    close: CardArt?,
-    closeIndex: Int,
-    wall: Color,
-) {
+/** Every painting within sight of the eye; [wall] is what the glass throws back. */
+private fun DrawScope.drawWall(art: WallArt, hang: Hang, room: Room, position: Float, wall: Color) {
     if (size.width <= 0f || size.height <= 0f) return
     val reach = room.reach
     val laps = floor((position - reach - hang.starts[0]) / hang.lap).toInt()
@@ -913,21 +598,10 @@ private fun DrawScope.drawWall(
     // The wall is seen from inside, so nothing on it covers anything else and
     // the order does not matter.
     while (true) {
-        var left = hang.start(i) - position
+        val left = hang.start(i) - position
         if (left > reach) break
-        val subject = i == closeIndex
-        if (i < closeIndex) left -= room.part else if (i > closeIndex) left += room.part
-        val card = if (close != null && subject) close else art.cards[hang.wrap(i)]
-        if (left <= reach && left + card.wallWidth >= -reach) {
-            if (subject) {
-                flat = room.flat
-                // Only the painting walked up to is taken apart.
-                if (room.unframed && card.bare != null) drawApart(card, left, room, wall) else drawCard(card, left, room, wall)
-                flat = 0f
-            } else {
-                drawCard(card, left, room, wall)
-            }
-        }
+        val card = art.cards[hang.wrap(i)]
+        if (left + card.wallWidth >= -reach) drawCard(card, left, room, wall)
         i++
     }
 }
@@ -939,9 +613,6 @@ private val p1 = FloatArray(2)
 private val n0 = FloatArray(2)
 private val n1 = FloatArray(2)
 
-/** Breaks along the wall where it changes from flat to curved. */
-private val bends = floatArrayOf(-FLAT - ARC, -FLAT, FLAT, FLAT + ARC)
-
 /**
  * One painting whose left edge is [left] along the wall: what is on the wall
  * behind it, the painting sunk in the frame and the glass over it, an edge,
@@ -952,134 +623,25 @@ private fun DrawScope.drawCard(card: CardArt, left: Float, room: Room, wall: Col
     val px = card.pxPerUnit
     val sunk = card.depth - card.recess
     card.wall?.let { drawSheet(it, px, card.top, left, 0f, room) }
-    val glass = if (card.glass) pane.aim(card, left, room, wall, card.back, 0f, 0f, 0f) else null
+    val glass = if (card.glass) pane.aim(card, left, room, wall, card.back) else null
     card.back?.let { drawSheet(it, px, card.top, left, sunk, room, glaze = glass) }
     if (card.edges != null) drawEdges(card, card.edges, left, room)
     drawSheet(card.face, px, card.top, left, card.depth, room)
 }
 
-/**
- * The painting walked up to, being inspected, square on: the label and shadow
- * fading, the bare canvas, its glass sliding up off it, and the four sticks of
- * the frame on their way out past the four edges of the screen — each pushed
- * just far enough, from wherever the eye stands, to clear it. With all of that
- * gone, the canvas can be turned over to its back and lie that way.
- */
-private fun DrawScope.drawApart(card: CardArt, left: Float, room: Room, wall: Color) {
-    val px = card.pxPerUnit
-    val bare = card.bare ?: return
-    val sunk = card.depth - card.recess
-    val f = room.focal
-    val w = card.face.width / px
-    val h = card.face.height / px
-    val border = card.opening / px
-    if (room.label > 0f) card.wall?.let { drawSheet(it, px, card.top, left, 0f, room, room.label) }
-
-    // Straight up, until its bottom edge is over the top of the screen.
-    val glass = if (card.glass) {
-        val z = DEPTH - sunk - room.eyeZ
-        val rise = card.top + h - room.eyeY + room.cy * z / f + CLEAR
-        pane.aim(card, left, room, wall, bare, 0f, -rise * room.lift, room.crack)
-    } else {
-        null
-    }
-    when {
-        room.fold > 0f -> drawFold(card, left, sunk, room)
-        room.over -> drawSheet(card.reverse ?: bare, px, card.top, left, sunk, room)
-        else -> drawSheet(bare, px, card.top, left, sunk, room, glaze = glass)
-    }
-
-    val sticks = card.sticks ?: return
-    val z = DEPTH - card.depth - room.eyeZ
-    // Each stick's inner edge, and how far it is to the side of the screen it leaves by.
-    val out = floatArrayOf(
-        card.top + border - room.eyeY + room.cy * z / f,
-        room.eyeX + (size.width - room.cx) * z / f - (left + w - border),
-        room.eyeY + (size.height - room.cy) * z / f - (card.top + h - border),
-        left + border - room.eyeX + room.cx * z / f,
-    )
-    for (side in 0..3) {
-        val by = CRACK * room.crack + max(out[side] + CLEAR - CRACK, 0f) * room.fly
-        val stick = sticks[side]
-        val x = left + stick.x / px + when (side) { 1 -> by; 3 -> -by; else -> 0f }
-        val y = card.top + stick.y / px + when (side) { 0 -> -by; 2 -> by; else -> 0f }
-        drawSheet(stick.image, px, y, x, card.depth, room)
-    }
-}
-
-private val paper = PaperFold()
-
-/**
- * The canvas, [inset] off the wall, turned [Room.fold] of the way over — to
- * its back, or from it if it lies [Room.over]. Only ever with the eye square
- * on and the glass gone, so the canvas lies on the screen as a plain
- * rectangle the fold starts and ends on.
- */
-private fun DrawScope.drawFold(card: CardArt, left: Float, inset: Float, room: Room) {
-    val sides = card.sides ?: return
-    val px = card.pxPerUnit
-    val f = room.focal
-    val z = DEPTH - inset - room.eyeZ
-    if (z <= 0.05f) return
-    val w = card.face.width
-    val h = card.face.height
-    val o = card.opening.toFloat()
-    // The painting on the left of the two, its back on the right.
-    val painting = o
-    val back = w + o
-    paper.draw(
-        scope = this,
-        image = sides,
-        frontLeft = if (room.over) back else painting,
-        backLeft = if (room.over) painting else back,
-        srcTop = o,
-        srcWidth = w - 2f * o,
-        srcHeight = h - 2f * o,
-        left = room.cx + f * (left + o / px - room.eyeX) / z,
-        top = room.cy + f * (card.top + o / px - room.eyeY) / z,
-        right = room.cx + f * (left + (w - o) / px - room.eyeX) / z,
-        bottom = room.cy + f * (card.top + (h - o) / px - room.eyeY) / z,
-        progress = room.fold,
-    )
-}
-
-/** What the room fades to round a painting stepped into. */
-private val INSIDE_DARK = Color(0xFF0A0A0B)
-
-/**
- * Where the canvas of [item] — out of its frame, sunk where it sits in it —
- * lies on screen with its left edge [left] along the wall, square on: left,
- * top, right and bottom into [out]. False if it is behind the eye.
- */
-private fun canvasOnScreen(card: CardArt, left: Float, room: Room, item: GalleryWallItem, out: FloatArray): Boolean {
-    val z = DEPTH - (card.depth - card.recess) - room.eyeZ
-    if (z <= 0.05f) return false
-    val border = card.opening / card.pxPerUnit
-    val x0 = left + border - room.eyeX
-    val y0 = card.top + border - room.eyeY
-    val h = item.scale
-    val w = h * item.image.width / max(item.image.height, 1).toFloat()
-    val f = room.focal
-    out[0] = room.cx + f * x0 / z
-    out[1] = room.cy + f * y0 / z
-    out[2] = room.cx + f * (x0 + w) / z
-    out[3] = room.cy + f * (y0 + h) / z
-    return true
-}
-
 /*
  * The glass. It throws back the room by Schlick's approximation of Fresnel —
  * four percent square on, more and more as the wall turns away — and the room
- * it throws back is the wall across from it. The doorway the visitor came in
- * by, behind them and to the left, shows in it as a glow.
+ * it throws back is the wall across from it. A doorway behind the visitor and
+ * to the left shows in it as a glow.
  */
 private const val GLASS_SQUARE_ON = 0.04f
 private const val GLASS_MOST = 0.5f
 
-/** The doorway's middle, in the room. */
+/** The doorway's middle, in the room, from the eye. */
 private const val DOOR_X = -0.9f
 private const val DOOR_Y = -0.6f
-private const val DOOR_Z = -ENTER_FROM - 1f
+private const val DOOR_Z = -4.5f
 
 /** The doorway's glow on the glass: half its width and height in card heights, and how bright its middle. */
 private const val GLARE_WIDE = 0.22f
@@ -1090,18 +652,12 @@ private val GLARE = Color(0xFFFFFBF2)
 /**
  * The band round the liquid glass's edge that bends the painting under it, in
  * card heights; it bends it in by as much again. The pane runs this far under
- * the moulding, so its edge only shows with the frame off.
+ * the moulding, so its edge never shows.
  */
 private const val LIQUID_BEVEL = 0.05f
 
 /** At most this much of the moulding's width, so the band stays under it. */
 private const val LIQUID_UNDER = 0.85f
-
-/**
- * The band once out of the frame, in card heights. Nothing hides it then, so
- * it widens as the frame fades, in over the painting's edge, and bends more.
- */
-private const val LIQUID_WIDE = 0.14f
 
 /**
  * How far from each corner the bend starts turning round it, against the band.
@@ -1110,10 +666,6 @@ private const val LIQUID_WIDE = 0.14f
  * glass has it.
  */
 private const val LIQUID_TURN = 1.5f * 22f / 32f
-
-/** The lit rim along the liquid glass's edge, in card heights, and at least this many pixels. */
-private const val LIQUID_RIM = 0.0025f
-private const val LIQUID_RIM_MIN = 1.5f
 
 /** The glass over the painting being drawn, worked out once a painting; sizes in face-bitmap pixels. */
 private class Glaze {
@@ -1124,24 +676,16 @@ private class Glaze {
     var width = 0f
     var height = 0f
 
-    /** Pixels to a card height. */
-    var unit = 1f
-
     /** The painting the liquid glass bends, in the same pixels as the face. */
     var image: ImageBitmap? = null
 
-    /**
-     * The liquid pane: its middle, half-sizes, bending band and how it turns
-     * the corners, how much its edges show, and its rim.
-     */
+    /** The liquid pane: its middle, half-sizes, bending band and how it turns the corners. */
     var cx = 0f
     var cy = 0f
     var hw = 0f
     var hh = 0f
     var turn = 0f
     var bevel = 1f
-    var edges = 0f
-    var rim = 1f
 
     /** The doorway's glow: its middle, half-sizes and strength — 0 when it is not on this pane. */
     var gx = 0f
@@ -1155,54 +699,40 @@ private class Glaze {
      * square to the wall at the painting's middle, so the glow does not break
      * where a painting bends round a corner.
      */
-    fun aim(
-        card: CardArt,
-        left: Float,
-        room: Room,
-        wall: Color,
-        image: ImageBitmap?,
-        slideX: Float,
-        slideY: Float,
-        edges: Float,
-    ): Glaze {
+    fun aim(card: CardArt, left: Float, room: Room, wall: Color, image: ImageBitmap?): Glaze {
         val px = card.pxPerUnit
         this.wall = wall
         this.image = image
         opening = card.opening.toFloat()
         width = card.face.width.toFloat()
         height = card.face.height.toFloat()
-        unit = px
         val hidden = min(LIQUID_BEVEL * px, opening * LIQUID_UNDER)
-        val bevel = hidden + max(LIQUID_WIDE * px - hidden, 0f) * edges
-        cx = width / 2f + slideX * px
-        cy = height / 2f + slideY * px
+        cx = width / 2f
+        cy = height / 2f
         hw = width / 2f - opening + hidden
         hh = height / 2f - opening + hidden
-        this.bevel = max(min(bevel, min(hw, hh)), 1f)
-        turn = min(this.bevel * LIQUID_TURN, min(hw, hh))
-        this.edges = edges
-        rim = max(LIQUID_RIM * px, LIQUID_RIM_MIN)
+        bevel = max(min(hidden, min(hw, hh)), 1f)
+        turn = min(bevel * LIQUID_TURN, min(hw, hh))
         glow = 0f
-        if (room.glare <= 0f) return this
         val mid = left + card.face.width / px / 2f
-        sheetPoint(mid, p0, card.depth)
-        sheetNormal(mid, n0)
+        room.wallPoint(mid, p0, card.depth)
+        room.wallNormal(mid, n0)
         val nx = n0[0]
         val nz = n0[1]
-        val eye = (room.eyeX - p0[0]) * nx + (room.eyeZ - p0[1]) * nz
+        val eye = -p0[0] * nx - p0[1] * nz
         val door = (DOOR_X - p0[0]) * nx + (DOOR_Z - p0[1]) * nz
         if (eye <= 0f || door <= 0f) return this
         // Where the line from the eye to the doorway's mirror image crosses the pane.
         val t = eye / (eye + door)
-        val hx = room.eyeX + t * (DOOR_X - 2f * door * nx - room.eyeX)
-        val hz = room.eyeZ + t * (DOOR_Z - 2f * door * nz - room.eyeZ)
-        val hy = room.eyeY + t * (DOOR_Y - room.eyeY)
+        val hx = t * (DOOR_X - 2f * door * nx)
+        val hz = t * (DOOR_Z - 2f * door * nz)
+        val hy = t * DOOR_Y
         val along = (hx - p0[0]) * -nz + (hz - p0[1]) * nx
         gx = (mid + along - left) * px
         gy = (hy - card.top) * px
         rx = GLARE_WIDE * px
         ry = GLARE_TALL * px
-        glow = GLARE_ALPHA * room.glare
+        glow = GLARE_ALPHA
         return this
     }
 }
@@ -1227,6 +757,7 @@ private fun reflectance(nx: Float, nz: Float, x: Float, z: Float): Float {
  */
 private fun DrawScope.drawGlass(
     glaze: Glaze,
+    room: Room,
     from: Int,
     to: Int,
     top: Int,
@@ -1238,8 +769,8 @@ private fun DrawScope.drawGlass(
     x1: Float,
     z1: Float,
 ) {
-    sheetNormal(s0, n0)
-    sheetNormal(s1, n1)
+    room.wallNormal(s0, n0)
+    room.wallNormal(s1, n1)
     val near = reflectance(n0[0], n0[1], x0, z0)
     val far = reflectance(n1[0], n1[1], x1, z1)
     val middle = reflectance(n0[0] + n1[0], n0[1] + n1[1], (x0 + x1) / 2f, (z0 + z1) / 2f)
@@ -1266,20 +797,16 @@ private fun DrawScope.drawGlass(
             halfHeight = glaze.hh,
             turn = glaze.turn,
             refraction = glaze.bevel,
-            edges = glaze.edges,
-            rim = glaze.rim,
         )
         drawRect(brush, topLeft = Offset(l, t), size = Size(r - l, b - t))
         return
     }
 
-    // The opening, wherever the pane has been slid to.
-    val dx = glaze.cx - glaze.width / 2f
-    val dy = glaze.cy - glaze.height / 2f
-    val l = max(glaze.opening + dx, from.toFloat())
-    val r = min(glaze.width - glaze.opening + dx, to.toFloat())
-    val t = max(glaze.opening + dy, top.toFloat())
-    val b = min(glaze.height - glaze.opening + dy, bottom.toFloat())
+    // The opening.
+    val l = max(glaze.opening, from.toFloat())
+    val r = min(glaze.width - glaze.opening, to.toFloat())
+    val t = max(glaze.opening, top.toFloat())
+    val b = min(glaze.height - glaze.opening, bottom.toFloat())
     if (r <= l || b <= t) return
     drawRect(
         Brush.horizontalGradient(
@@ -1313,9 +840,9 @@ private fun DrawScope.drawGlass(
 }
 
 /**
- * A bitmap whose left edge is [left] along the wall, [inset] off it, at
- * [alpha]: cut where the wall bends, each flat stretch through one exact
- * projection and each curved one in chords; [glaze] glasses it.
+ * A bitmap whose left edge is [left] along the wall, [inset] off it: cut where
+ * the wall bends, each flat stretch through one exact projection and each
+ * curved one in chords; [glaze] glasses it.
  */
 private fun DrawScope.drawSheet(
     bitmap: ImageBitmap,
@@ -1324,36 +851,21 @@ private fun DrawScope.drawSheet(
     left: Float,
     inset: Float,
     room: Room,
-    alpha: Float = 1f,
     glaze: Glaze? = null,
 ) {
-    // The glass can be slid off the bitmap, so the sheet runs on under it.
-    var x0 = 0
-    var x1 = bitmap.width
-    var y0 = 0
-    var y1 = bitmap.height
-    if (glaze != null) {
-        x0 = min(x0, floor(glaze.cx - glaze.hw).toInt())
-        x1 = max(x1, ceil(glaze.cx + glaze.hw).toInt())
-        y0 = min(y0, floor(glaze.cy - glaze.hh).toInt())
-        y1 = max(y1, ceil(glaze.cy + glaze.hh).toInt())
-    }
-    // Laid flat, it is off the walls and can go anywhere across the view.
-    val reach = if (flat >= 1f) Float.MAX_VALUE else room.reach
-    val from = max(left + x0 / pxPerUnit, -reach)
-    val to = min(left + x1 / pxPerUnit, reach)
+    val from = max(left, -room.reach)
+    val to = min(left + bitmap.width / pxPerUnit, room.reach)
     if (to <= from) return
+    val flat = room.flat
+    val arc = room.arc
     var a = from
     while (a < to) {
         var b = to
-        for (k in bends) if (k > a + 1e-5f && k < b) b = k
-        val curved = flat < 1f && abs((a + b) / 2f) in FLAT..(FLAT + ARC)
-        val pieces = if (curved) max(1, ceil((b - a) / (ARC / ARC_CHORDS)).toInt()) else 1
+        for (k in room.bends) if (k > a + 1e-5f && k < b) b = k
+        val curved = abs((a + b) / 2f) in flat..(flat + arc)
+        val pieces = if (curved) max(1, ceil((b - a) / (arc / ARC_CHORDS)).toInt()) else 1
         for (n in 0 until pieces) {
-            drawPiece(
-                bitmap, pxPerUnit, top, left, inset, a + (b - a) * n / pieces, a + (b - a) * (n + 1) / pieces,
-                room, alpha, glaze, x0, x1, y0, y1,
-            )
+            drawPiece(bitmap, pxPerUnit, top, left, inset, a + (b - a) * n / pieces, a + (b - a) * (n + 1) / pieces, room, glaze)
         }
         a = b
     }
@@ -1362,7 +874,7 @@ private fun DrawScope.drawSheet(
 /** Columns of overlap between neighbouring pieces, or the seams show. */
 private const val OVERLAP = 1
 
-/** The sheet's columns [sx0] to [sx1] and rows [sy0] to [sy1], which run past the bitmap's under slid glass. */
+/** The stretch of the sheet from [a] to [b] along the wall, through one projection. */
 private fun DrawScope.drawPiece(
     bitmap: ImageBitmap,
     pxPerUnit: Float,
@@ -1372,58 +884,48 @@ private fun DrawScope.drawPiece(
     a: Float,
     b: Float,
     room: Room,
-    alpha: Float,
     glaze: Glaze?,
-    sx0: Int,
-    sx1: Int,
-    sy0: Int,
-    sy1: Int,
 ) {
     // On whole columns of the bitmap, so neighbours meet exactly.
-    val c0 = ((a - left) * pxPerUnit).roundToInt().coerceIn(sx0, sx1)
-    val c1 = ((b - left) * pxPerUnit).roundToInt().coerceIn(sx0, sx1)
+    val c0 = ((a - left) * pxPerUnit).roundToInt().coerceIn(0, bitmap.width)
+    val c1 = ((b - left) * pxPerUnit).roundToInt().coerceIn(0, bitmap.width)
     if (c1 <= c0) return
-    sheetPoint(left + c0 / pxPerUnit, p0, inset)
-    sheetPoint(left + c1 / pxPerUnit, p1, inset)
+    room.wallPoint(left + c0 / pxPerUnit, p0, inset)
+    room.wallPoint(left + c1 / pxPerUnit, p1, inset)
     // The overlap runs on along the same flat stretch, back towards the last piece.
-    val start = max(c0 - OVERLAP, sx0)
+    val start = max(c0 - OVERLAP, 0)
     val back = (c0 - start).toFloat() / (c1 - c0)
-    // From the eye, wherever the walk has taken it.
-    val x0 = p0[0] - (p1[0] - p0[0]) * back - room.eyeX
-    val z0 = p0[1] - (p1[1] - p0[1]) * back - room.eyeZ
-    val x1 = p1[0] - room.eyeX
-    val z1 = p1[1] - room.eyeZ
+    val x0 = p0[0] - (p1[0] - p0[0]) * back
+    val z0 = p0[1] - (p1[1] - p0[1]) * back
+    val x1 = p1[0]
+    val z1 = p1[1]
     if (z0 <= 0.05f || z1 <= 0.05f) return
 
     val f = room.focal
-    val y0 = top + sy0 / pxPerUnit - room.eyeY
-    val y1 = top + sy1 / pxPerUnit - room.eyeY
+    val h = bitmap.height
+    val y0 = top
+    val y1 = top + h / pxPerUnit
     quad[0] = room.cx + f * x0 / z0; quad[1] = room.cy + f * y0 / z0
     quad[2] = room.cx + f * x1 / z1; quad[3] = room.cy + f * y0 / z1
     quad[4] = room.cx + f * x1 / z1; quad[5] = room.cy + f * y1 / z1
     quad[6] = room.cx + f * x0 / z0; quad[7] = room.cy + f * y1 / z0
 
-    if (!quadMatrix(quad, (c1 - start).toFloat(), (sy1 - sy0).toFloat(), matrix)) return
+    if (!quadMatrix(quad, (c1 - start).toFloat(), h.toFloat(), matrix)) return
     withTransform({
         transform(matrix)
         // Into the bitmap's own pixels.
-        translate(-start.toFloat(), -sy0.toFloat())
+        translate(-start.toFloat(), 0f)
     }) {
-        val i0 = max(start, 0)
-        val i1 = min(c1, bitmap.width)
-        if (i1 > i0) {
-            drawImage(
-                image = bitmap,
-                srcOffset = IntOffset(i0, 0),
-                srcSize = IntSize(i1 - i0, bitmap.height),
-                dstOffset = IntOffset(i0, 0),
-                dstSize = IntSize(i1 - i0, bitmap.height),
-                alpha = alpha,
-                filterQuality = FilterQuality.Medium,
-            )
-        }
+        drawImage(
+            image = bitmap,
+            srcOffset = IntOffset(start, 0),
+            srcSize = IntSize(c1 - start, h),
+            dstOffset = IntOffset(start, 0),
+            dstSize = IntSize(c1 - start, h),
+            filterQuality = FilterQuality.Medium,
+        )
         if (glaze != null) {
-            drawGlass(glaze, start, c1, sy0, sy1, left + start / pxPerUnit, left + c1 / pxPerUnit, x0, z0, x1, z1)
+            drawGlass(glaze, room, start, c1, 0, h, left + start / pxPerUnit, left + c1 / pxPerUnit, x0, z0, x1, z1)
         }
     }
 }
@@ -1442,21 +944,21 @@ private fun DrawScope.drawEdges(card: CardArt, edges: ImageBitmap, left: Float, 
     for (side in 0..1) {
         val s = if (side == 0) left else left + card.face.width / card.pxPerUnit
         if (abs(s) > room.reach) continue
-        sheetPoint(s, p0)
+        room.wallPoint(s, p0)
         // Outwards from the painting, along the wall.
-        sheetPoint(if (side == 0) s - PROBE else s + PROBE, p1)
+        room.wallPoint(if (side == 0) s - PROBE else s + PROBE, p1)
         val ox = p1[0] - p0[0]
         val oz = p1[1] - p0[1]
-        if ((room.eyeX - p0[0]) * ox + (room.eyeZ - p0[1]) * oz <= 0f) continue
-        sheetPoint(s, p1, card.depth)
-        val xw = p0[0] - room.eyeX
-        val zw = p0[1] - room.eyeZ
-        val xf = p1[0] - room.eyeX
-        val zf = p1[1] - room.eyeZ
+        if (-p0[0] * ox - p0[1] * oz <= 0f) continue
+        room.wallPoint(s, p1, card.depth)
+        val xw = p0[0]
+        val zw = p0[1]
+        val xf = p1[0]
+        val zf = p1[1]
         if (zw <= 0.05f || zf <= 0.05f) continue
 
         val f = room.focal
-        val y0 = card.top - room.eyeY
+        val y0 = card.top
         val y1 = y0 + h / card.pxPerUnit
         // Wall side first, as the strip is drawn.
         quad[0] = room.cx + f * xw / zw; quad[1] = room.cy + f * y0 / zw
@@ -1533,38 +1035,17 @@ private class CardArt(
     val glass: Boolean = false,
     /** The face's opening, in from each side, in its pixels. */
     val opening: Int = 0,
-    unframe: (() -> ImageBitmap)? = null,
-    turn: (() -> ImageBitmap)? = null,
-    pair: (() -> ImageBitmap)? = null,
-    split: (() -> List<Stick>)? = null,
 ) {
     /** How far along the wall it runs, label and shadow included. */
     val wallWidth: Float get() = max(face.width, wall?.width ?: 0) / pxPerUnit
-
-    /** The canvas out of its frame, the size of the face; drawn the first time it is asked for. */
-    val bare: ImageBitmap? by lazy { unframe?.invoke() }
-
-    /** The back of the canvas as [bare] lies; drawn the first time it is asked for. */
-    val reverse: ImageBitmap? by lazy { turn?.invoke() }
-
-    /**
-     * [bare] and [reverse] side by side, the face's width apart, so one mesh
-     * can turn the canvas over showing both; drawn the first time asked for.
-     */
-    val sides: ImageBitmap? by lazy { pair?.invoke() }
-
-    /** The face cut along its mitres, top, right, bottom and left; cut the first time asked for. */
-    val sticks: List<Stick>? by lazy { split?.invoke() }
 }
 
-/** One stick of a frame, cut out of the face at [x], [y] in its pixels. */
-private class Stick(val image: ImageBitmap, val x: Int, val y: Int)
-
-/** Every painting drawn once, rebuilt only when they change size on screen. */
+/** Every painting drawn once, rebuilt only when they change size on screen; [labels] puts a label under each. */
 private class WallArt(
     private val items: List<GalleryWallItem>,
     private val ink: Color,
     private val frame: GalleryWallFrame?,
+    private val labels: Boolean,
     private val measurer: TextMeasurer,
 ) {
     var cards: List<CardArt> = emptyList()
@@ -1572,29 +1053,11 @@ private class WallArt(
 
     private var builtFor = -1
 
-    private var closeCard: CardArt? = null
-    private var closeIndex = -1
-    private var closeFor = -1
-
     fun ensure(pxPerUnit: Float) {
         val px = pxPerUnit.roundToInt().coerceAtLeast(8)
         if (px == builtFor) return
         builtFor = px
         cards = items.mapIndexed { n, item -> build(item, px.toFloat(), n) }
-    }
-
-    /**
-     * Painting [index] again at [pxPerUnit], for walking up to — no finer than
-     * its own image, which would only blur it twice.
-     */
-    fun close(index: Int, pxPerUnit: Float): CardArt {
-        val item = items[index]
-        val px = min(pxPerUnit, item.image.height / item.scale).roundToInt().coerceAtLeast(8)
-        val cached = closeCard
-        if (cached != null && index == closeIndex && px == closeFor) return cached
-        closeIndex = index
-        closeFor = px
-        return build(item, px.toFloat(), index).also { closeCard = it }
     }
 
     /** [seed] picks the painting's wood, the same at every size. */
@@ -1616,9 +1079,13 @@ private class WallArt(
         val depth = frame?.let { (it.depth * unit).roundToInt() } ?: 0
         val outerW = paintW + 2 * border
         val outerH = paintH + 2 * border
-        val lines = listOf(item.title to title, item.artist to rest, item.date to rest, item.medium to rest)
-            .filter { it.first.isNotEmpty() }
-            .map { (text, style) -> measurer.measure(text, style, density = density) }
+        val lines = if (!labels) {
+            emptyList()
+        } else {
+            listOf(item.title to title, item.artist to rest, item.date to rest, item.medium to rest)
+                .filter { it.first.isNotEmpty() }
+                .map { (text, style) -> measurer.measure(text, style, density = density) }
+        }
         val labelW = lines.maxOfOrNull { it.size.width } ?: 0
         val labelTop = outerH + LABEL_GAP * unit
         val labelH = if (lines.isEmpty()) 0f else LABEL_GAP * unit + lines.size * LABEL_LINE * unit
@@ -1634,15 +1101,14 @@ private class WallArt(
             CanvasDrawScope().draw(density, LayoutDirection.Ltr, BitmapCanvas(bitmap), Size(w.toFloat(), h.toFloat()), block)
             return bitmap
         }
-        fun DrawScope.canvas(image: ImageBitmap = item.image, x: Int = border) = drawImage(
-            image = image,
+        fun DrawScope.canvas() = drawImage(
+            image = item.image,
             srcOffset = IntOffset.Zero,
-            srcSize = IntSize(image.width, image.height),
-            dstOffset = IntOffset(x, border),
+            srcSize = IntSize(item.image.width, item.image.height),
+            dstOffset = IntOffset(border, border),
             dstSize = IntSize(paintW, paintH),
             filterQuality = FilterQuality.High,
         )
-        val reverse = item.back ?: item.image
         fun DrawScope.label() = lines.forEachIndexed { n, layout ->
             drawText(layout, topLeft = Offset(0f, labelTop + n * LABEL_LINE * unit))
         }
@@ -1673,49 +1139,11 @@ private class WallArt(
             recess = recess / pxPerUnit,
             glass = frame.glass,
             opening = border,
-            unframe = { paint(outerW, outerH) { canvas() } },
-            turn = { paint(outerW, outerH) { canvas(reverse) } },
-            pair = { paint(2 * outerW, outerH) { canvas(); canvas(reverse, outerW + border) } },
-            split = { cut(face, border) },
         )
     }
 }
 
 // --- the frame ---------------------------------------------------------------
-
-/**
- * The frame [face] cut along its mitres into its four sticks, [border] deep —
- * top, right, bottom and left, each in a bitmap just its own size.
- */
-private fun cut(face: ImageBitmap, border: Int): List<Stick> {
-    val w = face.width
-    val h = face.height
-    val b = border.toFloat()
-    // Each stick's place in the face and its outline there, outer edge first.
-    val places = listOf(
-        IntOffset(0, 0) to floatArrayOf(0f, 0f, w.toFloat(), 0f, w - b, b, b, b),
-        IntOffset(w - border, 0) to floatArrayOf(w.toFloat(), 0f, w.toFloat(), h.toFloat(), w - b, h - b, w - b, b),
-        IntOffset(0, h - border) to floatArrayOf(w.toFloat(), h.toFloat(), 0f, h.toFloat(), b, h - b, w - b, h - b),
-        IntOffset(0, 0) to floatArrayOf(0f, h.toFloat(), 0f, 0f, b, b, b, h - b),
-    )
-    return places.mapIndexed { side, (at, q) ->
-        val size = if (side % 2 == 0) IntSize(w, border) else IntSize(border, h)
-        val bitmap = ImageBitmap(size.width.coerceAtLeast(1), size.height.coerceAtLeast(1))
-        CanvasDrawScope().draw(Density(1f), LayoutDirection.Ltr, BitmapCanvas(bitmap), Size(size.width.toFloat(), size.height.toFloat())) {
-            translate(-at.x.toFloat(), -at.y.toFloat()) {
-                val mitre = Path().apply {
-                    moveTo(q[0], q[1])
-                    lineTo(q[2], q[3])
-                    lineTo(q[4], q[5])
-                    lineTo(q[6], q[7])
-                    close()
-                }
-                clipPath(mitre) { drawImage(face) }
-            }
-        }
-        Stick(bitmap, at.x, at.y)
-    }
-}
 
 /*
  * The moulding's profile, outer edge to inner, as light over the wood: a
@@ -1775,8 +1203,8 @@ private fun Random.between(from: Float, to: Float): Float = from + nextFloat() *
 /**
  * One stick of wood, [length] along by [across] wide, with x running along it
  * and y across. Every size is a share of [across] or a multiple of [unit], and
- * [random] is drawn on the same number of times at any size, so the painting
- * walked up to wears the same piece of wood it had from across the room.
+ * [random] is drawn on the same number of times at any size, so a painting
+ * redrawn when the wall changes size wears the same piece of wood it had.
  */
 private fun DrawScope.drawWood(base: Color, grain: Float, length: Float, across: Float, unit: Float, lines: Int, random: Random) {
     drawRect(shade(base, random.between(-0.06f, 0.06f)), size = Size(length, across))
@@ -2243,7 +1671,7 @@ private class Carver(
  * Gold leaf over one stick, [length] along by [across] wide: laid in
  * overlapping squares, rubbed through to the bole on the high outer edge and
  * dulled down the cove. [random] is drawn on the same number of times at any
- * size, so the gold walked up to wears the same as from across the room.
+ * size, so the gold wears the same when the wall changes size.
  */
 private fun DrawScope.drawGilt(gold: Color, length: Float, across: Float, unit: Float, random: Random) {
     drawRect(shade(gold, random.between(-0.04f, 0.04f)), size = Size(length, across))

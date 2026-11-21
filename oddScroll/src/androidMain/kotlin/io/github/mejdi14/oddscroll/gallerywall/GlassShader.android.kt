@@ -102,7 +102,6 @@ float4 bend(float2 bent, float2 shift, float2 p, float2 halfSize) {
  * - All of it through 1.5x vibrancy, then a tenth of white.
  * - Over that, the room it throws back, running between the three amounts
  *   worked out for the piece.
- * - Along the edge, a thin rim lit from the upper left and lower right.
  */
 private const val SOURCE = """
 uniform shader image;
@@ -112,8 +111,6 @@ uniform float3 wall;
 uniform float4 pane;
 uniform float turn;
 uniform float refraction;
-uniform float edges;
-uniform float rim;
 
 $ROUNDED_RECT
 $BEND
@@ -143,10 +140,6 @@ half4 main(float2 xy) {
     float t = clamp((xy.x - span.x) / max(span.y - span.x, 1.0), 0.0, 1.0);
     float room = t < 0.5 ? mix(fresnel.x, fresnel.y, t * 2.0) : mix(fresnel.y, fresnel.z, t * 2.0 - 1.0);
     color = float4(wall * room, room) + color * (1.0 - room);
-
-    float lip = clamp(rim + 0.5 - max(-sd, 0.0), 0.0, 1.0);
-    float light = abs(dot(grad, float2(0.70710678))) * 0.5 * lip * edges;
-    color = min(color + float4(light), 1.0);
 
     return half4(color * cover);
 }
@@ -189,8 +182,6 @@ private class AgslGlass : GlassShader {
         halfHeight: Float,
         turn: Float,
         refraction: Float,
-        edges: Float,
-        rim: Float,
     ): Brush {
         shader.setInputShader("image", imageShader(image))
         shader.setFloatUniform("span", from, to)
@@ -199,8 +190,6 @@ private class AgslGlass : GlassShader {
         shader.setFloatUniform("pane", centreX, centreY, halfWidth, halfHeight)
         shader.setFloatUniform("turn", turn)
         shader.setFloatUniform("refraction", refraction)
-        shader.setFloatUniform("edges", edges)
-        shader.setFloatUniform("rim", rim)
         return brush
     }
 

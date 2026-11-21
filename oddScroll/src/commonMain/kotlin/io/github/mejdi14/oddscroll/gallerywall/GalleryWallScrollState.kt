@@ -4,12 +4,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import io.github.mejdi14.oddscroll.internal.clamped
-import io.github.mejdi14.oddscroll.internal.frameRate
 import kotlin.math.abs
 import kotlin.math.exp
-import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlin.math.sign
 
 /*
@@ -18,7 +16,7 @@ import kotlin.math.sign
  * number says, to 1.8 px. The reference is driven by a trackpad, and what it
  * does after each swipe ends is a critically damped spring — pooled over all
  * seven let-gos, ζ = 1.02 ± 0.01 and ωn = 7.0 ± 0.2 a second, to 1.3 px; held
- * at ζ = 1 it is ωn = 6.74 to the same 1.3 px, which is what this uses
+ * at ζ = 1 it is ωn = 6.74 to the same 1.3 px, which is the default
  * (Compose's `spring(dampingRatio = 1f, stiffness = 45.5f)`, just under
  * `Spring.StiffnessVeryLow`).
  *
@@ -27,6 +25,7 @@ import kotlin.math.sign
  * such a lag comes to — so there is no throw on top: the input moves a target,
  * the hang springs after it, and the coast is the hang catching up.
  */
+
 private const val OMEGA = 6.744f
 
 /** Below these, in card heights and card heights a second, it has arrived. */
@@ -47,53 +46,20 @@ private const val SETTLE_MS = 150f
  */
 private const val FLICK = 0.2f
 
-/** Still this long, with a painting in the middle, before it can be walked up to. */
-private const val LOOK_AFTER_MS = 2000f
-
-/** Close enough to the middle to call it there, in card heights — under a pixel. */
-private const val CENTRED = 0.01f
-
-/** Walking up to a painting, and back. */
-private const val WALK_IN_MS = 2000f
-private const val WALK_OUT_MS = 1400f
-
-/** Walking into the room when it is first shown. */
-private const val ENTRY_MS = 2400f
-
-/** Inspecting: the frame's four sticks part and fly off, then the glass slides up and away. */
-private const val FRAME_OFF_MS = 1000f
-private const val GLASS_OFF_MS = 800f
-
-/** Stepping away, the glass and the frame go back on this much faster. */
-private const val BACK_ON = 2f
-
-/** Turning the bare painting over like a sheet of paper, one way or the other. */
-internal const val FLIP_MS = 1800f
-
-/** Stepping into the painting, and back out of it. */
-private const val STEP_IN_MS = 2600f
-private const val STEP_OUT_MS = 1600f
-
-/** A painting rebuilt as a place: the walk in along its route, and how much faster it walks back out. */
-private const val ROUTE_MS = 2800f
-private const val ROUTE_BACK = 3f
-
-/** How far stepped in before the walk in starts, once the room round the frame has gone dark. */
-private const val ROUTE_FROM = 0.4f
-
-/** The head easing after a drag inside the painting, per frame at 60Hz. */
-private const val LOOK_EASE = 0.12f
-
 /**
- * Where the hang has slid to along the wall, in card heights.
+ * Where the hang has slid to along the wall, in card heights, and which
+ * painting is in the middle of the back wall.
  *
  * The whole gallery is one number: each painting hangs a fixed way along the
  * wall from the one before, so where the hang has slid to says where every
  * painting is. Input moves where it is going; the number springs after it.
  * When the input stops, where it is going is rounded to a painting, so the
  * hang always comes to rest with one in the middle.
+ *
+ * [scrollTo], [animateScrollTo] and [step] work whether or not the user can
+ * scroll it; the [GalleryWallScroll] showing it runs the motion.
  */
-class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
+class GalleryWallScrollState internal constructor(initialIndex: Int) {
 
     /** Unbounded; the hang repeats, so it is only wrapped when drawn. */
     internal var position = 0f
@@ -102,52 +68,32 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
     private var target = 0f
     private var velocity = 0f
 
+    /** ωn of the spring the hang follows its target on, a second; set from the stiffness it is shown with. */
+    internal var omega = OMEGA
+
     /** Bumped on each frame that moves anything, so the wall repaints. */
     internal var tick by mutableIntStateOf(0)
         private set
 
     /** The painting nearest the middle of the back wall, unwrapped. */
-    var centred by mutableIntStateOf(0)
-        private set
+    private var centred = 0
 
     /**
-     * The hang has stood still for two seconds with a painting in the
-     * middle, so [look] will walk up to it.
+     * The painting nearest the middle of the back wall, as an index into the
+     * items, `0 until items.size`. Changes as a painting passes the middle,
+     * not every frame.
      */
-    var canLook by mutableStateOf(false)
+    var currentIndex by mutableIntStateOf(initialIndex)
         private set
 
-    /** Walking up to, or standing in front of, a painting; [leave] steps back. */
-    var looking by mutableStateOf(false)
+    /** The hang is being dragged, or is still sliding to where it was sent. */
+    var isScrollInProgress by mutableStateOf(false)
         private set
 
-    /** Standing in front of the painting walked up to. */
-    var arrived by mutableStateOf(false)
-        private set
+    private var hang: Hang? = null
 
-    /** Its frame and glass taken off by [inspect]; they go back on when stepped away from. */
-    var inspected by mutableStateOf(false)
-        private set
-
-    /** Up close with the frame still on, so [inspect] will take it and the glass off. */
-    val canInspect: Boolean get() = arrived && !inspected && !stepping
-
-    /** The frame and glass are off and out of sight, so [flip] will turn the painting over, or back. */
-    var canFlip by mutableStateOf(false)
-        private set
-
-    /** Up close, the painting lying face up and still, so [stepInside] will go into it. */
-    var canStepInside by mutableStateOf(false)
-        private set
-
-    /** Inside the painting walked up to, or on the way in; [leave] steps back out of it. */
-    var inside by mutableStateOf(false)
-        private set
-
-    /** In the painting at all, or on the way in or out of it. */
-    private var stepping by mutableStateOf(false)
-
-    internal var hang: Hang? = null
+    /** A jump asked for before there was a hang to make it on, as an item index. */
+    private var pending: Int? = initialIndex
 
     /** A finger is down, so the input has not stopped however still it is. */
     private var held = false
@@ -161,161 +107,76 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
     /** The target is a painting's middle, with no input since. */
     private var settled = true
 
-    /** The painting walked up to, unwrapped. */
-    private var visited = 0
-
-    /** The walk up to it, 0 at the hang and 1 in front of it, linear in time. */
-    internal var walk = 0f
-        private set
-
-    /** How far the frame has come off the painting walked up to, 0 to 1, linear in time. */
-    internal var apart = 0f
-        private set
-
-    /** How far its glass has slid away once the frame is off, 0 to 1, linear in time. */
-    internal var lift = 0f
-        private set
-
-    /** How far the bare painting has turned over, 0 to 1, linear in time; 0 lying still. */
-    internal var fold = 0f
-        private set
-
-    private var flipping = false
-
-    /** The bare painting lies turned over, its back showing, until it is flipped again or stepped away from. */
-    internal var over = false
-        private set
-
-    /** How far into the painting, 0 in front of it and 1 inside, linear in time. */
-    internal var stepIn = 0f
-        private set
-
-    /**
-     * Inside, the head turned across and up or down, in radians, easing after
-     * where the drags have put it; how far walked on, in the painting's
-     * distance; and how long since stepping in, in seconds.
-     */
-    internal var yaw = 0f
-        private set
-    internal var pitch = 0f
-        private set
-    internal var wander = 0f
-        private set
-    internal var insideTime = 0f
-        private set
-
-    private val look = FloatArray(2)
-    private var wanderTo = 0f
-
-    /**
-     * The painting walked up to is rebuilt as a place, [GalleryWallItem.scene]:
-     * stepping in walks its route, a drag turns within its bounds and a scroll
-     * walks on or back along it. Set as it is drawn.
-     */
-    internal var scene: GalleryWallScene? = null
-
-    /** How far along the scene's route, 0 at the painting and 1 at its end, linear in time; and where it is going. */
-    internal var route = 0f
-        private set
-    private var routeTo = 0f
-    private var walkPending = false
-
-    /** The walk into the room, 0 in the doorway and 1 where the hang is seen from, linear in time. */
-    internal var entry = if (walkIn) 0f else 1f
-        private set
-
-    /** The painting the walk is towards, or would be: the one in the middle until it starts. */
-    internal val subject: Int get() = if (looking || walk > 0f) visited else centred
-
-    /** Slides painting [index] to the middle. Unwrapped, so it can go either way round. */
+    /** Jumps painting [index] (of the items) to the middle, with no motion. */
     fun scrollTo(index: Int) {
-        val hang = hang ?: return
-        if (!input()) return
-        target = hang.centre(index)
-    }
-
-    /** Walks up to the painting in the middle, once [canLook]. */
-    fun look() {
-        if (!canLook) return
-        visited = centred
-        looking = true
-        canLook = false
-    }
-
-    /** Takes the frame off the painting walked up to, then its glass, once [canInspect]. */
-    fun inspect() {
-        if (!canInspect) return
-        inspected = true
-    }
-
-    /** Turns the bare painting over like a sheet of paper to its back, or back again, once [canFlip]. */
-    fun flip() {
-        if (!canFlip) return
-        flipping = true
-        canFlip = false
-    }
-
-    /**
-     * Goes into the painting walked up to, once [canStepInside]: it takes on
-     * depth, the room fades to dark round it and the eye goes in, where a drag
-     * looks round and a scroll walks in or back.
-     */
-    fun stepInside() {
-        if (!canStepInside) return
-        inside = true
-        canStepInside = false
-        walkPending = scene != null
-    }
-
-    /**
-     * Steps back out of the painting if inside it; otherwise steps back from
-     * it to the hang, putting its frame and glass back on.
-     */
-    fun leave() {
-        if (inside) {
-            inside = false
-            look[0] = 0f
-            look[1] = 0f
-            wanderTo = 0f
-            routeTo = 0f
-            walkPending = false
+        val hang = hang
+        if (hang == null) {
+            pending = index
             return
         }
-        looking = false
-        inspected = false
-        flipping = false
-        fold = 0f
-        over = false
+        target = hang.centre(nearestCopy(hang, index, position))
+        position = target
+        velocity = 0f
+        settled = true
+        tick++
+        update(hang)
+    }
+
+    /** Slides painting [index] (of the items) to the middle, the short way round, on the hang's own spring. */
+    fun animateScrollTo(index: Int) {
+        val hang = hang
+        if (hang == null) {
+            pending = index
+            return
+        }
+        travel(nearestCopy(hang, index, target))
+    }
+
+    /**
+     * Slides [by] paintings along from the one the hang is going to: positive
+     * brings the next ones in from the right-hand wall, negative the ones before.
+     */
+    fun step(by: Int) {
+        val hang = hang ?: return
+        travel(hang.nearest(target) + by)
+    }
+
+    /** Sends the hang to painting [index], unwrapped. */
+    internal fun travel(index: Int) {
+        val hang = hang ?: return
+        target = hang.centre(index)
+        settled = true
+        idleMs = 0f
+    }
+
+    /** The copy of item [index], round the repeating hang, whose middle is nearest [from]. */
+    private fun nearestCopy(hang: Hang, index: Int, from: Float): Int {
+        val wrapped = hang.wrap(index)
+        val laps = ((from - hang.centre(wrapped)) / hang.lap).roundToInt()
+        return laps * hang.count + wrapped
+    }
+
+    /** Shown with [hang]; a new one, from changed items or spacing, keeps the same painting in the middle. */
+    internal fun attach(hang: Hang) {
+        val previous = this.hang
+        if (previous === hang) return
+        this.hang = hang
+        val jump = pending
+        pending = null
+        when {
+            jump != null -> scrollTo(jump)
+            previous != null -> travel(nearestCopy(hang, previous.wrap(centred), target))
+        }
     }
 
     /** [by] is in card heights, along the wall. */
     internal fun nudge(by: Float) {
-        if (!input()) return
+        if (settled) {
+            anchor = target
+            settled = false
+        }
+        idleMs = 0f
         target += by
-    }
-
-    /** A drag of [dx], [dy] pixels inside the painting, seen through a focal length of [focal]. */
-    internal fun lookAround(dx: Float, dy: Float, focal: Float) {
-        if (!inside) return
-        val scene = scene
-        if (scene == null) {
-            lookBy(dx, dy, focal, look[0], look[1], look)
-        } else {
-            // Into the scene: a drag right turns right, towards the cliff, and a drag up looks up.
-            look[0] = (look[0] + dx / focal).clamped(-scene.yawMax, scene.yawMax)
-            look[1] = (look[1] - dy / focal).clamped(-scene.pitchDown, scene.pitchUp)
-        }
-    }
-
-    /** A scroll of [by] inside the painting walks in, or back. */
-    internal fun walkInside(by: Float) {
-        if (!inside) return
-        if (scene != null) {
-            routeTo = (routeTo - by * 0.04f).clamped(0f, 1f)
-            walkPending = false
-        } else {
-            wanderTo = wanderBy(by, wanderTo)
-        }
     }
 
     internal fun press() {
@@ -329,17 +190,6 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
             idleMs = 0f
             settle()
         }
-    }
-
-    /** Input is about to move the target; false while away from the hang. */
-    private fun input(): Boolean {
-        if (looking || walk > 0f || entry < 1f) return false
-        if (settled) {
-            anchor = target
-            settled = false
-        }
-        idleMs = 0f
-        return true
     }
 
     /** Rounds where the hang is going to a painting. */
@@ -356,86 +206,17 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
     internal fun advance(deltaMs: Float) {
         idleMs = min(idleMs + deltaMs, 1e6f)
         if (!held && !settled && idleMs >= SETTLE_MS) settle()
+        if (spring(deltaMs)) tick++
+        hang?.let(::update)
+    }
 
-        var moved = spring(deltaMs)
-
-        if (entry < 1f) {
-            entry = min(1f, entry + deltaMs / ENTRY_MS)
-            // The wait for the button starts once in.
-            idleMs = 0f
-            moved = true
-        }
-
-        val goal = if (looking) 1f else 0f
-        if (walk != goal) {
-            walk = if (looking) min(1f, walk + deltaMs / WALK_IN_MS) else max(0f, walk - deltaMs / WALK_OUT_MS)
-            moved = true
-        }
-        val there = looking && walk >= 1f
-        if (there != arrived) arrived = there
-
-        // Off the frame first and then the glass, and back on the other way round.
-        if (inspected) {
-            if (apart < 1f) {
-                apart = min(1f, apart + deltaMs / FRAME_OFF_MS)
-                moved = true
-            } else if (lift < 1f) {
-                lift = min(1f, lift + deltaMs / GLASS_OFF_MS)
-                moved = true
-            }
-        } else if (lift > 0f) {
-            lift = max(0f, lift - deltaMs * BACK_ON / GLASS_OFF_MS)
-            moved = true
-        } else if (apart > 0f) {
-            apart = max(0f, apart - deltaMs * BACK_ON / FRAME_OFF_MS)
-            moved = true
-        }
-
-        if (flipping) {
-            fold += deltaMs / FLIP_MS
-            if (fold >= 1f) {
-                // Turned all the way over, it lies the other way up.
-                fold = 0f
-                over = !over
-                flipping = false
-            }
-            moved = true
-        }
-
-        // Into the painting and back out, the head easing after the drags.
-        val deep = if (inside) min(1f, stepIn + deltaMs / STEP_IN_MS) else max(0f, stepIn - deltaMs / STEP_OUT_MS)
-        if (deep > 0f || stepIn > 0f) {
-            stepIn = deep
-            val k = frameRate(LOOK_EASE, deltaMs)
-            yaw += (look[0] - yaw) * k
-            pitch += (look[1] - pitch) * k
-            wander += (wanderTo - wander) * k
-            insideTime = if (deep > 0f) insideTime + deltaMs / 1000f else 0f
-            if (walkPending && inside && stepIn >= ROUTE_FROM) {
-                routeTo = 1f
-                walkPending = false
-            }
-            val step = deltaMs / ROUTE_MS * if (inside) 1f else ROUTE_BACK
-            route = if (deep == 0f) 0f else if (route < routeTo) min(routeTo, route + step) else max(routeTo, route - step)
-            // Inside, the head never quite stops drifting.
-            moved = true
-        }
-        if ((stepIn > 0f) != stepping) stepping = stepIn > 0f
-
-        if (moved) tick++
-        val hang = hang ?: return
-        val flippable = inspected && lift >= 1f && !flipping && !stepping && paperFolds && hang.framed(visited)
-        if (flippable != canFlip) canFlip = flippable
-        // Lying face up and still, out of any frame that is coming off or going back on.
-        val enterable = arrived && !inside && !stepping && !flipping && !over && fold == 0f &&
-            (apart == 0f || lift >= 1f) && paperFolds
-        if (enterable != canStepInside) canStepInside = enterable
+    private fun update(hang: Hang) {
         val nearest = hang.nearest(position)
         if (nearest != centred) centred = nearest
-
-        val ready = !looking && walk == 0f && apart == 0f && settled && idleMs >= LOOK_AFTER_MS &&
-            abs(position - hang.centre(nearest)) < CENTRED
-        if (ready != canLook) canLook = ready
+        val index = hang.wrap(nearest)
+        if (index != currentIndex) currentIndex = index
+        val moving = !settled || position != target
+        if (moving != isScrollInProgress) isScrollInProgress = moving
     }
 
     /** One frame of the hang springing after its target; false if it was already there. */
@@ -449,10 +230,10 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
             // The spring's own solution over the frame, so it lands the same
             // at any frame rate.
             val dt = deltaMs / 1000f
-            val c = velocity + OMEGA * e
-            val decay = exp(-OMEGA * dt)
+            val c = velocity + omega * e
+            val decay = exp(-omega * dt)
             position = target + (e + c * dt) * decay
-            velocity = (velocity - OMEGA * c * dt) * decay
+            velocity = (velocity - omega * c * dt) * decay
         }
         return true
     }
