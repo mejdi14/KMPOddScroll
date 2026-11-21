@@ -35,7 +35,7 @@ fun EdgeDistortionDemoScreen() {
     }
 
     EdgeDistortionScroll(
-        images = images,
+        items = images,
         modifier = Modifier.fillMaxSize(),
         background = palette.page,
     )

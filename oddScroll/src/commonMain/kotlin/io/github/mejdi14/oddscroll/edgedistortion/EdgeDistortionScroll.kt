@@ -70,7 +70,7 @@ fun rememberEdgeDistortionScrollState(
  * Where no runtime shader is available the grid is drawn flat and everything
  * else behaves the same: see [edgeDistortion].
  *
- * @param images pictures to lay over the lattice, cover-fitted to [cardRatio].
+ * @param items pictures to lay over the lattice, cover-fitted to [cardRatio].
  * @param modifier applied to the frame.
  * @param background the page colour behind the cards.
  * @param cardHeight card height as a share of the viewport's height.
@@ -88,14 +88,14 @@ fun rememberEdgeDistortionScrollState(
  *   [Offset.Zero] stops the drift.
  * @param userScrollEnabled false ignores drag and wheel; the drift and
  *   programmatic scrolling through [state] still work.
- * @param onItemClick called with the index into [images] of the picture on the
+ * @param onItemClick called with the index into [items] of the picture on the
  *   tapped card. The test ignores the distortion, so near the borders it can be
  *   a little off the card the eye sees. A tap does nothing when this is null.
  * @param state where the camera is; also drives programmatic scrolling.
  */
 @Composable
 fun EdgeDistortionScroll(
-    images: List<ImageBitmap>,
+    items: List<ImageBitmap>,
     modifier: Modifier = Modifier,
     background: Color = Color.White,
     cardHeight: Float = 0.375f,
@@ -112,15 +112,15 @@ fun EdgeDistortionScroll(
     onItemClick: ((index: Int) -> Unit)? = null,
     state: EdgeDistortionScrollState = rememberEdgeDistortionScrollState(drift),
 ) {
-    if (images.isEmpty()) {
+    if (items.isEmpty()) {
         Box(modifier)
         return
     }
 
     SideEffect { state.drift = drift }
 
-    val cards = remember(images, cardRatio, corner) {
-        images.map { cardBitmap(it, cardRatio, corner) }
+    val cards = remember(items, cardRatio, corner) {
+        items.map { cardBitmap(it, cardRatio, corner) }
     }
     val click by rememberUpdatedState(onItemClick)
 
