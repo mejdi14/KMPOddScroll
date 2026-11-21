@@ -56,10 +56,10 @@ private const val TAP_SLOP = 6f
  * Every piece is flat in its own frame, so each is drawn once and then sent
  * through its own exact projection, back to front as the case faces; the
  * walls round its edge and the knuckles of the hinge are drawn as the camera
- * sees them each frame. On Android 13 and up, and on the web, the glass and
- * the disc are lit a pixel at a time, after the reference's own shaders, and
- * the sparks the rods catch of the studio's lamps throw its four-point stars;
- * elsewhere the case is drawn from a look baked once.
+ * sees them each frame. The glass and the disc are lit a pixel at a time,
+ * after the reference's own shaders, and the sparks the rods catch of the
+ * studio's lamps throw its four-point stars; on Android before 13 the case
+ * is drawn from a look baked once.
  *
  * @param art printed across the disc, its middle square to the disc's width.
  * @param cover slipped in under the lid's glass, its middle square filling

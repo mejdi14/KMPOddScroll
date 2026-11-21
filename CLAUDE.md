@@ -67,8 +67,13 @@ rewritten. Put it behind an `internal expect fun Modifier.<effect>(...)` instead
 `androidMain` supplies an AGSL `RuntimeShader` through
 `graphicsLayer { renderEffect = ... }`, and the other targets return `this`, so
 the style still runs everywhere with that one treatment missing. Keep the actual
-in every source set (`jvmMain`, `jsMain`, `wasmJsMain`, `iosMain`) — the module
-has no shared non-Android set, and adding one is not worth the build config.
+in every source set (`jvmMain`, `jsMain`, `wasmJsMain`, `iosMain`).
+
+Every target but Android draws through Skia, and SkSL takes AGSL source as it
+is, so an effect worth having everywhere can go in `skikoMain` (shared by jvm,
+web and ios, set up in `oddScroll/build.gradle.kts`) with one Skia
+`RuntimeEffect` actual. The CD case does this: its shader strings live in
+`commonMain/.../cdrack/CaseShaderSource.kt` and both actuals compile them.
 
 House techniques for the common part:
 

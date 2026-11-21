@@ -1,3 +1,4 @@
+import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
@@ -30,6 +31,19 @@ kotlin {
 
         compilerOptions {
             jvmTarget = JvmTarget.JVM_11
+        }
+    }
+
+    // Every target but Android draws through Skia, so a shader written for it
+    // is shared once in skikoMain rather than copied into each.
+    @OptIn(ExperimentalKotlinGradlePluginApi::class)
+    applyDefaultHierarchyTemplate {
+        common {
+            group("skiko") {
+                withJvm()
+                group("web")
+                group("ios")
+            }
         }
     }
 

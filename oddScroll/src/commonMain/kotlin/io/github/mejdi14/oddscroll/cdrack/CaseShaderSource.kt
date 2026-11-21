@@ -3,7 +3,7 @@ package io.github.mejdi14.oddscroll.cdrack
 /*
  * The case's shaders, written in AGSL. Skia's SkSL takes the same source, so
  * Android's RuntimeShader and the web's Skia RuntimeEffect compile these
- * strings as they are.
+ * strings as they are, Skia doing so for desktop, iOS and the web alike.
  */
 
 /**

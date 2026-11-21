@@ -62,8 +62,8 @@ CdRackScroll(
 | `pageScrubber` | `true` | ruler that scrubs through the open manual |
 | `state` | intro of `4` | `rememberCdRackScrollState(intro)` |
 
-Shaded plastic and the disc's rainbow run on Android 13+ and on the web (JS and
-Wasm); on desktop and iOS the same case is drawn from a baked look.
+Shaded plastic and the disc's rainbow run on desktop, iOS, the web, and Android
+13+; on older Android the same case is drawn from a baked look.
 
 <br>
 

@@ -21,8 +21,8 @@ import org.jetbrains.skia.SamplingMode
 import org.jetbrains.skia.Shader
 
 /**
- * Compose on the web draws through Skia, whose SkSL takes the AGSL source as
- * it is, so the case is lit the way it is on Android. If any shader fails to
+ * Compose on desktop, iOS and the web draws through Skia, whose SkSL takes
+ * the AGSL source as it is, so the case is lit the way it is on Android. If any shader fails to
  * compile, it is drawn from its baked look in common code.
  */
 internal actual fun caseShader(): CaseShader? = runCatching { SkslCase() }.getOrNull()
