@@ -39,12 +39,6 @@ private const val STAND_SECONDS = 1.602f
 private val standEase = cubicBezierEase(0.483f, 0.018f, 0.130f, 1.034f)
 
 /**
- * The lift and turn are played this much faster than the reference, both up
- * and down. The curves keep their shape; only the clock runs quicker.
- */
-private const val LIFT_PACE = 1.5f
-
-/**
  * Seconds of parting speed a throw is aimed on by. The settle curve starts at
  * 0.93 of its distance a second, so a throw this long leaves the deck moving
  * at the speed the finger let go of it.
@@ -71,14 +65,32 @@ internal const val NONE = Int.MIN_VALUE
  * its slot. From the moment a card is selected until it is all the way back
  * down, the deck does not scroll.
  */
-class LiftStackScrollState internal constructor(intro: Int) {
+class LiftStackScrollState internal constructor(initialIndex: Int = 0) {
 
     /** Deck position, in cards. Unbounded; wrapped only when a card is drawn. */
-    internal var phase = 0f
+    internal var phase = initialIndex.toFloat()
         private set
 
     /** Card the deck is resting on, or heading for. */
-    private var target = intro
+    private var target = initialIndex
+
+    /** How many items the deck is made of; set by the style from its list. */
+    internal var itemCount = 1
+
+    /** How much faster the lift and turn play than the curves they were read from. */
+    internal var liftPace = 1.5f
+
+    /** The card nearest the top slot, unwrapped. Written when it changes. */
+    private var topIndex by mutableIntStateOf(initialIndex)
+
+    /**
+     * Index, wrapped into the items, of the card in the top slot. It follows
+     * the deck as cards pass, so it changes mid-run and not only at rest.
+     */
+    val currentIndex: Int get() = wrapItem(topIndex, itemCount)
+
+    /** True while the deck is dragged, thrown or running to a card. */
+    val isScrollInProgress: Boolean get() = dragging || moving
 
     /** The card that is up, getting up, or going back down. */
     internal val selected = Raised()
@@ -98,12 +110,16 @@ class LiftStackScrollState internal constructor(intro: Int) {
     internal var dragging by mutableStateOf(false)
         private set
 
-    /** True while a card is selected or still on its way back down. */
+    /**
+     * True while a card is standing up or still on its way back down. The deck
+     * does not scroll while this is set, and [step], [scrollTo] and
+     * [animateScrollTo] do nothing.
+     */
     val locked: Boolean get() = selected.index != NONE
 
     // A move is a run to [runTo], then the last card to [target]. A move
     // that has only the one card to go starts at the settle.
-    private var moving = false
+    private var moving by mutableStateOf(false)
     private var runFrom = 0f
     private var runTo = 0f
     private var runSeconds = 0f
@@ -113,10 +129,6 @@ class LiftStackScrollState internal constructor(intro: Int) {
     private val at = FloatArray(SAMPLES)
     private val of = FloatArray(SAMPLES)
     private var taken = 0
-
-    init {
-        if (intro != 0) plan(intro.toFloat(), fromRest = true)
-    }
 
     /** The selected card and where it is in getting up. */
     internal class Raised {
@@ -135,6 +147,13 @@ class LiftStackScrollState internal constructor(intro: Int) {
     internal val top: Int get() = phase.roundToInt()
 
     // --- input ---------------------------------------------------------------
+
+    /**
+     * Lifts the card in the top slot off the deck and stands it up, or, when a
+     * card is already up, turns it round: back down if it was getting up, up
+     * again if it was going down. Does nothing while the deck is moving.
+     */
+    fun toggleLift() = onTap(true)
 
     /**
      * A tap on the card in the top slot. Selects it if nothing is; otherwise
@@ -177,13 +196,37 @@ class LiftStackScrollState internal constructor(intro: Int) {
     }
 
     /**
-     * Run the deck on by [by] cards. Public so a host can drive it from its own
-     * chrome; does nothing while a card is selected.
+     * Runs the deck on by [by] cards, up the stack when positive. Does nothing
+     * while a card is standing up.
      */
     fun step(by: Int) {
         if (by == 0 || dragging || locked) return
         target += by
         plan(target.toFloat(), fromRest = !moving)
+    }
+
+    /**
+     * Runs the deck to item [index], the short way round. From rest a longer
+     * trip runs up to speed through the cards between and eases the last one
+     * in, the way a throw does. Does nothing while a card is standing up.
+     */
+    fun animateScrollTo(index: Int) {
+        val count = itemCount
+        var by = wrapItem(index - target, count)
+        if (by > count / 2) by -= count
+        step(by)
+    }
+
+    /** Puts item [index] in the top slot at once. Does nothing while a card is standing up. */
+    fun scrollTo(index: Int) {
+        if (dragging || locked) return
+        val count = itemCount
+        var by = wrapItem(index - target, count)
+        if (by > count / 2) by -= count
+        target += by
+        phase = target.toFloat()
+        moving = false
+        topIndex = target
     }
 
     private fun plan(to: Float, fromRest: Boolean) {
@@ -211,6 +254,8 @@ class LiftStackScrollState internal constructor(intro: Int) {
     internal fun advance(deltaMs: Float) {
         tick++
         val dt = deltaMs / 1000f
+        val nearest = phase.roundToInt()
+        if (nearest != topIndex) topIndex = nearest
 
         if (moving) {
             clock += dt
@@ -228,7 +273,7 @@ class LiftStackScrollState internal constructor(intro: Int) {
 
         if (selected.index != NONE) {
             // Down is the same animation run backwards, at the same pace.
-            val step = dt * LIFT_PACE
+            val step = dt * liftPace
             selected.seconds = if (selected.raising) {
                 (selected.seconds + step).coerceAtMost(LIFT_SECONDS)
             } else {

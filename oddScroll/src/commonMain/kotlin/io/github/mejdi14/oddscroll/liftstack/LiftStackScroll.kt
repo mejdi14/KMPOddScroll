@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
@@ -99,14 +100,16 @@ private const val OUT_TO = -0.23f
 private const val IN_FROM = 2.976f
 private const val IN_TO = 3.629f
 
-/** White mat round the picture, as a share of the card side. */
-private const val MAT = 0.012f
-
 private const val TAP_SLOP = 8f
 
+/**
+ * Creates and remembers a [LiftStackScrollState].
+ *
+ * @param initialIndex the item that starts in the top slot.
+ */
 @Composable
-fun rememberLiftStackScrollState(intro: Int = 7): LiftStackScrollState =
-    remember { LiftStackScrollState(intro) }
+fun rememberLiftStackScrollState(initialIndex: Int = 0): LiftStackScrollState =
+    remember { LiftStackScrollState(initialIndex) }
 
 /**
  * A deck of pictures laid flat in a stack and seen from above at a quarter
@@ -129,11 +132,22 @@ fun rememberLiftStackScrollState(intro: Int = 7): LiftStackScrollState =
  * way back down.
  *
  * @param items cards, in order; the deck repeats, so it has no end.
+ * @param modifier applied to the whole page.
  * @param background page colour.
  * @param contentColor caption text.
  * @param markerColor the small square that leads the caption.
+ * @param matColor the mat round each picture.
+ * @param mat width of the mat, as a share of the card side.
+ * @param liftPace how much faster the lift and turn play than the curves they
+ *   were read from, both up and down. 1 is the original clock.
  * @param captions say what the standing card is.
- * @param state also sets how far the deck runs when it first appears.
+ * @param userScrollEnabled false ignores drag, flick and wheel; the deck can
+ *   still be run through [state].
+ * @param onItemClick called with the index of the item on the tapped card.
+ *   When null, a tap on the top card stands it up and a tap while one is up
+ *   puts it back; a host that sets this can do that itself with
+ *   [LiftStackScrollState.toggleLift].
+ * @param state drives and reports the deck; see [LiftStackScrollState].
  */
 @Composable
 fun LiftStackScroll(
@@ -142,7 +156,12 @@ fun LiftStackScroll(
     background: Color = Color(0xFFF6F6F1),
     contentColor: Color = Color(0xFF141414),
     markerColor: Color = Color(0xFFD9443F),
+    matColor: Color = Color.White,
+    mat: Float = 0.012f,
+    liftPace: Float = 1.5f,
     captions: Boolean = true,
+    userScrollEnabled: Boolean = true,
+    onItemClick: ((index: Int) -> Unit)? = null,
     state: LiftStackScrollState = rememberLiftStackScrollState(),
 ) {
     if (items.isEmpty()) {
@@ -150,8 +169,15 @@ fun LiftStackScroll(
         return
     }
 
-    val cards = remember(items) { items.map { matted(cardBitmap(it.image, 1f, 0f)) } }
+    val cards = remember(items, mat, matColor) {
+        items.map { matted(cardBitmap(it.image, 1f, 0f), mat, matColor) }
+    }
     val frame = remember { StackFrame() }
+
+    SideEffect {
+        state.itemCount = items.size
+        state.liftPace = liftPace
+    }
 
     LaunchedEffect(state) {
         var previous = 0L
@@ -168,7 +194,7 @@ fun LiftStackScroll(
         Canvas(
             Modifier
                 .fillMaxSize()
-                .pointerInput(state) {
+                .pointerInput(state, userScrollEnabled, onItemClick) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         var last = down.position.y
@@ -182,7 +208,7 @@ fun LiftStackScroll(
                             val dy = change.position.y - last
                             last = change.position.y
                             travel += abs(dy)
-                            if (travel > TAP_SLOP) {
+                            if (travel > TAP_SLOP && userScrollEnabled) {
                                 if (!started) {
                                     state.onDragStart(change.uptimeMillis / 1000f)
                                     started = true
@@ -195,12 +221,18 @@ fun LiftStackScroll(
                         }
                         if (started) {
                             state.onDragEnd()
-                        } else {
-                            state.onTap(frame.hitsTop(down.position.x, down.position.y, state))
+                        } else if (travel <= TAP_SLOP) {
+                            if (onItemClick == null) {
+                                state.onTap(frame.hitsTop(down.position.x, down.position.y, state))
+                            } else {
+                                val hit = frame.hitIndex(down.position.x, down.position.y, state)
+                                if (hit != NONE) onItemClick(wrapItem(hit, items.size))
+                            }
                         }
                     }
                 }
-                .pointerInput(state) {
+                .pointerInput(state, userScrollEnabled) {
+                    if (!userScrollEnabled) return@pointerInput
                     // A notch is a card. A trackpad sends fractions of one, so
                     // they are added up until they come to a whole card.
                     var notches = 0f
@@ -348,6 +380,33 @@ private class StackFrame {
     fun hitsTop(x: Float, y: Float, state: LiftStackScrollState): Boolean {
         val pts = FloatArray(8)
         cardCorners(state.top - state.phase, 0f, 0f, pts)
+        return inside(pts, x, y)
+    }
+
+    /**
+     * The unwrapped index of the card under [x], [y], the one standing up
+     * first and then the deck from the top slot down, or [NONE].
+     */
+    fun hitIndex(x: Float, y: Float, state: LiftStackScrollState): Int {
+        val pts = FloatArray(8)
+        val selected = state.selected
+        val phase = state.phase
+        if (selected.index != NONE) {
+            val p = (selected.index - phase) * (1f - selected.up)
+            cardCorners(p, selected.lift, selected.stand * STAND_ANGLE, pts)
+            if (inside(pts, x, y)) return selected.index
+        }
+        val first = ceil(phase + OUT_TO).toInt()
+        val last = floor(phase + IN_TO).toInt()
+        for (index in first..last) {
+            if (index == selected.index || deckAlpha(index - phase) < 0.5f) continue
+            cardCorners(index - phase, 0f, 0f, pts)
+            if (inside(pts, x, y)) return index
+        }
+        return NONE
+    }
+
+    private fun inside(pts: FloatArray, x: Float, y: Float): Boolean {
         // Inside a convex quad is on the same side of all four edges.
         var sign = 0f
         for (k in 0 until 4) {
@@ -457,18 +516,18 @@ private fun quadMatrix(q: FloatArray, w: Float, h: Float, out: Matrix): Boolean 
     return true
 }
 
-/** The picture set in a thin white mat, the way the reference's cards are. */
-private fun matted(source: ImageBitmap): ImageBitmap {
+/** The picture set in a thin mat, the way the reference's cards are. */
+private fun matted(source: ImageBitmap, mat: Float, matColor: Color): ImageBitmap {
     val side = source.width
     val bitmap = ImageBitmap(side, side)
-    val inset = (side * MAT).roundToInt().coerceAtLeast(1)
+    val inset = (side * mat).roundToInt().coerceAtLeast(1)
     CanvasDrawScope().draw(
         Density(1f),
         LayoutDirection.Ltr,
         BitmapCanvas(bitmap),
         Size(side.toFloat(), side.toFloat()),
     ) {
-        drawRect(Color.White)
+        drawRect(matColor)
         drawImage(
             image = source,
             srcOffset = IntOffset.Zero,
