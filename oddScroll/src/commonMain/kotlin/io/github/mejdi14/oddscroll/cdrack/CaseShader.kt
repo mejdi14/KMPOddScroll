@@ -51,3 +51,11 @@ internal interface CaseShader {
 
 /** The platform's shading, or null to draw the case from its baked look. */
 internal expect fun caseShader(): CaseShader?
+
+/**
+ * Whether the rack keeps each case it draws as the recorded layer rather than
+ * a snapshot of it. Through Skia a snapshot is drawn into a bitmap on the
+ * CPU, which runs the case's shaders a pixel at a time there — a minute or
+ * more for a rack in the browser — where the layer is replayed on the GPU.
+ */
+internal expect val rackKeepsLayers: Boolean

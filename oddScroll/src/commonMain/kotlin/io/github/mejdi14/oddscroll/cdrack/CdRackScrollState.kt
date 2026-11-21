@@ -2,6 +2,7 @@ package io.github.mejdi14.oddscroll.cdrack
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github.mejdi14.oddscroll.internal.clamped
@@ -80,6 +81,14 @@ class CdRackScrollState internal constructor(intro: Int) {
     /** Bumped once per frame, so the rack repaints while anything moves. */
     internal var tick by mutableIntStateOf(0)
         private set
+
+    /**
+     * How far the rack has got drawing its cases, from 0 to 1. Nothing can be
+     * taken out before it reaches 1; a host can cover the rack with its own
+     * loader until then.
+     */
+    var loaded by mutableFloatStateOf(0f)
+        internal set
 
     /** The tape nearest the slot, unwrapped. Changes only as one passes it. */
     var slotted by mutableIntStateOf(0)

@@ -5,9 +5,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,21 +27,23 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.GraphicsContext
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.layer.GraphicsLayer
+import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalGraphicsContext
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.TextMeasurer
-import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -48,8 +51,6 @@ import io.github.mejdi14.oddscroll.internal.clamped
 import io.github.mejdi14.oddscroll.internal.inOutCubic
 import io.github.mejdi14.oddscroll.internal.lerp
 import io.github.mejdi14.oddscroll.internal.smoothstep
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.exp
@@ -58,6 +59,9 @@ import kotlin.math.hypot
 import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /** One case in the rack. */
 data class CdRackItem(
@@ -123,6 +127,12 @@ private val AXIS = floatArrayOf(0.5085733f, 0.2623819f, -0.8200664f)
  * orthographic look; taking a case out, the camera comes back in.
  */
 private const val RACK_ZOOM = 24f
+
+/** The sharpest the disc's print is kept for a case drawn in the rack. */
+private const val RACK_ART_PX = 512
+
+/** How much of [CdRackScrollState.loaded] baking the case's pieces counts for, in cases. */
+private const val PREPARE_SHARE = 1f
 
 /*
  * The case in the slot stands proud of the rest, straight up: flat over the
@@ -244,29 +254,40 @@ fun CdRackScroll(
         // it to be back in the rack, and takes taps away until it is done.
         while (state.chosen != NONE) withFrameNanos { }
         rack.ready = false
+        state.loaded = 0f
         rack.fit(frameSize.width.toFloat(), frameSize.height.toFloat())
         withContext(Dispatchers.Default) { rack.scene.prepare(rack.rackCamera) }
         val box = rack.spriteBox()
         rack.sprites.fill(null)
+        rack.releaseLayers(graphics)
         rack.box = box
+        // The print need be no sharper than the disc stands in the rack.
+        val artPx = (box.width * 1.5f).roundToInt().coerceIn(256, RACK_ART_PX)
         for (index in items.indices) {
-            withContext(Dispatchers.Default) { rack.scene.setArt(items[index].image) }
+            state.loaded = (index + PREPARE_SHARE) / (items.size + PREPARE_SHARE)
+            withContext(Dispatchers.Default) { rack.scene.setArt(items[index].image, artPx) }
             rack.scene.setCover(items[index].cover)
             rack.scene.setManual(null)
             val layer = graphics.createGraphicsLayer()
-            try {
-                layer.record(layerDensity, direction, IntSize(box.width, box.height)) {
-                    translate(-box.left.toFloat(), -box.top.toFloat()) {
-                        rack.scene.draw(this, rack.rackCamera, rack.rackPose, shadow = 0f)
-                    }
+            layer.record(layerDensity, direction, IntSize(box.width, box.height)) {
+                translate(-box.left.toFloat(), -box.top.toFloat()) {
+                    rack.scene.draw(this, rack.rackCamera, rack.rackPose, shadow = 0f)
                 }
-                rack.sprites[index] = layer.toImageBitmap()
-            } finally {
-                graphics.releaseGraphicsLayer(layer)
+            }
+            if (rackKeepsLayers) {
+                rack.layers[index] = layer
+            } else {
+                try {
+                    rack.sprites[index] = layer.toImageBitmap()
+                } finally {
+                    graphics.releaseGraphicsLayer(layer)
+                }
             }
         }
         rack.ready = true
+        state.loaded = 1f
     }
+    DisposableEffect(rack) { onDispose { rack.releaseLayers(graphics) } }
 
     // The disc of the case tapped, baked off the main thread while it slides
     // to the slot; it is taken out once this is done.
@@ -515,6 +536,16 @@ private class RackScene(var items: List<CdRackItem>) {
     private val readBox = FloatArray(3)
 
     val sprites = arrayOfNulls<ImageBitmap>(items.size)
+
+    /** Each case as recorded, in place of [sprites] where [rackKeepsLayers]. */
+    val layers = arrayOfNulls<GraphicsLayer>(items.size)
+
+    fun releaseLayers(graphics: GraphicsContext) {
+        for (i in layers.indices) {
+            layers[i]?.let { graphics.releaseGraphicsLayer(it) }
+            layers[i] = null
+        }
+    }
     var box: SpriteBox? = null
     @kotlin.concurrent.Volatile
     var ready = false
@@ -622,7 +653,9 @@ private class RackScene(var items: List<CdRackItem>) {
                 scene.draw(this, liveCamera, livePose, shadow = come, cover = loose, book = book, riffleLayer = riffle)
                 continue
             }
-            val sprite = sprites[wrapCase(i, count)] ?: continue
+            val sprite = sprites[wrapCase(i, count)]
+            val layer = layers[wrapCase(i, count)]
+            if (sprite == null && layer == null) continue
             val b = box ?: continue
             if (!spriteAt(i - position)) continue
             var x = at[0]
@@ -641,7 +674,7 @@ private class RackScene(var items: List<CdRackItem>) {
             if (x > size.width || y > size.height || x + b.width < 0f || y + b.height < 0f) continue
             // Translated rather than offset by whole pixels, so a slow slide
             // does not step.
-            translate(x, y) { drawImage(sprite) }
+            translate(x, y) { if (layer != null) drawLayer(layer) else drawImage(sprite!!) }
         }
         // The rack's cases are drawn without them; the one out comes into
         // its stars as it comes out.

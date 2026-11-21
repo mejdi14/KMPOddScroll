@@ -65,6 +65,9 @@ CdRackScroll(
 Shaded plastic and the disc's rainbow run on desktop, iOS, the web, and Android
 13+; on older Android the same case is drawn from a baked look.
 
+The rack draws every case once before it can be used; `state.loaded` runs from
+0 to 1 while it does, for a loader of your own over it (the demo has one).
+
 <br>
 
 ## Install

@@ -86,6 +86,7 @@ internal class CaseScene {
     private var lidBitmap: ImageBitmap? = null
     private var discArt: DiscArt? = null
     private var square: ImageBitmap? = null
+    private var squarePx = 0
     private val trayShadow = bakeShadow(lid = false)
     private val lidShadow = bakeShadow(lid = true)
     private val coverShadow = bakeCoverShadow()
@@ -104,11 +105,15 @@ internal class CaseScene {
     private val path = Path()
     private val hull = FloatArray(24)
 
-    /** Prints [image] on the disc from now on. */
-    fun setArt(image: ImageBitmap) {
-        if (image === art) return
+    /**
+     * Prints [image] on the disc from now on, sampled by the shader from a
+     * square at most [artPx] across.
+     */
+    fun setArt(image: ImageBitmap, artPx: Int = ART_PX) {
+        if (image === art && (shader == null || artPx == squarePx)) return
         art = image
-        square = if (shader != null) squareArt(image, ART_PX) else null
+        squarePx = artPx
+        square = if (shader != null) squareArt(image, artPx) else null
         discArt = if (shader == null && ppm > 0f) bakeDisc(image, ppm) else null
     }
 
