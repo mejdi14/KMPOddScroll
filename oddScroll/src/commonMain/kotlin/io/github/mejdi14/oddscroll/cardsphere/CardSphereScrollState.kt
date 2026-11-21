@@ -21,12 +21,6 @@ import kotlin.math.pow
 /** Fast away, long glide in: the settle should look decided, not sprung. */
 private val SETTLE = cubicBezierEase(0.25f, 0.75f, 0.2f, 1f)
 
-/** Spin left after a flick decays by this much every sixtieth of a second. */
-private const val COAST_DECAY = 0.88f
-
-/** Under this the spin is spent and the field may commit to a hero. */
-private const val SNAP_SPEED = 1.6f
-
 /** Quiet time after the last input before the settle is allowed to begin. */
 private const val SNAP_IDLE_MS = 60f
 
@@ -38,18 +32,35 @@ private const val SNAP_IDLE_MS = 60f
  * whatever direction that arrives from. Angles would lock at the poles and
  * would split one gesture into two.
  */
-class CardSphereScrollState internal constructor(flowerCount: Int) {
-    internal val cards: List<SphereCard> = buildField(flowerCount)
+class CardSphereScrollState internal constructor(
+    private val itemCount: Int,
+    initialIndex: Int = 0,
+) {
+    internal val cards: List<SphereCard> = buildField(itemCount)
 
     internal val rotation = Quat()
 
-    /** Index of the hero card last settled at the front. */
-    var hero by mutableIntStateOf(0)
-        internal set
+    /** Which hero card last settled at the front. */
+    internal var hero by mutableIntStateOf(0)
+        private set
 
-    /** Page colour. Flipped by a double tap. */
-    var dark by mutableStateOf(false)
-        internal set
+    /**
+     * Index into the items of the card last settled at the front. It follows
+     * the glide, so it changes when a new card lands rather than while the
+     * field is still turning.
+     */
+    val currentIndex: Int get() = cards[hero].flower
+
+    private var inMotion by mutableStateOf(false)
+
+    /** True while the field is dragged, coasting or gliding to a card. */
+    val isScrollInProgress: Boolean get() = inMotion
+
+    /** Spin left after a flick decays by this much every sixtieth of a second. */
+    internal var coastDecay = 0.88f
+
+    /** Under this the spin is spent and the field may commit to a hero. */
+    internal var snapSpeed = 1.6f
 
     /** Bumped once per frame, so the field repaints while it turns. */
     internal var tick by mutableIntStateOf(0)
@@ -110,18 +121,32 @@ class CardSphereScrollState internal constructor(flowerCount: Int) {
     private var snapMs = 0f
     private var snapHero = 0
     private var settled = true
+        set(value) {
+            field = value
+            inMotion = !value || dragging
+        }
     private var lastInputMs = 0f
     private var nowMs = 0f
 
     init {
-        // Hero zero starts facing the camera.
-        quatBetween(cards[0].x, cards[0].y, cards[0].z, 0f, 0f, 1f, rotation)
+        val start = heroFor(initialIndex).coerceAtLeast(0)
+        hero = start
+        quatBetween(cards[start].x, cards[start].y, cards[start].z, 0f, 0f, 1f, rotation)
+    }
+
+    /** The first hero that carries item [index], or -1 when none does. */
+    private fun heroFor(index: Int): Int {
+        if (itemCount <= 0) return -1
+        val item = ((index % itemCount) + itemCount) % itemCount
+        for (i in 0 until HERO_COUNT) if (cards[i].flower == item) return i
+        return -1
     }
 
     // --- input ---------------------------------------------------------------
 
     internal fun onDragStart() {
         dragging = true
+        inMotion = true
         snapping = false
         settled = false
         spinX = 0f; spinY = 0f; spinZ = 0f
@@ -143,6 +168,7 @@ class CardSphereScrollState internal constructor(flowerCount: Int) {
 
     internal fun onDragEnd() {
         dragging = false
+        inMotion = !settled
         lastInputMs = nowMs
     }
 
@@ -157,13 +183,33 @@ class CardSphereScrollState internal constructor(flowerCount: Int) {
         lastInputMs = nowMs
     }
 
-    /** Brings [index] to the front, or the nearest hero when it is out of range. */
-    fun goTo(index: Int) {
-        startSnap(if (index in 0 until HERO_COUNT) index else -1)
+    /** Glides the hero at [hero] to the front; out of range picks the nearest one. */
+    internal fun glideToHero(hero: Int) {
+        startSnap(if (hero in 0 until HERO_COUNT) hero else -1)
     }
 
-    internal fun toggleTheme() {
-        dark = !dark
+    /**
+     * Brings item [index] to the front with the field's own glide. Only the
+     * first eight cards can sit at the front, so an item that none of them
+     * carries sends the field to the nearest of them instead.
+     */
+    fun animateScrollTo(index: Int) {
+        glideToHero(heroFor(index))
+    }
+
+    /** Turns the field to face item [index] at once, with the same fallback. */
+    fun scrollTo(index: Int) {
+        val target = heroFor(index)
+        if (target < 0) return
+        snapping = false
+        spinX = 0f; spinY = 0f; spinZ = 0f
+        val card = cards[target]
+        rotation.rotate(card.x, card.y, card.z, scratch)
+        quatBetween(scratch[0], scratch[1], scratch[2], 0f, 0f, 1f, between)
+        rotation.premultiplyBy(between.x, between.y, between.z, between.w)
+        rotation.normalize()
+        hero = target
+        settled = true
     }
 
     // --- frame ---------------------------------------------------------------
@@ -177,13 +223,13 @@ class CardSphereScrollState internal constructor(flowerCount: Int) {
             val speed = hypot(hypot(spinX, spinY), spinZ)
             if (speed > 0.02f) {
                 rotation.turn(spinX / speed, spinY / speed, spinZ / speed, speed * dt)
-                val k = COAST_DECAY.pow(dt * 30f)
+                val k = coastDecay.pow(dt * 30f)
                 spinX *= k; spinY *= k; spinZ *= k
             }
             // The settle waits for the spin to fall off and for the hand to
             // have actually let go — otherwise a slow drag would be fought by
             // the snap the whole way.
-            if (!settled && speed < SNAP_SPEED && nowMs - lastInputMs > SNAP_IDLE_MS) {
+            if (!settled && speed < snapSpeed && nowMs - lastInputMs > SNAP_IDLE_MS) {
                 startSnap(-1)
             }
         }

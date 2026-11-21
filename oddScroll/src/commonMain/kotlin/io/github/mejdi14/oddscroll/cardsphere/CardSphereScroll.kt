@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
@@ -41,12 +42,6 @@ import kotlin.math.sin
 /** Degrees per radian, as the reference writes it. */
 private const val DEG = 57.3f
 
-/** Share of the full facing angle a card turns through: a partial billboard. */
-private const val BILLBOARD = 0.35f
-
-/** Perspective depth of a card's own tilt, in multiples of its width. */
-private const val CARD_PERSPECTIVE = 2.6f
-
 /** How far outside the frame a card may stray before it stops being drawn. */
 private const val CULL = 40f
 
@@ -54,18 +49,26 @@ private const val CULL = 40f
 private const val FADED = 0.03f
 
 private const val TAP_SLOP = 6f
-private const val DOUBLE_TAP_MS = 280L
 
+/**
+ * Creates and remembers a [CardSphereScrollState].
+ *
+ * @param itemCount how many items the field will be given.
+ * @param initialIndex the item that starts at the front.
+ */
 @Composable
-fun rememberCardSphereScrollState(flowerCount: Int): CardSphereScrollState =
-    remember(flowerCount) { CardSphereScrollState(flowerCount) }
+fun rememberCardSphereScrollState(
+    itemCount: Int,
+    initialIndex: Int = 0,
+): CardSphereScrollState =
+    remember(itemCount) { CardSphereScrollState(itemCount, initialIndex) }
 
 /**
  * A field of flat graphic cards on a transparent sphere, turned by dragging,
  * flicking or scrolling, which coasts and then glides one big card to the
  * front.
  *
- * Each card carries one botanical plate, dealt so that every plate gets an
+ * Each card carries one image (a plate), dealt so that every plate gets an
  * equal share of the field and no two neighbours draw the same one. Nothing is
  * shaded and nothing is blurred — all of the depth is in the projection.
  *
@@ -78,35 +81,49 @@ fun rememberCardSphereScrollState(flowerCount: Int): CardSphereScrollState =
  * hero is chosen, so the field lands on the card it was aimed at rather than
  * the one that happened to be passing.
  *
- * @param flowers the plates to deal around the field; the eight heroes take
+ * @param items the plates to deal around the field; the eight heroes take
  *   the first eight.
- * @param theme which page colour to start on.
- * @param allowThemeToggle let a double tap flip the page colour.
- * @param onSettle called with the hero index each time the field comes to rest.
- * @param onThemeChange called when the page colour flips.
+ * @param modifier applied to the field.
+ * @param background the colour behind the cards.
+ * @param billboard share of the full facing angle a card turns through as it
+ *   passes round the sphere; 0 keeps every card flat to the screen.
+ * @param cardPerspective depth of a card's own tilt, in multiples of its width.
+ *   Lower is a stronger keystone.
+ * @param coastDecay fraction of the spin kept every sixtieth of a second after
+ *   a flick. Closer to 1 coasts longer.
+ * @param snapSpeed spin, in radians a second, under which the field commits to
+ *   a card and glides it to the front.
+ * @param userScrollEnabled false ignores drag, flick and wheel; the field can
+ *   still be moved through [state].
+ * @param onItemClick called with the index of the item on the tapped card.
+ *   When null a tap glides the nearest hero card to the front.
+ * @param state drives and reports the field; see [CardSphereScrollState].
  */
 @Composable
 fun CardSphereScroll(
-    flowers: List<ImageBitmap>,
+    items: List<ImageBitmap>,
     modifier: Modifier = Modifier,
-    theme: CardSphereTheme = CardSphereTheme.Light,
-    allowThemeToggle: Boolean = true,
-    onSettle: ((Int) -> Unit)? = null,
-    onThemeChange: ((CardSphereTheme) -> Unit)? = null,
-    state: CardSphereScrollState = rememberCardSphereScrollState(flowers.size),
+    background: Color = Color.White,
+    billboard: Float = 0.35f,
+    cardPerspective: Float = 2.6f,
+    coastDecay: Float = 0.88f,
+    snapSpeed: Float = 1.6f,
+    userScrollEnabled: Boolean = true,
+    onItemClick: ((index: Int) -> Unit)? = null,
+    state: CardSphereScrollState = rememberCardSphereScrollState(items.size),
 ) {
-    if (flowers.isEmpty()) {
+    if (items.isEmpty()) {
         Box(modifier)
         return
     }
     val density = LocalDensity.current.density
 
-    LaunchedEffect(theme) {
-        if (state.dark != (theme == CardSphereTheme.Dark)) state.toggleTheme()
+    SideEffect {
+        state.coastDecay = coastDecay
+        state.snapSpeed = snapSpeed
     }
 
-    LaunchedEffect(state, onSettle) {
-        var last = -1
+    LaunchedEffect(state) {
         var previous = 0L
         while (true) {
             withFrameNanos { frame ->
@@ -114,10 +131,6 @@ fun CardSphereScroll(
                     if (previous == 0L) 16.67f else (frame - previous) / 1_000_000f
                 previous = frame
                 state.advance(frame / 1_000_000f, deltaMs.clamped(1f, 50f))
-                if (state.hero != last) {
-                    last = state.hero
-                    onSettle?.invoke(last)
-                }
             }
         }
     }
@@ -126,11 +139,10 @@ fun CardSphereScroll(
         Canvas(
             Modifier
                 .fillMaxSize()
-                .pointerInput(state, allowThemeToggle, onThemeChange) {
-                    var lastTapMs = 0L
+                .pointerInput(state, userScrollEnabled, onItemClick) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
-                        state.onDragStart()
+                        if (userScrollEnabled) state.onDragStart()
                         var last = down.position
                         var travel = 0f
                         var sampleAt = down.uptimeMillis
@@ -148,7 +160,7 @@ fun CardSphereScroll(
                             val dy = change.position.y - last.y
                             last = change.position
                             travel += abs(dx) + abs(dy)
-                            if (travel > TAP_SLOP) {
+                            if (travel > TAP_SLOP && userScrollEnabled) {
                                 state.onDrag(dx / density, dy / density)
                                 change.consume()
                             }
@@ -164,25 +176,21 @@ fun CardSphereScroll(
                                 sampleY = change.position.y
                             }
                         }
-                        state.onDragEnd()
+                        if (userScrollEnabled) state.onDragEnd()
                         if (travel > TAP_SLOP) {
-                            state.flick(vx, vy)
+                            if (userScrollEnabled) state.flick(vx, vy)
                         } else {
-                            val now = down.uptimeMillis
-                            if (allowThemeToggle && now - lastTapMs < DOUBLE_TAP_MS) {
-                                lastTapMs = 0L
-                                state.toggleTheme()
-                                onThemeChange?.invoke(
-                                    if (state.dark) CardSphereTheme.Dark else CardSphereTheme.Light
-                                )
+                            val picked = state.pick(down.position, density)
+                            if (onItemClick != null) {
+                                if (picked >= 0) onItemClick(state.cards[picked].flower)
                             } else {
-                                lastTapMs = now
-                                state.goTo(state.pick(down.position, density))
+                                state.glideToHero(picked)
                             }
                         }
                     }
                 }
-                .pointerInput(state) {
+                .pointerInput(state, userScrollEnabled) {
+                    if (!userScrollEnabled) return@pointerInput
                     awaitPointerEventScope {
                         while (true) {
                             val event = awaitPointerEvent()
@@ -200,20 +208,20 @@ fun CardSphereScroll(
                 }
         ) {
             state.tick // read, so the field repaints every frame while it turns
-            drawRect(if (state.dark) Color(0xFF111111) else Color.White)
-            drawField(state, flowers, density)
+            drawRect(background)
+            drawField(state, items, density, billboard, cardPerspective)
         }
     }
 }
-
-enum class CardSphereTheme { Light, Dark }
 
 // --- the field ---------------------------------------------------------------
 
 private fun DrawScope.drawField(
     state: CardSphereScrollState,
-    flowers: List<ImageBitmap>,
+    items: List<ImageBitmap>,
     density: Float,
+    billboard: Float,
+    cardPerspective: Float,
 ) {
     // Everything below is in density-independent units. The cards are authored
     // at fixed sizes, so the layout has to be reasoned about at one scale and
@@ -267,8 +275,8 @@ private fun DrawScope.drawField(
             sy + halfH < -CULL || sy - halfH > h + CULL
         ) continue
 
-        val faceY = atan2(turned[0], max(0.2f, turned[2])) * DEG * BILLBOARD
-        val faceX = atan2(turned[1], max(0.2f, turned[2])) * DEG * BILLBOARD
+        val faceY = atan2(turned[0], max(0.2f, turned[2])) * DEG * billboard
+        val faceX = atan2(turned[1], max(0.2f, turned[2])) * DEG * billboard
         placed.add(Placed(index, card, sx, sy, scale, faceX, faceY, alpha, depth))
 
         state.visible.add(
@@ -283,9 +291,9 @@ private fun DrawScope.drawField(
     val matrix = Matrix()
     for (p in placed) {
         val card = p.card
-        val origin = corner(p, 0f, 0f, density) ?: continue
-        val across = corner(p, card.w, 0f, density) ?: continue
-        val down = corner(p, 0f, card.h, density) ?: continue
+        val origin = corner(p, 0f, 0f, density, cardPerspective) ?: continue
+        val across = corner(p, card.w, 0f, density, cardPerspective) ?: continue
+        val down = corner(p, 0f, card.h, density, cardPerspective) ?: continue
 
         matrix.reset()
         matrix[0, 0] = (across.x - origin.x) / card.w
@@ -295,7 +303,7 @@ private fun DrawScope.drawField(
         matrix[3, 0] = origin.x
         matrix[3, 1] = origin.y
 
-        val plate = flowers[card.flower % flowers.size]
+        val plate = items[card.flower % items.size]
 
         if (p.alpha > 0.995f) {
             withTransform({ transform(matrix) }) { drawPlate(card, plate) }
@@ -336,7 +344,13 @@ private class Placed(
  * transform; the fourth would only differ by the keystone, which over a card
  * this size is a fraction of a pixel of error against the cost of subdividing.
  */
-private fun corner(p: Placed, px: Float, py: Float, density: Float): Offset? {
+private fun corner(
+    p: Placed,
+    px: Float,
+    py: Float,
+    density: Float,
+    cardPerspective: Float,
+): Offset? {
     val card = p.card
     var x = px - card.w / 2f
     var y = py - card.h / 2f
@@ -355,7 +369,7 @@ private fun corner(p: Placed, px: Float, py: Float, density: Float): Offset? {
     val y3 = y1 * cos(rx) - z2 * sin(rx)
     val z3 = y1 * sin(rx) + z2 * cos(rx)
 
-    val perspective = card.w * CARD_PERSPECTIVE
+    val perspective = card.w * cardPerspective
     val near = perspective - z3
     if (near <= 1f) return null
     val m = perspective / near
