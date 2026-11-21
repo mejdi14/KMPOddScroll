@@ -5,9 +5,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
@@ -15,8 +13,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -32,7 +30,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.withTransform
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -45,21 +42,22 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.mejdi14.oddscroll.internal.clamped
-import io.github.mejdi14.oddscroll.internal.SplitBy
-import io.github.mejdi14.oddscroll.internal.SplitText
-import io.github.mejdi14.oddscroll.internal.inOutCubic
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-/** One card of the row. */
+/**
+ * One card of the row.
+ *
+ * @param image the picture. Its own proportions set the card's width unless
+ *   the row's `fit` overrides them.
+ * @param title shown along the bottom while this card is at the front, when
+ *   captions are on.
+ */
 data class FlexCarouselItem(
     val image: ImageBitmap,
-    /** Shown while this card is at the front. */
     val title: String = "",
-    /** Shown beside the card once it is opened. See [FlexFocus]. */
-    val description: String = "",
 )
 
 /** How the row rolls past the glass. */
@@ -67,19 +65,6 @@ enum class FlexCurl { Twist, Rise, Fall }
 
 /** How a card is proportioned, whatever its picture's own shape. */
 enum class FlexFit { Natural, Portrait, Square, Landscape }
-
-/** Where an opened card goes, and whether its text comes with it. */
-enum class FlexFocus {
-    /** It stays in the middle of the frame and fills what it can of it. */
-    Centred,
-
-    /** It slides to one side and its title and description take the other. */
-    Beside,
-
-    /** Beside on a frame wider than it is tall, centred otherwise. A tall frame
-        has no room to put text next to a card worth looking at. */
-    Auto,
-}
 
 /**
  * Shape and behaviour of the invisible glass the row runs through. The named
@@ -93,7 +78,8 @@ enum class FlexFocus {
  *   reference measures both against.
  * @param tilt rotation of the lens, in degrees.
  * @param roundness 1 is an ellipse, 0 a hard rectangle.
- * @param bend how far the glass drags what passes through it.
+ * @param bend how far the glass drags what passes through it. 0 turns the
+ *   glass off.
  * @param reach thickness of the band either side of the lens's edge.
  * @param curl which way the row twists as it rolls past.
  * @param dispersion how far the colour splits across the band.
@@ -121,25 +107,19 @@ data class FlexLens(
  * the platform has one and nothing where it does not.
  */
 @Composable
-internal expect fun Modifier.liquidLens(lens: FlexLens, strength: () -> Float): Modifier
+internal expect fun Modifier.liquidLens(lens: FlexLens): Modifier
 
 /** Copies either side of the row, so the loop has no visible end. */
 private const val REPEATS = 3
 
-/** The picture is held slightly over size, leaving room to slide inside the card. */
-private const val OVERSCAN = 1.08f
-
 /** How far along the row a card has to be before its picture is fully offset. */
 private const val PARALLAX_SPAN = 0.75f
 
-private const val INTRO_SECONDS = 2.1f
+/** Pointer travel under which a press is a tap rather than a drag. */
+private const val TAP_SLOP = 6f
 
-/** Share of the frame the opened card keeps when its text sits beside it. */
-private const val FOCUS_SPLIT = 0.5f
-
-@Composable
-fun rememberFlexCarouselScrollState(count: Int): FlexCarouselScrollState =
-    remember(count) { FlexCarouselScrollState(count.coerceAtLeast(1)) }
+/** Pixels of row per unit of wheel or trackpad scroll delta. */
+private const val WHEEL_GAIN = 60f
 
 /**
  * An infinite row of pictures that flows through invisible liquid glass at its
@@ -160,6 +140,7 @@ fun rememberFlexCarouselScrollState(count: Int): FlexCarouselScrollState =
  * [liquidLens].
  *
  * @param items pictures and their titles, in order along the row.
+ * @param modifier applied to the row's frame.
  * @param background the page colour behind the row.
  * @param contentColor colour of the caption and counter.
  * @param lens shape and behaviour of the glass. See [FlexLens].
@@ -173,13 +154,21 @@ fun rememberFlexCarouselScrollState(count: Int): FlexCarouselScrollState =
  * @param fit how cards are proportioned; [FlexFit.Natural] keeps each
  *   picture's own shape and gives the row its uneven run of widths.
  * @param squeeze how far cards narrow at full speed, 0 to 1.
- * @param focusOnClick tapping the centred card opens it; tapping again closes.
- * @param focus where an opened card goes. [FlexFocus.Beside] slides it to the
- *   left and gives the room it leaves to its title and description.
+ * @param parallax how far a picture slides inside its card as the card crosses
+ *   the row, as a share of the card. 0 holds every picture still in its frame.
+ * @param captions draw the current card's title and the counter.
  * @param autoplay step along on a timer while untouched.
  * @param interval seconds between autoplay steps.
- * @param captions draw the title and counter.
- * @param intro play the arrival — the row rises into place.
+ * @param stiffness spring stiffness of the row. Higher settles faster and
+ *   snappier; the wheel always runs somewhat stiffer than this.
+ * @param flingReach how far a throw carries before the row picks a card to
+ *   land on, in seconds of the throw's own speed.
+ * @param userScrollEnabled false ignores drag, fling and wheel and leaves taps
+ *   reporting through [onItemClick] only. The row still moves through [state]
+ *   and autoplay.
+ * @param onItemClick called with the tapped card's index. When null, a tap
+ *   travels the tapped card to the middle, provided [userScrollEnabled].
+ * @param state where the row sits, and the handle to move it from outside.
  */
 @Composable
 fun FlexCarouselScroll(
@@ -194,13 +183,15 @@ fun FlexCarouselScroll(
     radius: Dp = 0.dp,
     fit: FlexFit = FlexFit.Natural,
     squeeze: Float = 0.2f,
-    focusOnClick: Boolean = true,
-    focus: FlexFocus = FlexFocus.Auto,
+    parallax: Float = 0.08f,
+    captions: Boolean = true,
     autoplay: Boolean = false,
     interval: Float = 4f,
-    captions: Boolean = true,
-    intro: Boolean = true,
-    state: FlexCarouselScrollState = rememberFlexCarouselScrollState(items.size),
+    stiffness: Float = 55f,
+    flingReach: Float = 0.32f,
+    userScrollEnabled: Boolean = true,
+    onItemClick: ((index: Int) -> Unit)? = null,
+    state: FlexCarouselScrollState = rememberFlexCarouselScrollState(),
 ) {
     if (items.isEmpty()) {
         Box(modifier)
@@ -232,7 +223,12 @@ fun FlexCarouselScroll(
             )
         }
     }
-    SideEffect { state.metrics = metrics }
+    SideEffect {
+        state.metrics = metrics
+        state.stiffness = stiffness
+        state.flingReach = flingReach
+    }
+    val click by rememberUpdatedState(onItemClick)
 
     LaunchedEffect(state, autoplay, interval) {
         var previous = 0L
@@ -251,30 +247,20 @@ fun FlexCarouselScroll(
         }
     }
 
-    // Nothing here reads how far open the card is. Those values move every
-    // frame, and reading one in composition would rebuild the whole carousel —
-    // canvas, gestures, panel and all — sixty times a second for the length of
-    // the animation. They are read inside layers and inside the draw instead,
-    // and the only thing composition is told is whether the panel exists.
-    val panelOn by remember(state) {
-        derivedStateOf { state.opening && state.asideAmount > 0.004f }
-    }
-    val beside = when (focus) {
-        FlexFocus.Beside -> true
-        FlexFocus.Centred -> false
-        FlexFocus.Auto -> viewport.width > viewport.height
-    }
-
+    // Nothing here reads the position. It moves every frame, and reading it in
+    // composition would rebuild the whole carousel — canvas, gestures and all —
+    // sixty times a second. The draw reads it instead, and composition only
+    // hears about the current index, inside the caption.
     Box(modifier) {
         Canvas(
             Modifier
                 .fillMaxSize()
                 .onSizeChanged { viewport = it }
-                .liquidLens(lens) { 1f - inOutCubic(state.focusAmount.clamped(0f, 1f)) }
-                .pointerInput(state, focusOnClick) {
+                .liquidLens(lens)
+                .pointerInput(state, userScrollEnabled) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
-                        state.onDragStart()
+                        if (userScrollEnabled) state.onDragStart()
                         var last = down.position.x
                         var travel = 0f
                         var sampleX = down.position.x
@@ -289,7 +275,7 @@ fun FlexCarouselScroll(
                             val dx = change.position.x - last
                             last = change.position.x
                             travel += abs(dx)
-                            if (travel > 6f) {
+                            if (travel > TAP_SLOP && userScrollEnabled) {
                                 state.onDrag(dx)
                                 change.consume()
                             }
@@ -301,65 +287,51 @@ fun FlexCarouselScroll(
                                 sampleAt = at
                             }
                         }
-                        if (travel > 6f) {
-                            state.onDragEnd(speed)
+                        if (travel > TAP_SLOP) {
+                            if (userScrollEnabled) state.onDragEnd(speed)
                         } else {
+                            if (userScrollEnabled) state.onRelease()
                             val hit = state.placed.firstOrNull {
                                 down.position.x >= it.left && down.position.x <= it.right
                             }
                             if (hit != null) {
-                                state.onTap(hit.index, hit.rel, focusOnClick)
-                            } else {
-                                state.closeFocus()
+                                val handler = click
+                                when {
+                                    handler != null -> handler(hit.index)
+                                    userScrollEnabled -> state.travelBy(hit.rel)
+                                }
                             }
                         }
                     }
                 }
-                .pointerInput(state) {
-                    awaitPointerEventScope {
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            if (event.type != PointerEventType.Scroll) continue
-                            val scroll = event.changes.firstOrNull()?.scrollDelta
-                                ?: continue
-                            val delta = if (scroll.x != 0f) scroll.x else scroll.y
-                            if (delta == 0f) continue
-                            state.onWheel(delta * 60f)
-                            event.changes.forEach { it.consume() }
+                .then(
+                    if (!userScrollEnabled) {
+                        Modifier
+                    } else {
+                        Modifier.pointerInput(state) {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    if (event.type != PointerEventType.Scroll) continue
+                                    val scroll = event.changes.firstOrNull()?.scrollDelta
+                                        ?: continue
+                                    val delta = if (scroll.x != 0f) scroll.x else scroll.y
+                                    if (delta == 0f) continue
+                                    state.onWheel(delta * WHEEL_GAIN)
+                                    event.changes.forEach { it.consume() }
+                                }
+                            }
                         }
                     }
-                }
+                )
         ) {
             state.tick // read, so the row redraws every frame while it settles
             drawRect(background)
-            drawRow(items, state, squeeze, radiusPx, intro, beside)
+            drawRow(items, state, squeeze, parallax, radiusPx)
         }
 
         if (captions) {
-            Caption(
-                title = items[state.active.coerceIn(items.indices)].title,
-                index = state.active.coerceIn(items.indices),
-                count = items.size,
-                contentColor = contentColor,
-                // The panel says all of this and more, so the caption gives way
-                // to it rather than repeating it along the bottom.
-                alpha = {
-                    if (beside) 1f - inOutCubic(state.focusAmount.clamped(0f, 1f)) else 1f
-                },
-            )
-        }
-        if (beside && panelOn) {
-            val shown = state.focusIndex.coerceIn(items.indices)
-            FocusPanel(
-                title = items[shown].title,
-                description = items[shown].description,
-                contentColor = contentColor,
-                // Laid out as the card sets off and held until it lands. Doing
-                // the measuring up front is the point: building eighty pieces
-                // of text in the frame the card arrives is what made the
-                // arrival stutter.
-                arrived = { state.asideAmount > 0.5f },
-            )
+            Caption(items, state, contentColor)
         }
     }
 }
@@ -377,9 +349,8 @@ private fun DrawScope.drawRow(
     items: List<FlexCarouselItem>,
     state: FlexCarouselScrollState,
     squeeze: Float,
+    parallax: Float,
     radiusPx: Float,
-    intro: Boolean,
-    beside: Boolean,
 ) {
     val m = state.metrics ?: return
     val width = size.width
@@ -388,29 +359,9 @@ private fun DrawScope.drawRow(
 
     val homeX = width / 2f
     val homeY = height / 2f
-    val shrink = 1f - squeeze.clamped(0f, 1f) * state.energy
-
-    val focus = state.focusAmount.clamped(0f, 1f)
-    val focusEase = inOutCubic(focus)
-    val focusWidth = state.focusIndex.let {
-        if (it in m.widths.indices) m.widths[it] else m.cardH
-    }
-    val aside = if (beside) inOutCubic(state.asideAmount.clamped(0f, 1f)) else 0f
-
-    // Opened as far as the frame allows and no further, so a wide card and a
-    // narrow one both land inside it. There are two of these: the card arrives
-    // at the size the whole frame allows, and then gives up what it has to in
-    // order to fit its own half of it.
-    fun openedTo(lane: Float) = min(
-        min(1.3f, height * 0.84f / m.cardH),
-        lane * 0.92f / focusWidth,
-    ).coerceAtLeast(1f)
-
-    val middleScale = openedTo(width)
-    val asideScale = if (beside) openedTo(width * FOCUS_SPLIT) else middleScale
-    val focusHome = if (beside) width * FOCUS_SPLIT / 2f else homeX
-
-    val arrival = if (!intro) 1f else (state.introAge / INTRO_SECONDS).clamped(0f, 1f)
+    val scale = 1f - squeeze.clamped(0f, 1f) * state.energy
+    // The picture is held over size by this much, leaving it room to slide.
+    val overscan = 1f + parallax.coerceAtLeast(0f)
 
     state.placed.clear()
     val path = Path()
@@ -422,45 +373,11 @@ private fun DrawScope.drawRow(
         for (copy in -REPEATS..REPEATS) {
             val rel = base + copy * m.loop
             if (abs(rel) - m.widths[i] / 2f > width + 40f) continue
-
-            var x = homeX + rel
-            var scale = shrink
-            var alpha = 1f
-            var y = homeY
-
-            if (intro && arrival < 1f) {
-                // The row rises into place, the middle of it arriving first.
-                val lag = (min(abs(rel) / max(width, 1f), 1f) * 0.35f)
-                val t = ((arrival - lag) / (1f - lag).coerceAtLeast(0.01f)).clamped(0f, 1f)
-                val eased = inOutCubic(t)
-                y += (1f - eased) * height * 0.3f
-                alpha *= eased
-                scale *= 0.92f + 0.08f * eased
-            }
-
-            if (focus > 0f) {
-                if (i == state.focusIndex && abs(rel) < m.widths[i]) {
-                    // Two steps, not one: it opens into the middle at the size
-                    // the frame allows, and only then moves over and tucks down
-                    // to what its half of the frame allows.
-                    val middle = 1f + (middleScale - 1f) * focusEase
-                    val tucked = 1f + (asideScale - 1f) * focusEase
-                    scale *= middle + (tucked - middle) * aside
-                    x += (focusHome - homeX) * aside
-                } else {
-                    // Everything else is swept out of the way, the near cards
-                    // leaving first so the opening reads as an order.
-                    val order = min(abs(rel) / max(width, 1f), 1f) * 0.25f
-                    val part = inOutCubic((focus * 1.25f - order).clamped(0f, 1f))
-                    x += (if (rel >= 0f) 1f else -1f) * part * width * 0.7f
-                    alpha *= 1f - part
-                }
-            }
-
+            val x = homeX + rel
             val cw = m.widths[i] * scale
             val ch = m.cardH * scale
-            if (alpha <= 0.004f || x + cw / 2f < -40f || x - cw / 2f > width + 40f) continue
-            draws.add(Placement(i, rel, x, y, cw, ch, alpha))
+            if (x + cw / 2f < -40f || x - cw / 2f > width + 40f) continue
+            draws.add(Placement(i, rel, x, cw, ch))
         }
     }
     draws.sortByDescending { abs(it.rel) }
@@ -468,7 +385,7 @@ private fun DrawScope.drawRow(
     for (d in draws) {
         val image = items[d.i].image
         val left = d.x - d.cw / 2f
-        val top = d.y - d.ch / 2f
+        val top = homeY - d.ch / 2f
 
         // Cover-fit, held slightly over size, then slid along by where the card
         // sits in the row — the picture lags its own frame, which is what makes
@@ -478,8 +395,8 @@ private fun DrawScope.drawRow(
         var sw = image.width.toFloat()
         var sh = image.height.toFloat()
         if (imageAspect > cardAspect) sw = sh * cardAspect else sh = sw / cardAspect
-        sw /= OVERSCAN
-        sh /= OVERSCAN
+        sw /= overscan
+        sh /= overscan
         val slide = (d.rel / (size.width * PARALLAX_SPAN)).clamped(-1f, 1f)
         val roomX = image.width - sw
         val srcX = (roomX * 0.5f + slide * roomX * 0.5f).coerceIn(0f, roomX)
@@ -496,7 +413,6 @@ private fun DrawScope.drawRow(
                     srcSize = IntSize(sw.roundToInt().coerceAtLeast(1), sh.roundToInt().coerceAtLeast(1)),
                     dstOffset = IntOffset.Zero,
                     dstSize = IntSize(sw.roundToInt().coerceAtLeast(1), sh.roundToInt().coerceAtLeast(1)),
-                    alpha = d.alpha,
                     filterQuality = FilterQuality.Medium,
                 )
             }
@@ -528,29 +444,30 @@ private class Placement(
     val i: Int,
     val rel: Float,
     val x: Float,
-    val y: Float,
     val cw: Float,
     val ch: Float,
-    val alpha: Float,
 )
 
 // --- caption -----------------------------------------------------------------
 
+/**
+ * The current card's title and the counter. Its own composable so that the
+ * index changing recomposes only the text, not the row.
+ */
 @Composable
 private fun BoxScope.Caption(
-    title: String,
-    index: Int,
-    count: Int,
+    items: List<FlexCarouselItem>,
+    state: FlexCarouselScrollState,
     contentColor: Color,
-    alpha: () -> Float,
 ) {
+    val index = state.currentIndex.coerceIn(items.indices)
+    val title = items[index].title
     if (title.isNotEmpty()) {
         BasicText(
             text = title,
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(horizontal = 24.dp, vertical = 28.dp)
-                .graphicsLayer { this.alpha = alpha() },
+                .padding(horizontal = 24.dp, vertical = 28.dp),
             style = TextStyle(
                 color = contentColor,
                 fontSize = 22.sp,
@@ -559,70 +476,12 @@ private fun BoxScope.Caption(
         )
     }
     BasicText(
-        text = "${pad2(index + 1)} / ${pad2(count)}",
+        text = "${pad2(index + 1)} / ${pad2(items.size)}",
         modifier = Modifier
             .align(Alignment.BottomEnd)
-            .padding(horizontal = 24.dp, vertical = 28.dp)
-            .graphicsLayer { this.alpha = alpha() },
+            .padding(horizontal = 24.dp, vertical = 28.dp),
         style = TextStyle(color = contentColor.copy(alpha = 0.55f), fontSize = 13.sp),
     )
 }
 
-/**
- * The half of the frame the opened card left behind.
- *
- * Nothing is composed here until the card is most of the way over, and the text
- * then lets itself in a piece at a time, so the two read as one gesture — the
- * card clearing the space and the text arriving into it.
- *
- * The title comes in by the letter and the description by the word. By the
- * letter is the finer effect and it is what a title is short enough for; across
- * a paragraph it reads as a machine typing rather than as text arriving.
- */
-@Composable
-private fun BoxScope.FocusPanel(
-    title: String,
-    description: String,
-    contentColor: Color,
-    arrived: () -> Boolean,
-) {
-    Column(
-        modifier = Modifier
-            .align(Alignment.CenterEnd)
-            .fillMaxWidth(1f - FOCUS_SPLIT)
-            .padding(horizontal = 32.dp, vertical = 28.dp),
-    ) {
-        SplitText(
-            text = title,
-            style = TextStyle(
-                color = contentColor,
-                fontSize = 26.sp,
-                lineHeight = 34.sp,
-                fontWeight = FontWeight.Medium,
-            ),
-            splitBy = SplitBy.Chars,
-            rise = 26.dp,
-            startWhen = arrived,
-        )
-        if (description.isNotEmpty()) {
-            SplitText(
-                text = description,
-                modifier = Modifier.padding(top = 14.dp),
-                style = TextStyle(
-                    color = contentColor.copy(alpha = 0.62f),
-                    fontSize = 14.sp,
-                    lineHeight = 22.sp,
-                ),
-                splitBy = SplitBy.Words,
-                rise = 18.dp,
-                startWhen = arrived,
-                // Held back until the title is on its way, so the panel fills
-                // from the top down rather than all at once.
-                startDelay = 260,
-            )
-        }
-    }
-}
-
 private fun pad2(value: Int): String = if (value < 10) "0$value" else value.toString()
-

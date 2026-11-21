@@ -1,9 +1,10 @@
 package io.github.mejdi14.oddscroll.flexcarousel
 
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import io.github.mejdi14.oddscroll.internal.clamped
 import kotlin.math.abs
@@ -17,15 +18,11 @@ import kotlin.math.sqrt
    chases it, so a flick, a wheel notch and a tap all arrive through the same
    settling. The wheel is stiffer because it comes in as a stream of discrete
    notches that would otherwise feel like it is lagging the hand. */
-private const val SPRING = 55f
-private const val WHEEL_SPRING = 80f
+private const val WHEEL_STIFFER = 80f / 55f
 private const val SUBSTEP = 1f / 240f
 
 /** Quiet time after a wheel notch before the row commits to a card. */
 private const val WHEEL_SETTLE_MS = 150f
-
-/** How far a throw is projected when choosing which card to land on. */
-private const val THROW_REACH = 0.32f
 
 /** Over this, a throw that would land where it started still moves one card. */
 private const val FLICK = 400f
@@ -36,20 +33,6 @@ private const val FLICK = 400f
 private const val ENERGY_FULL = 2600f
 private const val ENERGY_RISE = 0.07f
 private const val ENERGY_FALL = 0.35f
-
-private const val FOCUS_SPRING = 64f
-
-/**
- * Softer than the opening, so the move aside reads as a second, more
- * deliberate step rather than a continuation of the first.
- */
-private const val ASIDE_SPRING = 42f
-
-/** How far open the card has to be before it starts moving aside. */
-private const val ASIDE_AFTER = 0.88f
-
-/** How far back to the middle it has to be before it may close. */
-private const val ASIDE_RETURNED = 0.03f
 
 /** Layout of the row for one viewport: every card's width and centre. */
 internal class FlexMetrics(
@@ -65,54 +48,53 @@ internal fun wrapAround(value: Float, size: Float): Float =
     ((((value + size / 2f) % size) + size) % size) - size / 2f
 
 /**
- * Where the row sits, how hard it is moving, and whether a card is open.
+ * Creates a [FlexCarouselScrollState] that is remembered across compositions.
+ *
+ * @param initialIndex the card centred on the first frame. Wrapped into the
+ *   items once the row is laid out, so any value is safe.
+ */
+@Composable
+fun rememberFlexCarouselScrollState(initialIndex: Int = 0): FlexCarouselScrollState =
+    remember { FlexCarouselScrollState(initialIndex) }
+
+/**
+ * Where a [FlexCarouselScroll] sits, and the handle to move it from outside.
  *
  * Position is unbounded and the row is wrapped only when it is drawn, so there
  * is no seam to cross and no bookkeeping at the ends — the loop is a property
- * of the layout, not something the scroll has to be kept inside.
+ * of the layout, not something the scroll has to be kept inside. The row's
+ * own frame loop runs every motion, so none of the functions here suspend.
+ *
+ * Only [currentIndex] and [isScrollInProgress] are observable. The position
+ * moves every frame and is read by the draw, never by composition.
  */
-class FlexCarouselScrollState internal constructor(
-    internal val count: Int,
-) {
+class FlexCarouselScrollState internal constructor(initialIndex: Int) {
     /** Set by the composable whenever the viewport or the items change. */
     internal var metrics: FlexMetrics? = null
+        set(value) {
+            if (value === field) return
+            val hadLayout = field != null
+            field = value
+            if (value == null) return
+            val pending = pendingIndex
+            pendingIndex = null
+            // A new layout moves every centre, so the row is re-anchored on
+            // the card it was showing rather than left at a stale offset.
+            when {
+                pending != null -> jump(value, pending)
+                hadLayout -> jump(value, currentIndex)
+            }
+        }
 
     internal var position = 0f
         private set
 
-    /** Index facing the middle of the row. */
-    var active by mutableIntStateOf(0)
-        internal set
-
-    /**
-     * How open the focused card is, 0 to 1. Observable, unlike the rest: the
-     * lens reads it, and the lens is a modifier that should be rebuilt when it
-     * changes and at no other time.
-     */
-    internal var focusAmount by mutableFloatStateOf(0f)
+    /** Index of the card facing the middle of the row, `0 until items.size`. */
+    var currentIndex by mutableIntStateOf(initialIndex.coerceAtLeast(0))
         private set
 
-    /**
-     * How far the opened card has moved out of the middle, 0 to 1.
-     *
-     * A second value rather than a later stretch of the first: the card has to
-     * finish arriving in the middle before it begins to leave it, and one
-     * spring cannot be made to stop and start again partway through.
-     */
-    internal var asideAmount by mutableFloatStateOf(0f)
-        private set
-
-    /**
-     * Whether a card is being held open, as opposed to how far open it is.
-     *
-     * It flips the instant a tap lands rather than easing like the rest, which
-     * is what lets anything keyed to it leave at once instead of riding the
-     * card back down.
-     */
-    internal var opening by mutableStateOf(false)
-        private set
-
-    internal var focusIndex by mutableIntStateOf(-1)
+    /** True while the row is being dragged, wheeled or is still settling. */
+    var isScrollInProgress by mutableStateOf(false)
         private set
 
     /** Bumped once per frame, so the row repaints while it is settling. */
@@ -123,43 +105,87 @@ class FlexCarouselScrollState internal constructor(
     internal var energy = 0f
         private set
 
-    internal var introAge = 0f
-        private set
+    /** Spring stiffness of the row, set by the composable. */
+    internal var stiffness = 55f
+
+    /** Seconds of a throw's own speed it is projected along, set by the composable. */
+    internal var flingReach = 0.32f
 
     /** Where the cards landed last frame, for hit testing. */
     internal val placed = ArrayList<PlacedCard>()
 
     internal class PlacedCard(val index: Int, val left: Float, val right: Float, val rel: Float)
 
+    private var pendingIndex: Int? = initialIndex
     private var goal = 0f
     private var velocity = 0f
     private var lastPosition = 0f
     private var wheeling = false
     private var wheelAtMs = 0f
     private var dragging = false
-    private var focusTarget = 0f
-    private var focusVelocity = 0f
-    private var asideVelocity = 0f
+    private var dragged = false
     private var nowMs = 0f
     private var autoplayAtMs = 0f
 
+    // --- public control ------------------------------------------------------
+
+    /** Centres [index] at once, with no motion. Any value is wrapped into the items. */
+    fun scrollTo(index: Int) {
+        val m = metrics
+        if (m == null) {
+            pendingIndex = index
+            return
+        }
+        jump(m, index)
+    }
+
+    /**
+     * Travels to [index] through the row's own spring, the nearest way round
+     * the loop. Any value is wrapped into the items.
+     */
+    fun animateScrollTo(index: Int) {
+        val m = metrics
+        if (m == null) {
+            pendingIndex = index
+            return
+        }
+        val i = wrapIndex(index, m)
+        wheeling = false
+        goal += wrapAround(m.centers[i] - goal, m.loop)
+    }
+
+    /** Moves [by] cards along, forward when positive, through the row's spring. */
+    fun step(by: Int) {
+        val m = metrics
+        if (m == null) {
+            pendingIndex = (pendingIndex ?: currentIndex) + by
+            return
+        }
+        wheeling = false
+        goal = stepFrom(m, snapTo(m, goal), by)
+    }
+
     // --- input ---------------------------------------------------------------
 
+    /** A finger is down: the row stops under it. */
     internal fun onDragStart() {
         dragging = true
+        dragged = false
         wheeling = false
     }
 
     internal fun onDrag(dx: Float) {
+        dragged = true
         position -= dx
     }
 
     /** [throwVelocity] is in pixels a second, positive when flicked leftward. */
     internal fun onDragEnd(throwVelocity: Float) {
         dragging = false
+        dragged = false
         val m = metrics ?: return
         velocity = throwVelocity
-        val landing = snapTo(m, position + throwVelocity * THROW_REACH)
+        val landing = snapTo(m, position + throwVelocity * flingReach)
         goal = landing
         // A hard flick that would settle back onto the card it started from is
         // read as intent to move on, not as a wasted gesture.
@@ -168,38 +194,23 @@ class FlexCarouselScrollState internal constructor(
         }
     }
 
+    /** A press that never became a drag lets go; the row picks up its goal again. */
+    internal fun onRelease() {
+        dragging = false
+        dragged = false
+        velocity = 0f
+    }
+
     internal fun onWheel(delta: Float) {
         wheeling = true
         wheelAtMs = nowMs
         goal += delta
     }
 
-    /** Centres [index], or opens it when it is already centred. */
-    internal fun onTap(index: Int, rel: Float, focusOnClick: Boolean) {
+    /** Travels to the card drawn [rel] pixels from the middle. */
+    internal fun travelBy(rel: Float) {
         val m = metrics ?: return
-        if (focusAmount > 0.01f || focusTarget == 1f) {
-            closeFocus()
-            return
-        }
-        if (abs(rel) < m.widths[index] * 0.5f && focusOnClick) {
-            focusIndex = index
-            focusTarget = 1f
-            opening = true
-            goal = snapTo(m, position + rel)
-        } else {
-            goal = snapTo(m, position + rel)
-        }
-    }
-
-    internal fun closeFocus() {
-        focusTarget = 0f
-        opening = false
-    }
-
-    /** Move [by] cards. Public so a host can drive the row from its own chrome. */
-    fun step(by: Int) {
-        val m = metrics ?: return
-        goal = stepFrom(m, snapTo(m, goal), by)
+        goal = snapTo(m, position + rel)
     }
 
     // --- frame ---------------------------------------------------------------
@@ -209,7 +220,6 @@ class FlexCarouselScrollState internal constructor(
         tick++
         val m = metrics ?: return
         val dt = (deltaMs / 1000f).clamped(0.001f, 0.05f)
-        introAge += dt
 
         if (wheeling && nowMs - wheelAtMs > WHEEL_SETTLE_MS) {
             goal = snapTo(m, goal)
@@ -217,14 +227,15 @@ class FlexCarouselScrollState internal constructor(
         }
 
         if (!dragging) {
-            val stiffness = if (wheeling) WHEEL_SPRING else SPRING
-            val damping = 2f * sqrt(stiffness)
+            val k = stiffness.coerceAtLeast(1f)
+            val springK = if (wheeling) k * WHEEL_STIFFER else k
+            val damping = 2f * sqrt(springK)
             // Fixed substeps: one 50ms frame integrated in a single step would
             // overshoot far enough to wind the spring up instead of settling it.
             val steps = ceil(dt / SUBSTEP).toInt().coerceAtLeast(1)
             val h = dt / steps
             repeat(steps) {
-                velocity += (stiffness * (goal - position) - damping * velocity) * h
+                velocity += (springK * (goal - position) - damping * velocity) * h
                 position += velocity * h
             }
             if (abs(goal - position) < 0.05f && abs(velocity) < 0.5f) {
@@ -239,32 +250,7 @@ class FlexCarouselScrollState internal constructor(
         energy += (want - energy) *
             (1f - exp(-dt / if (want > energy) ENERGY_RISE else ENERGY_FALL))
 
-        // The move aside goes first, both ways. Opening, it waits for the card
-        // to have all but arrived in the middle; closing, it is what runs while
-        // the card is still held open.
-        val asideTarget = if (focusTarget == 1f && focusAmount > ASIDE_AFTER) 1f else 0f
-        asideVelocity += (ASIDE_SPRING * (asideTarget - asideAmount) -
-            2f * sqrt(ASIDE_SPRING) * asideVelocity) * dt
-        asideAmount += asideVelocity * dt
-        if (abs(asideTarget - asideAmount) < 0.0005f && abs(asideVelocity) < 0.001f) {
-            asideAmount = asideTarget
-            asideVelocity = 0f
-        }
-
-        // Held open until the card is back in the middle, so closing retraces
-        // the way it came — over first, then down into the row — instead of
-        // shrinking away from where it happened to be standing.
-        val held = focusTarget == 0f && asideAmount > ASIDE_RETURNED
-        val wants = if (held) 1f else focusTarget
-        focusVelocity += (FOCUS_SPRING * (wants - focusAmount) -
-            2f * sqrt(FOCUS_SPRING) * focusVelocity) * dt
-        focusAmount += focusVelocity * dt
-        if (abs(wants - focusAmount) < 0.0005f && abs(focusVelocity) < 0.001f) {
-            focusAmount = wants
-            focusVelocity = 0f
-        }
-
-        if (autoplay && !dragging && focusTarget == 0f && abs(velocity) < 1f) {
+        if (autoplay && !dragging && abs(velocity) < 1f) {
             if (autoplayAtMs == 0f) autoplayAtMs = nowMs
             if (nowMs - autoplayAtMs > intervalMs) {
                 autoplayAtMs = nowMs
@@ -275,10 +261,27 @@ class FlexCarouselScrollState internal constructor(
         }
 
         val near = nearest(m, position)
-        if (active != near) active = near
+        if (currentIndex != near) currentIndex = near
+        val moving = dragged || wheeling || goal != position || velocity != 0f
+        if (isScrollInProgress != moving) isScrollInProgress = moving
     }
 
     // --- layout queries ------------------------------------------------------
+
+    private fun jump(m: FlexMetrics, index: Int) {
+        val i = wrapIndex(index, m)
+        position += wrapAround(m.centers[i] - position, m.loop)
+        goal = position
+        lastPosition = position
+        velocity = 0f
+        wheeling = false
+        currentIndex = i
+    }
+
+    private fun wrapIndex(index: Int, m: FlexMetrics): Int {
+        val n = m.centers.size
+        return ((index % n) + n) % n
+    }
 
     private fun nearest(m: FlexMetrics, at: Float): Int {
         var best = 0

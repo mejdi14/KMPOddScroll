@@ -44,7 +44,6 @@ uniform float uOuter;
 uniform float uFlow;
 uniform float uCurl;
 uniform float uDispersion;
-uniform float uStrength;
 
 half4 main(float2 fragCoord) {
     float2 uv = fragCoord / uResolution;
@@ -71,14 +70,14 @@ half4 main(float2 fragCoord) {
 
     float reachX = rel.x / (uResolution.x * 0.5);
     float side = smoothstep(0.02, 0.3, abs(reachX)) * (uCurl == 0.0 ? sign(reachX) : uCurl);
-    float lift = ramp * side * uFlow * uStrength;
-    float2 swirl = along * along.y * side * slope * uFlow * uStrength * 0.35;
+    float lift = ramp * side * uFlow;
+    float2 swirl = along * along.y * side * slope * uFlow * 0.35;
     float2 drift = float2(0.0, -lift) - swirl;
 
     float2 shifted = uv + float2(drift.x, -drift.y) / uResolution;
     float4 color = float4(content.eval(shifted * uResolution));
 
-    float2 spread = float2(0.0, -(side * slope * uFlow * uStrength)) / uResolution * uDispersion;
+    float2 spread = float2(0.0, -(side * slope * uFlow)) / uResolution * uDispersion;
     float spreadPx = length(spread * uResolution);
     if (color.a > 0.002 && spreadPx > 0.25) {
         float3 base = color.rgb / color.a;
@@ -99,7 +98,7 @@ half4 main(float2 fragCoord) {
 """
 
 @Composable
-internal actual fun Modifier.liquidLens(lens: FlexLens, strength: () -> Float): Modifier {
+internal actual fun Modifier.liquidLens(lens: FlexLens): Modifier {
     // Remembered unconditionally, so the slot table is the same shape whatever
     // the device turns out to support. AGSL arrived in 33; below that, and if
     // the shader fails to compile at all, the row runs undistorted.
@@ -116,10 +115,7 @@ internal actual fun Modifier.liquidLens(lens: FlexLens, strength: () -> Float): 
     return graphicsLayer {
         val w = size.width
         val h = size.height
-        // Read in here, not in composition: it moves every frame while a card
-        // opens, and reading it out there would rebuild the carousel each time.
-        val amount = strength()
-        if (w <= 0f || h <= 0f || amount <= 0.001f) {
+        if (w <= 0f || h <= 0f) {
             renderEffect = null
             return@graphicsLayer
         }
@@ -157,7 +153,6 @@ internal actual fun Modifier.liquidLens(lens: FlexLens, strength: () -> Float): 
                 },
             )
             shader.setFloatUniform("uDispersion", lens.dispersion * 0.12f)
-            shader.setFloatUniform("uStrength", amount)
             renderEffect = RenderEffect
                 .createRuntimeShaderEffect(shader, "content")
                 .asComposeRenderEffect()
