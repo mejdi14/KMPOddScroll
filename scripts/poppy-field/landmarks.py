@@ -16,11 +16,9 @@ MEADOW_TREES = (
     ((-21.8, -21.0), 5.8, 'low_tree', True),
 )
 FLOCK = (
-    ((-7.9, -7.3), 1.62, 'ewe_side', False),
-    ((-11.3, -4.3), 1.51, 'ewe_step', False),
-    ((-13.6, -6.0), 1.12, 'ewe_quarter', False),
-    ((-11.9, -11.9), 1.42, 'ewe_step', True),
-    ((-15.4, 1.0), 1.40, 'ewe_side', True),
+    ((49.5, -10.9), 1.62, 'ewe_side', False),
+    ((61.0, -8.7), 1.12, 'ewe_quarter', False),
+    ((54.5, -2.9), 1.51, 'ewe_step', False),
 )
 MILL = (28.0, -14.0)
 MILL_WIDTH = 9.4
@@ -212,6 +210,8 @@ def pack_landmarks(atlas, ridge_tree):
         rects[name] = (x, y, w, h)
 
     sheet = Image.open(ART / 'grazing-sheep.webp').convert('RGBA')
+    # At the far bank each ewe reads as a few brush marks, even on a high-density display.
+    sheet = sheet.resize((72, 18), Image.Resampling.LANCZOS)
     wool = np.asarray(sheet, np.float32) / 255
     # Keep the wool's brush marks, with cloud whites in the light and meadow grey in the shade.
     original = painting()

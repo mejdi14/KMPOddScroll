@@ -160,10 +160,11 @@ Flex Carousel's paintings are museum scans from [Unsplash](https://unsplash.com)
 [The Metropolitan Museum of Art](https://unsplash.com/@themet) and
 [Tofan Teodor](https://unsplash.com/@tofanteodor).
 
-In the gallery's walk through Monet's *Poppy Field*, the trees in the grazing
-meadow use foliage from the painting. ImageGen supplied the sheep and the
-windmill tower. The scene generator
-paints its fixed sails and the river with reflections of the sky and mill.
+In the gallery's walk through Monet's *Poppy Field*, the trees on the left
+use foliage from the painting. ImageGen supplied the windmill tower and the
+three sheep grazing in the distance on the right, beyond the river. The scene
+generator paints the mill's fixed sails and the river with reflections of the
+sky and mill.
 See the [scene notes](scripts/poppy-field/README.md).
 
 CD Rack's disc labels come from the

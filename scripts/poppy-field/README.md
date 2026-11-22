@@ -41,9 +41,9 @@ ground, trees or figures, and the cut-out trees and figures.
   round.
 - **Trees, figures, sheep and the mill** (`cards`). The hill carries the
   painting's trees and both pairs of figures. Four trees on the left take
-  their trunks and boughs from the ridge tree. Five sheep graze among them.
-  Their [three painted poses](art/grazing-sheep.webp) share the light of the
-  original sky and the grey-green shadows of its foliage.
+  their trunks and boughs from the ridge tree. Three sheep graze in the
+  distance on the right, beyond the river. Their [painted poses](art/grazing-sheep.webp)
+  share the light of the original sky and the grey-green shadows of its foliage.
   On the far bank, a cart track leads to the stone mill. Its four linen sails
   and the [tower supplied by ImageGen](art/mill.webp) share one static cutout.
 
