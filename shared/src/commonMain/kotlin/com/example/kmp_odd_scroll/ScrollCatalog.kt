@@ -96,6 +96,7 @@ private val allScrollDemos: List<ScrollDemo> = listOf(
         category = "Architectural",
         title = "Gallery Wall",
         subtitle = "Paintings hung round the inside of a room, sliding along its walls past you",
+        ready = true,
         screen = { GalleryWallDemoScreen() },
     ),
     ScrollDemo(
