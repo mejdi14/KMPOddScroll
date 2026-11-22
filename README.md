@@ -160,6 +160,10 @@ Flex Carousel's paintings are museum scans from [Unsplash](https://unsplash.com)
 [The Metropolitan Museum of Art](https://unsplash.com/@themet) and
 [Tofan Teodor](https://unsplash.com/@tofanteodor).
 
+The elm and windmill tower in the gallery's walk through Monet's *Poppy Field*
+are new artwork generated with ImageGen. The sails, cart track and shade are
+painted by the [scene generator](scripts/poppy-field/README.md).
+
 CD Rack's disc labels come from the
 [LaunchBox Games Database](https://gamesdb.launchbox-app.com) and its manuals
 from [Emu-Land](https://www.emu-land.net/library/manuals/psx). The artwork

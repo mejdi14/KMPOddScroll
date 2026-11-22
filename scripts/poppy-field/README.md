@@ -36,9 +36,12 @@ ground, trees or figures, and the cut-out trees and figures.
 - **The tree line** (`band`), a ring 194 m out: the painting's own stretch
   with its house, and trees dabbed in its tree colours the rest of the way
   round.
-- **The hill's trees and the figures** (`cards`): the painting's stretch of
-  the hill as it was, its cypress, bushes and tall tree standing again along
-  the crest where it bends round, and the two pairs of figures.
+- **Trees, figures and the mill** (`cards`). The hill carries the painting's
+  trees and both pairs of figures. A broad elm stands closer on the left with
+  dappled shade in the grass. On the right, a cart track leads to a stone
+  windmill. The four linen sails share one square card that turns about the
+  painted axle. ImageGen supplied the [elm](art/elm.webp) and
+  [tower](art/mill.webp) in the muted olives and warm greys of the original.
 
 The hill is the one the painting was fitted to wherever the painting sees it.
 Out of its sight the crest bends round on the left, and there is a low swell
@@ -49,10 +52,42 @@ off behind.
 The app can't be run from here, so `render.py` draws a scene the way
 `EnterPainting` does: textured triangles with screen-space texture
 coordinates, back to front. `views.py` renders the new scene at phone size,
-each view a `route,yaw,pitch`:
+each view a `route,yaw,pitch` with an optional fourth value for seconds inside:
 
 ```
-python3 scripts/poppy-field/views.py look 1,0,0 1,-45,0 1,180,0 1,0,35
+python3 scripts/poppy-field/views.py look 1,0,0 1,-70,0 1,72,0 1,72,0,3
 ```
 
 The picture lands in `work/look.png`.
+
+<details>
+<summary>ImageGen source prompt for the elm and tower</summary>
+
+Use case: historical-scene. Make one two-piece transparent sprite sheet for the
+landscape just outside the frame of Claude Monet’s 1873 Poppies at Argenteuil.
+Wide horizontal composition with 2 completely disconnected painted objects,
+separated by a broad fully transparent gutter at the exact vertical midline.
+Each object fully in frame, each centered within its own half, with a little
+transparent padding. Left half: one characterful mature field elm from the
+meadow, broad irregular lopsided crown, a visible lightly crooked forked warm
+grey trunk, large broken clumps of leaves with openings of air; a few wispy
+grass strokes at its roots. Right half: one small rural French 19th-century
+stone tower windmill BODY ONLY with a squat round tapering warm ivory plaster
+tower, small dark door, one shutter, a muted dusty terracotta conical cap and a
+tiny dark wooden axle nub near the roof eave facing the viewer. The mill is a
+base for animating separately painted sails, so absolutely NO sails, spars or
+blades on it. A few sage grass marks and low scrub at the mill's base. Both seen
+from ground level on a gentle summer afternoon in the Seine valley. Paint each
+in the same broad, loose thin scumbled oil strokes and broken drybrush as
+Monet's Poppies, with irregular brush ends and barely visible canvas grain
+within the paint. Quiet grey olives, muted sage, warm straw green and umber tree
+shadows, hazy warm greys and dusty rose for the tower. Light from upper left.
+Simplify into beautiful masses, just as thick rough brushmarks suggest forms on
+Monet's distant hillside. No intricate leaf detailing or microscopic texture, no
+realism, no outlines, no clipart rendering. Let edges dissolve into sparse dry
+paint. Absolutely transparent real alpha throughout the negative space between
+branches, under the tree and surrounding both subjects. No sky, no backdrop, no
+horizon line, no landscape slab under either, no isolated island of dirt, no
+labels, no drop shadow.
+
+</details>

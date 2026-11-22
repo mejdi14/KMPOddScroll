@@ -7,7 +7,7 @@ from scene import save, load
 
 OUT = f'{WORK}/out'
 os.makedirs(OUT, exist_ok=True)
-SKY, SOLID, CARD, DECAL = 0, 1, 2, 4
+SKY, SOLID, CARD, DECAL, SAILS = 0, 1, 2, 4, 5
 NAMES = ['far', 'ground', 'paint', 'band', 'cards']
 
 
@@ -34,7 +34,8 @@ def write_scene():
     hdr = dict(hFov=HFOV, tilt=TILT, yawMax=180.0, pitchDown=35.0, pitchUp=35.0)
     layers = []
     for kind, tex, name in ((SKY, 0, 'sky'), (SKY, 2, 'skydecal'), (CARD, 3, 'band'), (SOLID, 1, 'ground'),
-                            (DECAL, 2, 'grounddecal'), (CARD, 4, 'crest'), (CARD, 4, 'row'), (CARD, 4, 'hillfig'), (CARD, 4, 'fig')):
+                            (DECAL, 2, 'grounddecal'), (CARD, 4, 'crest'), (SAILS, 4, 'sails'),
+                            (CARD, 4, 'row'), (CARD, 4, 'hillfig'), (CARD, 4, 'fig')):
         m = np.load(f'{WORK}/mesh_{name}.npz')
         assert len(m['pos']) < 32768, (name, len(m['pos']))
         w = m['w'] if 'w' in m.files else np.ones(len(m['pos']), np.float32)

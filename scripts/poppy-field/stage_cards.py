@@ -1,18 +1,17 @@
-"""The hill's trees and the figures: the painting's stretch of the hill as it was, its trees standing again
-along the crest where it bends round, each on a card turned to the walk, and the two pairs of figures."""
+"""The hill trees, figures, elm and windmill, each on a painted card facing the walk."""
 import math
 import numpy as np
 from PIL import Image
 from common import *
+from landmarks import pack_landmarks, side_cards
 from scene import load
-from trees import TreePalette, tree
 
 OLD_U0, OLD_U1 = 1884, 2433     # the hill row's stretch inside the painting, in the old cards texture
 PX_PER_M = 62.52
 ROW_BOTTOM = 279
 
 
-def build(rng):
+def build():
     old = np.asarray(Image.open(f'{SRC}/museum_poppies_cards.webp').convert('RGBA')).astype(np.float32) / 255
     rowA = old[:285, OLD_U0:OLD_U1].copy()
     # Where it is cut at the painting's left edge, soften it.
@@ -59,7 +58,8 @@ def build(rng):
     for p, (x, y, w, h) in zip(pieces, rects):
         atlas[y:y + h, x:x + w] = p
     atlas = atlas[:max(r[1] + r[3] for r in rects) + 2]
-    return atlas, rects
+    landmark_rects = pack_landmarks(atlas)
+    return atlas, rects, landmark_rects
 
 
 def crest_points():
@@ -72,9 +72,9 @@ def crest_points():
     return pts
 
 
-def billboards(rects, rng):
+def billboards(rects, landmark_rects, rng):
     Cm = np.array([-0.85, -3.6])
-    quads = []
+    quads, sails = side_cards(landmark_rects, Cm)
     for x, z, n in crest_points():
         to = np.array([x, z]) - Cm; dist = np.linalg.norm(to); fwd = to / dist
         right = np.array([-fwd[1], fwd[0]])
@@ -91,20 +91,24 @@ def billboards(rects, rng):
             quads.append((np.linalg.norm(np.array([cx, cz]) - Cm), cx, cz, base, right, w, h, (rx, ry, rw, rh), flip))
             off += w * rng.uniform(0.55, 0.85) * (1 if k % 2 == 0 else -1.6)
     quads.sort(key=lambda q: -q[0])
+    # A vertex at the axle pins it to the tower even in an oblique, affine-textured view.
+    return card_mesh(quads), card_mesh([sails], 2, 2)
+
+
+def card_mesh(quads, nx=4, ny=2):
     pos, uv, idx = [], [], []
     for _, cx, cz, base, right, w, h, (rx, ry, rw, rh), flip in quads:
         b0 = len(pos)
-        NX, NY = 4, 2
-        for j in range(NY + 1):
-            for i in range(NX + 1):
-                fx = i / NX; fy = j / NY
+        for j in range(ny + 1):
+            for i in range(nx + 1):
+                fx = i / nx; fy = j / ny
                 px = cx + right[0] * (fx - 0.5) * w; pz = cz + right[1] * (fx - 0.5) * w
                 pos.append((px, base + (1 - fy) * h, pz))
                 uu = rx + (1 - fx if flip else fx) * rw
                 uv.append((uu, ry + fy * rh))
-        for j in range(NY):
-            for i in range(NX):
-                a0 = b0 + j * (NX + 1) + i; a1 = a0 + 1; c0 = a0 + NX + 1; c1 = c0 + 1
+        for j in range(ny):
+            for i in range(nx):
+                a0 = b0 + j * (nx + 1) + i; a1 = a0 + 1; c0 = a0 + nx + 1; c1 = c0 + 1
                 idx += [a0, c0, c1, a0, c1, a1]
     return np.array(pos, np.float32), np.array(uv, np.float32), np.array(idx, np.int32).reshape(-1, 3)
 
@@ -130,13 +134,14 @@ def old_layers():
 
 if __name__ == '__main__':
     rng = np.random.default_rng(9)
-    atlas, rects = build(rng)
+    atlas, rects, landmark_rects = build()
+    crest, sails = billboards(rects, landmark_rects, rng)
     np.save(f'{WORK}/out_cards.npy', atlas)
     pv = Image.new('RGBA', (atlas.shape[1], atlas.shape[0]), (255, 0, 255, 255))
     pv.alpha_composite(Image.fromarray((np.clip(atlas, 0, 1) * 255).astype(np.uint8)))
     pv.convert('RGB').save(f'{WORK}/cards_preview.png')
-    bpos, buv, bidx = billboards(rects, rng)
-    np.savez(f'{WORK}/mesh_crest.npz', pos=bpos, uv=buv, idx=bidx)
+    for name, (p, u, i) in [('crest', crest), ('sails', sails)]:
+        np.savez(f'{WORK}/mesh_{name}.npz', pos=p, uv=u, idx=i)
     for name, (p, u, i) in zip(('row', 'hillfig', 'fig'), old_layers()):
         np.savez(f'{WORK}/mesh_{name}.npz', pos=p, uv=u, idx=i)
-    print('atlas', atlas.shape, 'crest quads', len(bpos) // 15, rects)
+    print('atlas', atlas.shape, 'field cards', len(crest[0]) // 15, rects)

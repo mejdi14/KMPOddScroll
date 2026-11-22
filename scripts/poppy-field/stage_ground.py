@@ -4,6 +4,7 @@ import math, time, sys
 import numpy as np
 from PIL import Image
 from common import *
+from landmarks import paint_ground
 
 NU, NV = 3072, 2048
 R0, RMAX = 0.12, 190.0
@@ -287,6 +288,7 @@ if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == 'fill':
         sys.exit()
     paint(canvas, X, Z, F, pal, rng)
+    paint_ground(canvas, X, Z)
     Image.fromarray((np.clip(canvas, 0, 1) * 255).astype(np.uint8)).save(f'{WORK}/out_ground.png')
     pos, uv, idx = mesh()
     np.savez(f'{WORK}/mesh_ground.npz', pos=pos, uv=uv, idx=idx)

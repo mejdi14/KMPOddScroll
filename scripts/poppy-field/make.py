@@ -60,7 +60,7 @@ STEPS = {
     'ground': script('stage_ground.py'),    # the field, about two and a half minutes
     'sky': script('stage_sky.py'),
     'band': script('stage_band.py'),        # the far tree line
-    'cards': script('stage_cards.py'),      # the hill's trees and the figures
+    'cards': script('stage_cards.py'),      # trees, figures and the mill with its sails
     'decal': script('stage_decal.py'),      # the painting laid back over sky and ground
     'pack': script('build.py', 'tex'),      # webp textures and the scene file, in work/out
     'install': install,                     # into shared/src/commonMain/composeResources
