@@ -42,6 +42,7 @@ import kmpoddscroll.shared.generated.resources.museum_poppies_band
 import kmpoddscroll.shared.generated.resources.museum_poppies_cards
 import kmpoddscroll.shared.generated.resources.museum_poppies_far
 import kmpoddscroll.shared.generated.resources.museum_poppies_ground
+import kmpoddscroll.shared.generated.resources.museum_poppies_paint
 import kmpoddscroll.shared.generated.resources.museum_roses
 import kmpoddscroll.shared.generated.resources.museum_seashore
 import kmpoddscroll.shared.generated.resources.museum_sunflowers
@@ -76,7 +77,10 @@ import org.jetbrains.compose.resources.imageResource
  * The Cliff Walk and Poppy Field, which are rebuilt as places instead: the
  * coast or the hill and the field, the figures, trees and sails laid out round
  * the spot each was painted from, the paint carried on past its edges and in
- * behind its near things, to walk into and look round. Credits are in the README.
+ * behind its near things, to walk into and look round. Poppy Field goes all the
+ * way round: the field, the sky and the tree line are brushed on in its own
+ * colours wherever it does not show them, and the painting itself lies over
+ * them from where it was painted. Credits are in the README.
  *
  * Back steps out of a painting that has been stepped inside, then away from
  * one that has been walked up to, before it leaves the room.
@@ -134,14 +138,16 @@ fun GalleryWallDemoScreen() {
         }
     }
 
-    // Poppy Field as a place: sky, meadow, the far tree line, the hill's trees and the figures, and how they lie.
+    // Poppy Field as a place all the way round: the sky, the field, the painting itself laid back over both,
+    // the far tree line, the hill's trees and the figures, and how they lie.
     val poppiesFar = imageResource(Res.drawable.museum_poppies_far)
     val poppiesGround = imageResource(Res.drawable.museum_poppies_ground)
+    val poppiesPaint = imageResource(Res.drawable.museum_poppies_paint)
     val poppiesBand = imageResource(Res.drawable.museum_poppies_band)
     val poppiesCards = imageResource(Res.drawable.museum_poppies_cards)
     val poppiesLayout by produceState<ByteArray?>(null) { value = Res.readBytes("files/museum_poppies_scene.bin") }
-    val poppiesScene = remember(poppiesLayout, poppiesFar, poppiesGround, poppiesBand, poppiesCards) {
-        poppiesLayout?.let { GalleryWallScene(it, listOf(poppiesFar, poppiesGround, poppiesBand, poppiesCards)) }
+    val poppiesScene = remember(poppiesLayout, poppiesFar, poppiesGround, poppiesPaint, poppiesBand, poppiesCards) {
+        poppiesLayout?.let { GalleryWallScene(it, listOf(poppiesFar, poppiesGround, poppiesPaint, poppiesBand, poppiesCards)) }
     }
 
     val items = remember(
