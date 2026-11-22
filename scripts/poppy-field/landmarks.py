@@ -1,4 +1,4 @@
-"""The near tree, river and mill beyond the painting's edges."""
+"""The grazing flock, trees, river and mill beyond the painting's edges."""
 import math
 from pathlib import Path
 
@@ -8,7 +8,20 @@ from PIL import Image
 from common import bilinear, fbm, height, painting, smoothstep
 from trees import dab
 
-ELM = (-14.0, -9.0)
+# Feet in the meadow, painted width in metres, cutout and facing.
+MEADOW_TREES = (
+    ((-14.0, -9.0), 7.3, 'tree', False),
+    ((-23.5, -5.7), 6.6, 'low_tree', False),
+    ((-28.8, 2.9), 7.1, 'tree', True),
+    ((-21.8, -21.0), 5.8, 'low_tree', True),
+)
+FLOCK = (
+    ((-7.9, -7.3), 1.62, 'ewe_side', False),
+    ((-11.3, -4.3), 1.51, 'ewe_step', False),
+    ((-13.6, -6.0), 1.12, 'ewe_quarter', False),
+    ((-11.9, -11.9), 1.42, 'ewe_step', True),
+    ((-15.4, 1.0), 1.40, 'ewe_side', True),
+)
 MILL = (28.0, -14.0)
 MILL_WIDTH = 9.4
 MILL_FOOT = (0.46, 0.971)
@@ -16,13 +29,25 @@ ART = Path(__file__).with_name('art')
 
 
 def paint_ground(canvas, x, z, walk):
-    # Broken light under the elm. Keep the paint marks and poppies visible in the shade.
-    under = (abs(x - ELM[0]) < 7) & (abs(z - ELM[1]) < 9)
-    dx, dz = x[under] - ELM[0], z[under] - ELM[1]
-    flecks = fbm(dx * 2, dz * 2, seed=73, octaves=3)
-    crown = np.hypot((dx + 0.6) / 3.3, (dz + 2.1) / 4.6)
-    shade = (1 - smoothstep(0.58, 1.1, crown + 0.27 * flecks)) * (0.78 + 0.22 * flecks)
-    canvas[under] *= 1 - shade[:, None] * np.array([0.30, 0.23, 0.18])
+    # Keep the grass strokes and poppies visible in the broken light under each crown.
+    for (tx, tz), width, _, _ in MEADOW_TREES:
+        scale = width / 7.3
+        under = (abs(x - tx) < 7 * scale) & (abs(z - tz) < 9 * scale)
+        dx, dz = (x[under] - tx) / scale, (z[under] - tz) / scale
+        flecks = fbm(dx * 2, dz * 2, seed=73, octaves=3)
+        crown = np.hypot((dx + 0.6) / 3.3, (dz + 2.1) / 4.6)
+        shade = (1 - smoothstep(0.58, 1.1, crown + 0.27 * flecks)) * (0.78 + 0.22 * flecks)
+        canvas[under] *= 1 - shade[:, None] * np.array([0.30, 0.23, 0.18])
+
+    for (sx, sz), width, _, _ in FLOCK:
+        under = (abs(x - sx) < width) & (abs(z - sz) < width)
+        dx, dz = x[under] - sx, z[under] - sz
+        facing = np.array([sx, sz]) - walk
+        fx, fz = facing / np.linalg.norm(facing)
+        across = (-fz * dx + fx * dz) / width
+        depth = (fx * dx + fz * dz) / width
+        shade = 1 - smoothstep(0.17, 1.15, np.hypot((across - 0.04) / 0.54, (depth - 0.06) / 0.28))
+        canvas[under] *= 1 - shade[:, None] * np.array([0.26, 0.21, 0.17])
 
     # Two wheel ruts bend through the meadow and disappear at the mill door.
     lane = (x > 15) & (x < MILL[0] + 1.5) & (z > MILL[1] - 5) & (z < 2)
@@ -52,7 +77,8 @@ def paint_river(canvas, x, z, walk):
     rows, cols = np.where((x > 2) & (np.abs(across) < half_width + 1.2))
     wx, wz = x[rows, cols], z[rows, cols]
     hollows = fbm(wx * 0.42, wz * 0.34, seed=91, octaves=3)
-    bank = half_width[rows, cols] - np.abs(across[rows, cols]) + 0.58 * hollows + 0.24 * fbm(wx * 2, wz * 2, seed=86)
+    broken_edge = fbm(wx * 2, wz * 2, seed=86)
+    bank = half_width[rows, cols] - np.abs(across[rows, cols]) + 0.78 * hollows + 0.34 * broken_edge
     dx, dz = wx - walk[0], wz - walk[1]
     distance = np.hypot(dx, dz)
     azimuth = np.arctan2(dx, -dz)
@@ -64,9 +90,22 @@ def paint_river(canvas, x, z, walk):
     foliage = original[285:325, 353:393].mean((0, 1))
     clumps = smoothstep(-0.27, 0.36, hollows)
     far_edge = (across[rows, cols] > 0) * (1 - smoothstep(0.05, 1.5 + 1.4 * clumps, bank + 0.24 * ripples))
-    reflected_green = (0.20 + 0.50 * far_edge * (0.3 + 0.7 * clumps) + 0.035 * ripples)[:, None]
+    reflected_green = (0.20 + 0.34 * far_edge * clumps + 0.035 * ripples)[:, None]
     water = sky * (1 - reflected_green) + foliage * reflected_green
     water *= np.array([0.91, 0.96, 0.99])
+
+    # Earth shows through in broken patches on the bank and under the shallows.
+    grass = canvas[rows, cols]
+    silt = original[455:482, 886:940].mean((0, 1)) + 0.05 * broken_edge[:, None]
+    petals = smoothstep(0.06, 0.22, grass[:, 0] - np.maximum(grass[:, 1], grass[:, 2]))
+    wet_edge = 1 - smoothstep(0.02, 0.48, -bank)
+    grass += (silt - grass) * (petals * wet_edge)[:, None]
+    earth = 0.58 * grass + 0.42 * silt
+    patches = smoothstep(-0.30, 0.38, hollows + 0.55 * broken_edge)
+    wear = patches * (1 - smoothstep(0.08, 0.28 + 0.48 * patches, -bank))
+    grass += (earth - grass) * (0.64 * wear[:, None])
+    shallows = (1 - smoothstep(0.02, 0.38 + 0.64 * patches, bank + 0.13 * ripples))
+    water += (earth - water) * ((0.10 + 0.28 * patches) * shallows)[:, None]
 
     # Reflect the actual painted mill in this bend, breaking its outline into dabs.
     mill = painted_mill()
@@ -82,10 +121,7 @@ def paint_river(canvas, x, z, walk):
            * (0.42 + 0.26 * ripples))[:, None]
     water += (reflection[:, :3] - water) * ink
 
-    grass = canvas[rows, cols]
-    lip = (1 - smoothstep(0.04, 0.42, np.abs(bank)))[:, None]
-    grass += (foliage - grass) * 0.42 * lip
-    canvas[rows, cols] = grass + (water - grass) * smoothstep(-0.06, 0.09, bank)[:, None]
+    canvas[rows, cols] = grass + (water - grass) * smoothstep(-0.13 - 0.08 * patches, 0.13, bank)[:, None]
 
     # In this atlas, a stroke across the ring reads horizontally from the walk.
     rng = np.random.default_rng(93)
@@ -95,16 +131,6 @@ def paint_river(canvas, x, z, walk):
         paint = light if rng.random() < 0.38 + 0.35 * clumps[k] else 0.64 * water[k] + 0.36 * foliage
         dab(canvas, cols[k], rows[k], rng.uniform(2, 10), rng.uniform(1.0, 3.1),
             rng.normal(0, 0.14), paint, rng.uniform(0.25, 0.60), rng)
-    # Uneven tussocks of reeds tie the painted bank to the meadow on either side.
-    margin = np.flatnonzero((bank < 0.04) & (bank > -0.52))
-    for k in rng.choice(margin, len(margin) // 29):
-        if rng.random() > 0.10 + 0.85 * clumps[k]:
-            continue
-        for _ in range(rng.integers(3, 8)):
-            length = rng.uniform(3, 12)
-            colour = original[rng.integers(390, 418), rng.integers(513, 560)]
-            dab(canvas, cols[k] + rng.normal(0, 2.2), rows[k] + length * 0.65, length, rng.uniform(0.6, 1.4),
-                math.pi / 2 + rng.normal(0, 0.28), colour, 0.82, rng)
 
 
 def mill_sails():
@@ -147,8 +173,8 @@ def painted_mill():
     return np.asarray(mill, np.float32) / 255
 
 
-def field_tree(ridge_tree):
-    """Build a spreading crown from the actual daubs and broken edges of the ridge tree."""
+def field_trees(ridge_tree):
+    """Fit boughs from the ridge tree into two different silhouettes."""
     tree = ridge_tree.copy()
     y, x = np.indices(tree.shape[:2])
     # Lift out the neighbouring bush on the lower right and fade the grass at the roots.
@@ -162,31 +188,63 @@ def field_tree(ridge_tree):
     result = Image.new('RGBA', (246, 246))
     result.alpha_composite(crown, (5, 78))
     result.alpha_composite(source.resize((214, 237), Image.Resampling.LANCZOS), (28, 4))
-    return np.asarray(result.transpose(Image.Transpose.FLIP_LEFT_RIGHT), np.float32) / 255
+    tree = result.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+
+    # Gather the lower foliage into a broader, shorter crown with its sunlit bough off centre.
+    low = Image.new('RGBA', (228, 194))
+    top = source.crop((38, 0, 167, 104)).resize((101, 70), Image.Resampling.LANCZOS)
+    low.alpha_composite(top, (52, 7))
+    low.alpha_composite(crown, (4, 46))
+    low.alpha_composite(source.crop((0, 86, 218, 253)).resize((206, 149), Image.Resampling.LANCZOS), (19, 44))
+    low = np.asarray(low, np.float32) / 255
+    y, x = np.indices(low.shape[:2])
+    low[..., 3] *= 1 - smoothstep(44, 18, x) * smoothstep(133, 177, y)
+    return np.asarray(tree, np.float32) / 255, low
 
 
 def pack_landmarks(atlas, ridge_tree):
-    """Pack the two cutouts beside the original hill and figures."""
+    """Pack the meadow cutouts in the spare atlas space above the crest row."""
     rects = {}
-    for name, tile, x, y in [('tree', field_tree(ridge_tree), 568, 8), ('mill', painted_mill(), 848, 8)]:
+    tree, low = field_trees(ridge_tree)
+    for name, tile, x, y in [('tree', tree, 568, 8), ('low_tree', low, 414, 295), ('mill', painted_mill(), 848, 8)]:
         h, w = tile.shape[:2]
         atlas[y:y + h, x:x + w] = tile
         rects[name] = (x, y, w, h)
+
+    sheet = Image.open(ART / 'grazing-sheep.webp').convert('RGBA')
+    wool = np.asarray(sheet, np.float32) / 255
+    # Keep the wool's brush marks, with cloud whites in the light and meadow grey in the shade.
+    original = painting()
+    cloud = original[65:110, 755:810].mean((0, 1))
+    shade = original[306:327, 367:392].mean((0, 1))
+    value = wool[..., :3] @ np.array([0.30, 0.55, 0.15])
+    neutral = shade + (cloud - shade) * smoothstep(0.17, 0.85, value)[..., None]
+    wool[..., :3] = 0.76 * neutral + 0.24 * wool[..., :3]
+    x, y = 650, 300
+    atlas[y:y + sheet.height, x:x + sheet.width] = wool
+    cell = sheet.width // 3
+    alpha = sheet.getchannel('A').point(lambda a: 255 if a > 12 else 0)
+    for i, name in enumerate(('ewe_side', 'ewe_quarter', 'ewe_step')):
+        left, top, right, bottom = alpha.crop((i * cell, 0, (i + 1) * cell, sheet.height)).getbbox()
+        rects[name] = (x + i * cell + left - 2, y + top - 2, right - left + 4, bottom - top + 4)
     return rects
 
 
 def side_cards(rects, walk):
-    """Stand each cutout on its painted root or doorstep, facing the walk."""
-    def upright(foot, width, rect, root):
+    """Stand each cutout on its roots, hooves or doorstep, facing the walk."""
+    def upright(foot, width, rect, root, flip=False):
         x, z = foot
         heading = np.array(foot) - walk
         distance = np.linalg.norm(heading)
         right = np.array([-heading[1], heading[0]]) / distance
         h = width * rect[3] / rect[2]
-        cx, cz = foot + right * (0.5 - root[0]) * width
+        root_x = 1 - root[0] if flip else root[0]
+        cx, cz = foot + right * (0.5 - root_x) * width
         base = float(height(x, z)) - (1 - root[1]) * h
-        return distance, cx, cz, base, right, width, h, rect, False
+        return distance, cx, cz, base, right, width, h, rect, flip
 
-    tree = upright(ELM, 7.3, rects['tree'], (0.59, 0.91))
-    mill = upright(MILL, MILL_WIDTH, rects['mill'], MILL_FOOT)
-    return [tree, mill]
+    roots = {'tree': (0.59, 0.91), 'low_tree': (0.39, 0.94)}
+    cards = [upright(foot, w, rects[name], roots[name], flip) for foot, w, name, flip in MEADOW_TREES]
+    cards.extend(upright(foot, w, rects[name], (0.5, 0.95), flip) for foot, w, name, flip in FLOCK)
+    cards.append(upright(MILL, MILL_WIDTH, rects['mill'], MILL_FOOT))
+    return cards

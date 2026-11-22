@@ -31,16 +31,19 @@ ground, trees or figures, and the cut-out trees and figures.
   the eye sees it from the walk, the way the painting's get smaller into the
   distance. On the right a river curves through the meadow. Its water picks up
   the original sky colours and a broken reflection of the mill. Short strokes
-  of light lie across the water, with rushes along the banks.
+  of light lie across the water. Patches of exposed earth show through the
+  shallows where they meet the meadow.
 - **The sky** (`far`), one polar texture with the zenith in its middle: the
   painting's clouds carried on into cloud masses on a deck overhead, in broad
   strokes from its sky.
 - **The tree line** (`band`), a ring 194 m out: the painting's own stretch
   with its house, and trees dabbed in its tree colours the rest of the way
   round.
-- **Trees, figures and the mill** (`cards`). The hill carries the painting's
-  trees and both pairs of figures. The near tree on the left takes its trunk
-  and crown from the ridge tree, with one bough placed behind its shoulder.
+- **Trees, figures, sheep and the mill** (`cards`). The hill carries the
+  painting's trees and both pairs of figures. Four trees on the left take
+  their trunks and boughs from the ridge tree. Five sheep graze among them.
+  Their [three painted poses](art/grazing-sheep.webp) share the light of the
+  original sky and the grey-green shadows of its foliage.
   On the far bank, a cart track leads to the stone mill. Its four linen sails
   and the [tower supplied by ImageGen](art/mill.webp) share one static cutout.
 
@@ -60,6 +63,25 @@ python3 scripts/poppy-field/views.py look 1,0,0 1,-70,0 1,72,-5
 ```
 
 The picture lands in `work/look.png`.
+
+<details>
+<summary>ImageGen prompt for the grazing sheep</summary>
+
+Three grazing ewes, one in each third of a wide horizontal transparent sprite
+sheet. Paint them as small figures in Monet’s Poppies at Argenteuil, with broad
+broken oil strokes, warm ivory and flax wool, muted grey-violet shadows, dull
+umber faces and legs. Afternoon light from upper left. Left ewe in side profile
+facing right with nose down in the grass, middle ewe grazing in three-quarter
+rear view with lowered head visible at its left side, right ewe facing left with
+one foreleg slightly advanced and muzzle down. Give each a different natural
+silhouette. Paint the whole animals from hoof to back, seen at meadow level. Use
+simple masses, irregular dry-brush edges and little detail, as if each animal
+were painted with a dozen small strokes. Genuine transparent background
+everywhere, also between the legs. Generous transparent gutters between the
+three animals and margin around the sheet. Animals only, no ground, grass,
+shadows outside the animals, text, outlines or scenery.
+
+</details>
 
 <details>
 <summary>Historical source prompt for the sheet containing the mill tower</summary>
