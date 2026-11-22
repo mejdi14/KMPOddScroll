@@ -57,9 +57,7 @@ import kotlin.math.tan
  * round) and the tilt down and up, in degrees; the route's point count and its
  * points; then the layer count and for each its kind (0 sky directions, 1
  * solid, 2 card, 3 water, 4 the painting laid over solid ground, giving way
- * by each vertex's weight as the walk goes in, 5 a rotating vertical square
- * on a 3 by 3 grid in row order from top left with the axle at its centre),
- * its index into [textures], its
+ * by each vertex's weight as the walk goes in), its index into [textures], its
  * vertex and index counts, the positions (x, y, z with y up and -z ahead), the
  * texture coordinates in texture pixels, a weight per vertex and the triangle
  * indices, padded to four bytes.
@@ -86,7 +84,6 @@ class GalleryWallScene(geometry: ByteArray, internal val textures: List<ImageBit
             val kind = r.int()
             val texture = r.int()
             val n = r.int()
-            require(kind != SAILS || n == 9) { "Sails require a 3 by 3 grid" }
             val ni = r.int()
             val positions = FloatArray(3 * n) { r.float() }
             val uv = FloatArray(2 * n) { r.float() }
@@ -142,9 +139,6 @@ private const val THROUGH = 4f * NEAR_CLIP
 private const val WATER_STRENGTH = 0.3f
 private const val WATER_DRIFT = 5f
 
-private const val SAILS = 5
-private const val SAIL_SPEED = 0.30f
-
 /** Draws a [GalleryWallScene], one mesh per layer. */
 internal class EnterPainting {
     private var forScene: GalleryWallScene? = null
@@ -162,29 +156,6 @@ internal class EnterPainting {
 
     private class Mesh(val layer: SceneLayer, val vertices: Vertices, val paint: Paint) {
         val z = FloatArray(layer.weight.size)
-        val positions = if (layer.kind == SAILS) layer.positions.copyOf() else layer.positions
-
-        fun rotateSails(time: Float) {
-            val rest = layer.positions
-            // Centre, middle right and top centre define the axle and its two in-plane axes.
-            val axleX = rest[12]
-            val axleY = rest[13]
-            val axleZ = rest[14]
-            val halfRightX = rest[15] - axleX
-            val halfRightZ = rest[17] - axleZ
-            val halfHeight = rest[4] - axleY
-            val turn = time * SAIL_SPEED
-            val c = cos(turn)
-            val s = sin(turn)
-            for (vertex in 0 until 9) {
-                val right = vertex % 3 - 1
-                val up = 1 - vertex / 3
-                val across = right * c + up * s
-                positions[3 * vertex] = axleX + halfRightX * across
-                positions[3 * vertex + 1] = axleY + halfHeight * (up * c - right * s)
-                positions[3 * vertex + 2] = axleZ + halfRightZ * across
-            }
-        }
     }
 
     fun prepare(scene: GalleryWallScene) {
@@ -379,8 +350,7 @@ internal class EnterPainting {
         time: Float,
     ) {
         val layer = mesh.layer
-        if (layer.kind == SAILS) mesh.rotateSails(time)
-        val p = mesh.positions
+        val p = layer.positions
         val out = mesh.vertices.positions
         val colors = mesh.vertices.colors
         val z = mesh.z

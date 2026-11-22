@@ -29,7 +29,7 @@ def sample(tex, u, v, repeat=False):
     fx=fx[...,None]; fy=fy[...,None]
     return (tex[y0m,x0m]*(1-fx)*(1-fy)+tex[y0m,x1m]*fx*(1-fy)+tex[y1m,x0m]*(1-fx)*fy+tex[y1m,x1m]*fx*fy)
 
-def render(scene, texs, W=780, H=1688, route=1.0, yaw=0.0, pitch=0.0, canvas=None, clipframe=False, time=0.0):
+def render(scene, texs, W=780, H=1688, route=1.0, yaw=0.0, pitch=0.0, canvas=None, clipframe=False):
     hdr, rpts, layers = scene
     if canvas is None:
         cw=0.86*W; ch=cw/1.5
@@ -51,15 +51,7 @@ def render(scene, texs, W=780, H=1688, route=1.0, yaw=0.0, pitch=0.0, canvas=Non
         sky=L['kind']==0
         e=np.zeros(3) if sky else eye
         clip=1e-3 if sky else NEAR
-        pos = L['pos']
-        if L['kind'] == 5:
-            axle = pos[4]
-            right = pos[5] - axle
-            up = pos[1] - axle
-            c, s = math.cos(0.30 * time), math.sin(0.30 * time)
-            pos = np.array([axle + right * (x*c + y*s) + up * (y*c - x*s)
-                            for y in (1, 0, -1) for x in (-1, 0, 1)])
-        d=pos-e
+        d=L['pos']-e
         zc=d@F; zz=np.maximum(zc,clip)
         sx=cx+focal*(d@R)/zz; sy=cy-focal*(d@U)/zz
         uv=L['uv']

@@ -29,7 +29,9 @@ ground, trees or figures, and the cut-out trees and figures.
   by stroke in colours lifted from the painting's own pixels: grass flicks,
   poppy dabs, yellow and white flowers. Each stroke has a size and slant as
   the eye sees it from the walk, the way the painting's get smaller into the
-  distance.
+  distance. On the right a river curves through the meadow. Its water picks up
+  the original sky colours and a broken reflection of the mill. Short strokes
+  of light lie across the water, with rushes along the banks.
 - **The sky** (`far`), one polar texture with the zenith in its middle: the
   painting's clouds carried on into cloud masses on a deck overhead, in broad
   strokes from its sky.
@@ -37,11 +39,10 @@ ground, trees or figures, and the cut-out trees and figures.
   with its house, and trees dabbed in its tree colours the rest of the way
   round.
 - **Trees, figures and the mill** (`cards`). The hill carries the painting's
-  trees and both pairs of figures. A broad elm stands closer on the left with
-  dappled shade in the grass. On the right, a cart track leads to a stone
-  windmill. The four linen sails share one square card that turns about the
-  painted axle. ImageGen supplied the [elm](art/elm.webp) and
-  [tower](art/mill.webp) in the muted olives and warm greys of the original.
+  trees and both pairs of figures. The near tree on the left takes its trunk
+  and crown from the ridge tree, with one bough placed behind its shoulder.
+  On the far bank, a cart track leads to the stone mill. Its four linen sails
+  and the [tower supplied by ImageGen](art/mill.webp) share one static cutout.
 
 The hill is the one the painting was fitted to wherever the painting sees it.
 Out of its sight the crest bends round on the left, and there is a low swell
@@ -52,16 +53,16 @@ off behind.
 The app can't be run from here, so `render.py` draws a scene the way
 `EnterPainting` does: textured triangles with screen-space texture
 coordinates, back to front. `views.py` renders the new scene at phone size,
-each view a `route,yaw,pitch` with an optional fourth value for seconds inside:
+each view a `route,yaw,pitch`:
 
 ```
-python3 scripts/poppy-field/views.py look 1,0,0 1,-70,0 1,72,0 1,72,0,3
+python3 scripts/poppy-field/views.py look 1,0,0 1,-70,0 1,72,-5
 ```
 
 The picture lands in `work/look.png`.
 
 <details>
-<summary>ImageGen source prompt for the elm and tower</summary>
+<summary>Historical source prompt for the sheet containing the mill tower</summary>
 
 Use case: historical-scene. Make one two-piece transparent sprite sheet for the
 landscape just outside the frame of Claude Monet’s 1873 Poppies at Argenteuil.

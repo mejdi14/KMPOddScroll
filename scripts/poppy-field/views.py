@@ -11,8 +11,8 @@ if __name__=='__main__':
     tag=sys.argv[1]
     views=[tuple(map(float,v.split(','))) for v in sys.argv[2:]]
     ims=[]
-    for route, yaw, pitch, *seconds in views:
-        im,_=R.render(sc,T,W=390,H=844,route=route,yaw=yaw,pitch=pitch,time=seconds[0] if seconds else 0)
+    for route,yaw,pitch in views:
+        im,_=R.render(sc,T,W=390,H=844,route=route,yaw=yaw,pitch=pitch)
         ims.append(Image.fromarray(im))
     W=sum(i.width for i in ims)+10*(len(ims)-1)
     s=Image.new('RGB',(W,ims[0].height),'white'); x=0

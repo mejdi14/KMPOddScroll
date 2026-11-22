@@ -58,7 +58,7 @@ def build():
     for p, (x, y, w, h) in zip(pieces, rects):
         atlas[y:y + h, x:x + w] = p
     atlas = atlas[:max(r[1] + r[3] for r in rects) + 2]
-    landmark_rects = pack_landmarks(atlas)
+    landmark_rects = pack_landmarks(atlas, sprites['tall'])
     return atlas, rects, landmark_rects
 
 
@@ -74,7 +74,7 @@ def crest_points():
 
 def billboards(rects, landmark_rects, rng):
     Cm = np.array([-0.85, -3.6])
-    quads, sails = side_cards(landmark_rects, Cm)
+    quads = side_cards(landmark_rects, Cm)
     for x, z, n in crest_points():
         to = np.array([x, z]) - Cm; dist = np.linalg.norm(to); fwd = to / dist
         right = np.array([-fwd[1], fwd[0]])
@@ -91,8 +91,7 @@ def billboards(rects, landmark_rects, rng):
             quads.append((np.linalg.norm(np.array([cx, cz]) - Cm), cx, cz, base, right, w, h, (rx, ry, rw, rh), flip))
             off += w * rng.uniform(0.55, 0.85) * (1 if k % 2 == 0 else -1.6)
     quads.sort(key=lambda q: -q[0])
-    # A vertex at the axle pins it to the tower even in an oblique, affine-textured view.
-    return card_mesh(quads), card_mesh([sails], 2, 2)
+    return card_mesh(quads)
 
 
 def card_mesh(quads, nx=4, ny=2):
@@ -135,13 +134,12 @@ def old_layers():
 if __name__ == '__main__':
     rng = np.random.default_rng(9)
     atlas, rects, landmark_rects = build()
-    crest, sails = billboards(rects, landmark_rects, rng)
+    crest = billboards(rects, landmark_rects, rng)
     np.save(f'{WORK}/out_cards.npy', atlas)
     pv = Image.new('RGBA', (atlas.shape[1], atlas.shape[0]), (255, 0, 255, 255))
     pv.alpha_composite(Image.fromarray((np.clip(atlas, 0, 1) * 255).astype(np.uint8)))
     pv.convert('RGB').save(f'{WORK}/cards_preview.png')
-    for name, (p, u, i) in [('crest', crest), ('sails', sails)]:
-        np.savez(f'{WORK}/mesh_{name}.npz', pos=p, uv=u, idx=i)
+    np.savez(f'{WORK}/mesh_crest.npz', pos=crest[0], uv=crest[1], idx=crest[2])
     for name, (p, u, i) in zip(('row', 'hillfig', 'fig'), old_layers()):
         np.savez(f'{WORK}/mesh_{name}.npz', pos=p, uv=u, idx=i)
     print('atlas', atlas.shape, 'field cards', len(crest[0]) // 15, rects)
