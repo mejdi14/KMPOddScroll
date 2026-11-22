@@ -39,8 +39,9 @@ import kotlin.math.tan
  * stays where it was in the scene, a window a little way ahead, so the scene
  * is only ever seen through it until the walk has carried the eye through —
  * it grows because the eye goes up to it, not because it is blown up. A drag
- * turns the head within set bounds, a scroll walks on or back along the
- * route, and the sea's brushwork drifts once in.
+ * turns the head within set bounds, or all the way round where the place is
+ * built all the way round, a scroll walks on or back along the route, and the
+ * sea's brushwork drifts once in.
  *
  * Each layer is one textured triangle mesh, drawn back to front, its arrays
  * written in place each frame.
@@ -52,12 +53,14 @@ import kotlin.math.tan
  * back to front.
  *
  * [geometry] is the scene file, little-endian: `PSC1`; the horizontal field of
- * view, the entry tilt, the turn either way and the tilt down and up, in
- * degrees; the route's point count and its points; then the layer count and
- * for each its kind (0 sky directions, 1 solid, 2 card, 3 water), its index
- * into [textures], its vertex and index counts, the positions (x, y, z with y
- * up and -z ahead), the texture coordinates in texture pixels, a weight per
- * vertex and the triangle indices, padded to four bytes.
+ * view, the entry tilt, the turn either way (180 or more turns all the way
+ * round) and the tilt down and up, in degrees; the route's point count and its
+ * points; then the layer count and for each its kind (0 sky directions, 1
+ * solid, 2 card, 3 water, 4 the painting laid over solid ground, giving way
+ * by each vertex's weight as the walk goes in), its index into [textures], its
+ * vertex and index counts, the positions (x, y, z with y up and -z ahead), the
+ * texture coordinates in texture pixels, a weight per vertex and the triangle
+ * indices, padded to four bytes.
  */
 class GalleryWallScene(geometry: ByteArray, internal val textures: List<ImageBitmap>) {
     internal val hFov: Float
@@ -104,6 +107,16 @@ internal class SceneLayer(
 private const val SKY = 0
 private const val SOLID = 1
 private const val WATER = 3
+
+/**
+ * The painting laid back over the ground from where it was painted. Seen from
+ * further in, its pixels would be blown up, so where a vertex's weight says
+ * so it gives way to the ground's own paint under it over this stretch of the
+ * walk, linear in time.
+ */
+private const val DECAL = 4
+private const val DECAL_FROM = 0.1f
+private const val DECAL_TO = 0.7f
 
 /** Nothing nearer the eye than this is drawn, in metres. */
 private const val NEAR_CLIP = 0.05f
@@ -209,13 +222,14 @@ internal class EnterPainting {
         val rx = cy0; val rz = sy0
         val ux = -sy0 * sp; val uy = cp; val uz = cy0 * sp
         val water = WATER_STRENGTH * smoothstep(0f, 0.3f, route)
+        val walked = smoothstep(DECAL_FROM, DECAL_TO, route)
 
         val through = frame(scene, left, top, right, bottom, cx, cy, focal, fx, fy, fz, rx, rz, ux, uy, uz)
         val layers: DrawScope.() -> Unit = {
             for (mesh in meshes) {
                 val layer = mesh.layer
                 if (layer.kind == WATER && water <= 0.001f) continue
-                project(mesh, focal, cx, cy, fx, fy, fz, rx, rz, ux, uy, uz, water, time)
+                project(mesh, focal, cx, cy, fx, fy, fz, rx, rz, ux, uy, uz, water, walked, time)
                 drawIntoCanvas { it.drawVertices(mesh.vertices, BlendMode.Modulate, mesh.paint) }
             }
             // The painting itself over the scene until it gives way.
@@ -332,6 +346,7 @@ internal class EnterPainting {
         rx: Float, rz: Float,
         ux: Float, uy: Float, uz: Float,
         water: Float,
+        walked: Float,
         time: Float,
     ) {
         val layer = mesh.layer
@@ -365,12 +380,14 @@ internal class EnterPainting {
                 tex[2 * n + 1] = v + WATER_DRIFT * 0.6f * sin(u * 0.017f + time * 0.6f)
                 colors[n] = alphaWhite(layer.weight[n] * water)
             }
+        } else if (layer.kind == DECAL) {
+            for (n in z.indices) colors[n] = alphaWhite(1f - walked * layer.weight[n])
         }
 
         // Triangles behind the eye, and the backs of solid ones, are left out.
         val src = layer.indices
         val dst = mesh.vertices.indices
-        val solid = layer.kind == SOLID
+        val solid = layer.kind == SOLID || layer.kind == DECAL
         var t = 0
         while (t < src.size) {
             val a = src[t].toInt()

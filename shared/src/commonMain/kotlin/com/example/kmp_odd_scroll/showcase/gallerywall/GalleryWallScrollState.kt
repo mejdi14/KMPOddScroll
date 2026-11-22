@@ -29,6 +29,8 @@ import kotlin.math.sign
  */
 private const val OMEGA = 6.744f
 
+private const val PI_F = kotlin.math.PI.toFloat()
+
 /** Below these, in card heights and card heights a second, it has arrived. */
 private const val REST = 1e-4f
 private const val REST_SPEED = 1e-3f
@@ -302,7 +304,15 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
             lookBy(dx, dy, focal, look[0], look[1], look)
         } else {
             // Into the scene: a drag right turns right, towards the cliff, and a drag up looks up.
-            look[0] = (look[0] + dx / focal).clamped(-scene.yawMax, scene.yawMax)
+            if (scene.yawMax >= PI_F) {
+                // Built all the way round, it turns on for ever, kept within half a turn of ahead so
+                // stepping out turns back the short way.
+                look[0] += dx / focal
+                if (look[0] > PI_F) { look[0] -= 2f * PI_F; yaw -= 2f * PI_F }
+                if (look[0] < -PI_F) { look[0] += 2f * PI_F; yaw += 2f * PI_F }
+            } else {
+                look[0] = (look[0] + dx / focal).clamped(-scene.yawMax, scene.yawMax)
+            }
             look[1] = (look[1] - dy / focal).clamped(-scene.pitchDown, scene.pitchUp)
         }
     }
