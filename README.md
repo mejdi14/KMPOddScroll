@@ -180,6 +180,10 @@ boys and paints the meadow, the schoolyard, the sky, the woods, the far fields
 and hills, and the two shade trees beyond the painting's edges in the
 painting's own colours. See the [scene notes](scripts/snap-the-whip/README.md).
 
+The *Automat* art studies pair Edward Hopper's 1927 painting from the Des Moines
+Art Center with three imagined views of the cafeteria, created with ImageGen.
+[Painting reproduction via Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Automat-edward-hopper-1927.jpg) · [Art studies](scripts/automat/art-review.jpg).
+
 CD Rack's disc labels come from the
 [LaunchBox Games Database](https://gamesdb.launchbox-app.com) and its manuals
 from [Emu-Land](https://www.emu-land.net/library/manuals/psx). The artwork
