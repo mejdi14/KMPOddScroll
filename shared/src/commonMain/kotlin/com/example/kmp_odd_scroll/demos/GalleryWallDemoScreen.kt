@@ -23,6 +23,13 @@ import com.example.kmp_odd_scroll.showcase.gallerywall.rememberGalleryWallScroll
 import kmpoddscroll.shared.generated.resources.Res
 import kmpoddscroll.shared.generated.resources.museum_almond
 import kmpoddscroll.shared.generated.resources.museum_armchair
+import kmpoddscroll.shared.generated.resources.museum_automat
+import kmpoddscroll.shared.generated.resources.museum_automat_front
+import kmpoddscroll.shared.generated.resources.museum_automat_left
+import kmpoddscroll.shared.generated.resources.museum_automat_rear
+import kmpoddscroll.shared.generated.resources.museum_automat_right
+import kmpoddscroll.shared.generated.resources.museum_automat_surfaces
+import kmpoddscroll.shared.generated.resources.museum_automat_table
 import kmpoddscroll.shared.generated.resources.museum_boating
 import kmpoddscroll.shared.generated.resources.museum_boating_party
 import kmpoddscroll.shared.generated.resources.museum_bridge
@@ -76,17 +83,16 @@ import kmpoddscroll.shared.generated.resources.museum_venus_depth
 import org.jetbrains.compose.resources.imageResource
 
 /**
- * Sixteen bright museum paintings, every one cut 3:2 so they hang at the same
- * height and a width of one and a half of it, ordered so that no painting sits
+ * Museum paintings hung whole at their own aspect, ordered so that no painting sits
  * beside one of its own colours — yellow, blue, orange, green, pink, teal, gold
  * and so on round the room, each in a frame of its own behind glass: gilt in
  * yellow, pale, red, green or antique gold, or carved walnut, mahogany, oak,
  * rosewood or ebonised wood, and carved shell, acanthus, gadroon or classical,
  * no two neighbours alike. The Cliff Walk carries Monet's notes from Pourville
  * on its back and Poppy Field his notes from Argenteuil, for when either is
- * taken out and turned over. Each carries a depth
- * map worked out by Depth Anything V2 Small, for stepping inside it — but for
- * The Cliff Walk, Poppy Field, Boys in a Pasture and Snap the Whip, which are
+ * taken out and turned over. Most carry a depth
+ * map worked out by Depth Anything V2 Small, for stepping inside.
+ * The Cliff Walk, Poppy Field, Boys in a Pasture and Snap the Whip are
  * rebuilt as places instead: the coast, the hill and the field, the pasture or
  * the schoolyard, the figures, trees and sails laid out round the spot each
  * was painted from, the paint carried on past its edges and in behind its near
@@ -98,7 +104,9 @@ import org.jetbrains.compose.resources.imageResource
  * fence runs on round the pasture. His chain of boys in Snap the Whip runs
  * across the meadow before the red schoolhouse, each boy as far off as his feet
  * say, the walk goes in among them, and the schoolhouse they hid stands whole
- * behind them, the woods going on round. Credits are in the README.
+ * behind them, the woods going on round. In Automat a short walk brings the
+ * viewer beside the table, with the cafeteria built all the way round.
+ * Credits are in the README.
  *
  * Back steps out of a painting that has been stepped inside, then away from
  * one that has been walked up to, before it leaves the room.
@@ -194,12 +202,28 @@ fun GalleryWallDemoScreen() {
         whipLayout?.let { GalleryWallScene(it, listOf(whipFar, whipGround, whipPaint, whipBand, whipCards)) }
     }
 
+    val automat = imageResource(Res.drawable.museum_automat)
+    val automatFront = imageResource(Res.drawable.museum_automat_front)
+    val automatLeft = imageResource(Res.drawable.museum_automat_left)
+    val automatRear = imageResource(Res.drawable.museum_automat_rear)
+    val automatRight = imageResource(Res.drawable.museum_automat_right)
+    val automatSurfaces = imageResource(Res.drawable.museum_automat_surfaces)
+    val automatTable = imageResource(Res.drawable.museum_automat_table)
+    val automatLayout by produceState<ByteArray?>(null) { value = Res.readBytes("files/museum_automat_scene.bin") }
+    val automatScene = remember(
+        automatLayout, automatFront, automatLeft, automatRear, automatRight, automatSurfaces, automatTable,
+    ) {
+        automatLayout?.let {
+            GalleryWallScene(it, listOf(automatFront, automatLeft, automatRear, automatRight, automatSurfaces, automatTable))
+        }
+    }
+
     val items = remember(
         sunflowers, boating, june, bridge, roses, armchair, kiss,
         almond, boatingparty, cliffwalk, cliffwalkBack, venus, poppies, poppiesBack, fan, seashore,
         sunflowersDepth, boatingDepth, juneDepth, bridgeDepth, rosesDepth, armchairDepth, kissDepth,
         almondDepth, boatingpartyDepth, cliffwalkDepth, venusDepth, poppiesDepth, fanDepth, seashoreDepth,
-        pasture, whip, cliffwalkScene, poppiesScene, pastureScene, whipScene,
+        pasture, whip, automat, cliffwalkScene, poppiesScene, pastureScene, whipScene, automatScene,
     ) {
         listOf(
             GalleryWallItem(sunflowers, "Sunflowers", "Vincent van Gogh", "1888–1889", "Oil on canvas", frame = gilt(YELLOW_GOLD, Shell), depth = sunflowersDepth),
@@ -218,6 +242,7 @@ fun GalleryWallDemoScreen() {
             GalleryWallItem(poppies, "Poppy Field", "Claude Monet", "1873", "Oil on canvas", frame = gilt(RED_GOLD, Acanthus, width = 0.095f), back = poppiesBack, depth = poppiesDepth, scene = poppiesScene),
             GalleryWallItem(fan, "Lady with a Fan", "Gustav Klimt", "1917–1918", "Oil on canvas", frame = wood(ROSEWOOD, Gadroon), depth = fanDepth),
             GalleryWallItem(seashore, "Strolling along the Seashore", "Joaquín Sorolla", "1909", "Oil on canvas", frame = gilt(YELLOW_GOLD, Classical, width = 0.075f), depth = seashoreDepth),
+            GalleryWallItem(automat, "Automat", "Edward Hopper", "1927", "Oil on canvas", frame = GalleryWallFrame(color = EBONISED), scene = automatScene),
         )
     }
 
