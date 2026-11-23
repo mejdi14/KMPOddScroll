@@ -167,6 +167,12 @@ generator paints the mill's fixed sails and the river with reflections of the
 sky and mill.
 See the [scene notes](scripts/poppy-field/README.md).
 
+The walk into Homer's *Boys in a Pasture* starts from the
+[Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Winslow_Homer_-_Boys_in_a_Pasture.jpg)
+scan (public domain). Its scene generator paints the pasture, the sky, the
+fence, the tree line and the two shade elms beyond the painting's edges in the
+painting's own colours. See the [scene notes](scripts/boys-in-a-pasture/README.md).
+
 CD Rack's disc labels come from the
 [LaunchBox Games Database](https://gamesdb.launchbox-app.com) and its manuals
 from [Emu-Land](https://www.emu-land.net/library/manuals/psx). The artwork

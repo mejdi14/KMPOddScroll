@@ -36,6 +36,12 @@ import kmpoddscroll.shared.generated.resources.museum_cliff_walk_strokes
 import kmpoddscroll.shared.generated.resources.museum_fan
 import kmpoddscroll.shared.generated.resources.museum_june
 import kmpoddscroll.shared.generated.resources.museum_kiss
+import kmpoddscroll.shared.generated.resources.museum_pasture
+import kmpoddscroll.shared.generated.resources.museum_pasture_band
+import kmpoddscroll.shared.generated.resources.museum_pasture_cards
+import kmpoddscroll.shared.generated.resources.museum_pasture_far
+import kmpoddscroll.shared.generated.resources.museum_pasture_ground
+import kmpoddscroll.shared.generated.resources.museum_pasture_paint
 import kmpoddscroll.shared.generated.resources.museum_poppies
 import kmpoddscroll.shared.generated.resources.museum_poppies_back
 import kmpoddscroll.shared.generated.resources.museum_poppies_band
@@ -64,7 +70,7 @@ import kmpoddscroll.shared.generated.resources.museum_venus_depth
 import org.jetbrains.compose.resources.imageResource
 
 /**
- * Fourteen bright museum paintings, every one cut 3:2 so they hang at the same
+ * Fifteen bright museum paintings, every one cut 3:2 so they hang at the same
  * height and a width of one and a half of it, ordered so that no painting sits
  * beside one of its own colours — yellow, blue, orange, green, pink, teal, gold
  * and so on round the room, each in a frame of its own behind glass: gilt in
@@ -74,13 +80,16 @@ import org.jetbrains.compose.resources.imageResource
  * on its back and Poppy Field his notes from Argenteuil, for when either is
  * taken out and turned over. Each carries a depth
  * map worked out by Depth Anything V2 Small, for stepping inside it — but for
- * The Cliff Walk and Poppy Field, which are rebuilt as places instead: the
- * coast or the hill and the field, the figures, trees and sails laid out round
- * the spot each was painted from, the paint carried on past its edges and in
- * behind its near things, to walk into and look round. Poppy Field goes all the
- * way round: the field, the sky and the tree line are brushed on in its own
+ * The Cliff Walk, Poppy Field and Boys in a Pasture, which are rebuilt as
+ * places instead: the coast, the hill and the field or the pasture, the
+ * figures, trees and sails laid out round the spot each was painted from, the
+ * paint carried on past its edges and in behind its near things, to walk into
+ * and look round. Poppy Field and Boys in a Pasture go all the way round: the
+ * field, the sky and the tree line are brushed on in the painting's own
  * colours wherever it does not show them, and the painting itself lies over
- * them from where it was painted. Credits are in the README.
+ * them from where it was painted. Homer's two boys sit in the grass a few
+ * steps in, the walk goes up past their shoulders, and the rail fence runs on
+ * round the pasture. Credits are in the README.
  *
  * Back steps out of a painting that has been stepped inside, then away from
  * one that has been walked up to, before it leaves the room.
@@ -150,12 +159,25 @@ fun GalleryWallDemoScreen() {
         poppiesLayout?.let { GalleryWallScene(it, listOf(poppiesFar, poppiesGround, poppiesPaint, poppiesBand, poppiesCards)) }
     }
 
+    // Boys in a Pasture the same way, all the way round: the sky, the pasture, the painting laid back over both,
+    // the fence and tree line, the two boys and the shade trees, and how they lie.
+    val pasture = imageResource(Res.drawable.museum_pasture)
+    val pastureFar = imageResource(Res.drawable.museum_pasture_far)
+    val pastureGround = imageResource(Res.drawable.museum_pasture_ground)
+    val pasturePaint = imageResource(Res.drawable.museum_pasture_paint)
+    val pastureBand = imageResource(Res.drawable.museum_pasture_band)
+    val pastureCards = imageResource(Res.drawable.museum_pasture_cards)
+    val pastureLayout by produceState<ByteArray?>(null) { value = Res.readBytes("files/museum_pasture_scene.bin") }
+    val pastureScene = remember(pastureLayout, pastureFar, pastureGround, pasturePaint, pastureBand, pastureCards) {
+        pastureLayout?.let { GalleryWallScene(it, listOf(pastureFar, pastureGround, pasturePaint, pastureBand, pastureCards)) }
+    }
+
     val items = remember(
         sunflowers, boating, june, bridge, roses, armchair, kiss,
         almond, boatingparty, cliffwalk, cliffwalkBack, venus, poppies, poppiesBack, fan, seashore,
         sunflowersDepth, boatingDepth, juneDepth, bridgeDepth, rosesDepth, armchairDepth, kissDepth,
         almondDepth, boatingpartyDepth, cliffwalkDepth, venusDepth, poppiesDepth, fanDepth, seashoreDepth,
-        cliffwalkScene, poppiesScene,
+        pasture, cliffwalkScene, poppiesScene, pastureScene,
     ) {
         listOf(
             GalleryWallItem(sunflowers, "Sunflowers", "Vincent van Gogh", "1888–1889", "Oil on canvas", frame = gilt(YELLOW_GOLD, Shell), depth = sunflowersDepth),
@@ -163,6 +185,7 @@ fun GalleryWallDemoScreen() {
             GalleryWallItem(june, "Flaming June", "Frederic Leighton", "1895", "Oil on canvas", frame = gilt(RED_GOLD, Gadroon, width = 0.105f), depth = juneDepth),
             GalleryWallItem(bridge, "Water Lilies and Japanese Bridge", "Claude Monet", "1899", "Oil on canvas", frame = gilt(PALE_GOLD, Acanthus, width = 0.09f), depth = bridgeDepth),
             GalleryWallItem(roses, "The Roses of Heliogabalus", "Lawrence Alma-Tadema", "1888", "Oil on canvas", frame = wood(MAHOGANY, Shell, width = 0.11f), depth = rosesDepth),
+            GalleryWallItem(pasture, "Boys in a Pasture", "Winslow Homer", "1874", "Oil on canvas", frame = gilt(ANTIQUE_GOLD, Acanthus, width = 0.09f), scene = pastureScene),
             GalleryWallItem(armchair, "Little Girl in a Blue Armchair", "Mary Cassatt", "1878", "Oil on canvas", frame = gilt(GREEN_GOLD, Gadroon, width = 0.095f), depth = armchairDepth),
             GalleryWallItem(kiss, "The Kiss", "Gustav Klimt", "1907–1908", "Oil and gold leaf on canvas", frame = wood(EBONISED, Acanthus), depth = kissDepth),
             GalleryWallItem(almond, "Almond Blossoms", "Vincent van Gogh", "1890", "Oil on canvas", frame = gilt(ANTIQUE_GOLD, Shell), depth = almondDepth),
