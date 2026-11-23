@@ -132,13 +132,13 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
         private set
 
     /** Up close with the frame still on, so [inspect] will take it and the glass off. */
-    val canInspect: Boolean get() = arrived && !inspected && !stepping
+    val canInspect: Boolean get() = looking && arrived && !inspected && !stepping
 
     /** The frame and glass are off and out of sight, so [flip] will turn the painting over, or back. */
     var canFlip by mutableStateOf(false)
         private set
 
-    /** Up close, the painting lying face up and still, so [stepInside] will go into it. */
+    /** The inspected painting is lying face up and still, so [stepInside] will go into it. */
     var canStepInside by mutableStateOf(false)
         private set
 
@@ -255,6 +255,7 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
         if (!canFlip) return
         flipping = true
         canFlip = false
+        canStepInside = false
     }
 
     /**
@@ -265,6 +266,7 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
     fun stepInside() {
         if (!canStepInside) return
         inside = true
+        canFlip = false
         canStepInside = false
         walkPending = scene != null
     }
@@ -285,6 +287,8 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
         }
         looking = false
         inspected = false
+        canFlip = false
+        canStepInside = false
         flipping = false
         fold = 0f
         over = false
@@ -434,12 +438,9 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
 
         if (moved) tick++
         val hang = hang ?: return
-        val flippable = inspected && lift >= 1f && !flipping && !stepping && paperFolds && hang.framed(visited)
-        if (flippable != canFlip) canFlip = flippable
-        // Lying face up and still, out of any frame that is coming off or going back on.
-        val enterable = arrived && !inside && !stepping && !flipping && !over && fold == 0f &&
-            (apart == 0f || lift >= 1f) && paperFolds
-        if (enterable != canStepInside) canStepInside = enterable
+        val paintingReady = arrived && inspected && lift >= 1f && !flipping && !inside && !stepping && paperFolds
+        canFlip = paintingReady && hang.framed(visited)
+        canStepInside = paintingReady && !over
         val nearest = hang.nearest(position)
         if (nearest != centred) centred = nearest
 

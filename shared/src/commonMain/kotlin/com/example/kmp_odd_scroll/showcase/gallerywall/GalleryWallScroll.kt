@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -342,14 +343,13 @@ fun rememberGalleryWallScrollState(walkIn: Boolean = true): GalleryWallScrollSta
  * Drag along it, or scroll, and the hang springs after, coming to rest with
  * a painting in the middle; tap a painting to bring it to the middle. Once
  * the hang has stood still for two seconds, [lookLabel] offers to walk up to
- * the painting in the middle. Up close, [exitLabel] steps back and
- * [inspectLabel] takes the painting out of its frame: the four sticks fly off
- * past the four edges of the screen, and then the glass slides up out of the
- * top. Both go back on as it is stepped away from. With them gone, [flipLabel]
+ * the painting in the middle. Up close, [inspectLabel] takes the painting out
+ * of its frame. The four sticks fly past the edges of the screen and the glass
+ * slides up out of sight. Both go back on as it is stepped away from. With them gone, [flipLabel]
  * turns the bare painting over like a sheet of paper — a crease sweeping in
  * from the lower left corner, ripples settling behind it — to its
- * [GalleryWallItem.back], and again turns it back. Up close, framed or bare,
- * [stepInsideLabel] goes into the painting: it takes on depth, the room fades
+ * [GalleryWallItem.back], and again turns it back. With the bare painting face up,
+ * [stepInsideLabel] goes into the painting. It takes on depth, the room fades
  * to dark round it and the eye goes in, where a drag looks round and a scroll
  * walks in or back, until [exitLabel] steps back out. The room opens with a
  * walk in from the doorway, unless the state was made without one.
@@ -361,16 +361,16 @@ fun rememberGalleryWallScrollState(walkIn: Boolean = true): GalleryWallScrollSta
  *   null to hang those bare.
  * @param lookLabel the button that walks up to a painting, or null for none —
  *   a host can show its own off [GalleryWallScrollState.canLook].
- * @param exitLabel the button, bottom left up close, that steps back, or null
- *   for none, when a tap anywhere does.
+ * @param exitLabel the button that steps back once inspection starts. Before
+ *   inspection, or when the label is null, tapping the painting steps back.
  * @param inspectLabel the button, bottom right up close, that takes the frame
  *   and the glass off, or null for none — a host can show its own off
  *   [GalleryWallScrollState.canInspect].
  * @param flipLabel the button, bottom right once the frame and glass are off,
  *   that turns the painting over and back, or null for none — a host can show its own
  *   off [GalleryWallScrollState.canFlip].
- * @param stepInsideLabel the button, bottom right up close above the others, that goes into
- *   the painting, or null for none — a host can show its own off
+ * @param stepInsideLabel the button above Flip that enters the inspected
+ *   painting while it is face up, or null for none. A host can show its own off
  *   [GalleryWallScrollState.canStepInside].
  * @param state also lets a host's own controls move it.
  */
@@ -444,8 +444,7 @@ fun GalleryWallScroll(
                         }
                         state.release(dragging)
                         if (state.looking) {
-                            // Without the button, a tap anywhere steps back.
-                            if (!dragging && exitLabel == null) state.leave()
+                            if (!dragging && (exitLabel == null || state.canInspect)) state.leave()
                         } else if (!dragging) {
                             val hit = room.hit(down.position.x, down.position.y, state.position, hang)
                             if (hit != null) state.scrollTo(hit)
@@ -515,12 +514,11 @@ fun GalleryWallScroll(
             }
         }
         if (exitLabel != null) {
-            HudButton(exitLabel, state.arrived, background, contentColor, Modifier.align(Alignment.BottomStart).padding(start = HUD_SIDE, bottom = HUD_BOTTOM)) {
+            HudButton(exitLabel, state.arrived && state.inspected, background, contentColor, Modifier.align(Alignment.BottomStart).padding(start = HUD_SIDE, bottom = HUD_BOTTOM)) {
                 state.leave()
             }
         }
-        // Stepping inside stands over inspecting and flipping, on the right, so
-        // all three fit beside the way back on a narrow phone.
+        // Flip takes Inspect's place, with Step inside just above it.
         Column(
             Modifier.align(Alignment.BottomEnd).padding(end = HUD_SIDE, bottom = HUD_BOTTOM),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -577,7 +575,10 @@ private fun HudButton(
                 translationY = (1f - reveal) * 10.dp.toPx()
             }
             // Only while it shows, or it would take taps meant for the wall.
-            .then(if (shown) Modifier.pointerInput(Unit) { detectTapGestures { tap() } } else Modifier)
+            .then(
+                if (shown) Modifier.pointerInput(Unit) { detectTapGestures { tap() } }
+                else Modifier.clearAndSetSemantics {}
+            )
             .background(background.copy(alpha = 0.9f), shape)
             .border(1.dp, contentColor.copy(alpha = 0.5f), shape)
             .padding(horizontal = 26.dp, vertical = 11.dp),
