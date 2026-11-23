@@ -53,6 +53,12 @@ import kmpoddscroll.shared.generated.resources.museum_roses
 import kmpoddscroll.shared.generated.resources.museum_seashore
 import kmpoddscroll.shared.generated.resources.museum_sunflowers
 import kmpoddscroll.shared.generated.resources.museum_venus
+import kmpoddscroll.shared.generated.resources.museum_whip
+import kmpoddscroll.shared.generated.resources.museum_whip_band
+import kmpoddscroll.shared.generated.resources.museum_whip_cards
+import kmpoddscroll.shared.generated.resources.museum_whip_far
+import kmpoddscroll.shared.generated.resources.museum_whip_ground
+import kmpoddscroll.shared.generated.resources.museum_whip_paint
 import kmpoddscroll.shared.generated.resources.museum_almond_depth
 import kmpoddscroll.shared.generated.resources.museum_armchair_depth
 import kmpoddscroll.shared.generated.resources.museum_boating_depth
@@ -70,7 +76,7 @@ import kmpoddscroll.shared.generated.resources.museum_venus_depth
 import org.jetbrains.compose.resources.imageResource
 
 /**
- * Fifteen bright museum paintings, every one cut 3:2 so they hang at the same
+ * Sixteen bright museum paintings, every one cut 3:2 so they hang at the same
  * height and a width of one and a half of it, ordered so that no painting sits
  * beside one of its own colours — yellow, blue, orange, green, pink, teal, gold
  * and so on round the room, each in a frame of its own behind glass: gilt in
@@ -80,16 +86,19 @@ import org.jetbrains.compose.resources.imageResource
  * on its back and Poppy Field his notes from Argenteuil, for when either is
  * taken out and turned over. Each carries a depth
  * map worked out by Depth Anything V2 Small, for stepping inside it — but for
- * The Cliff Walk, Poppy Field and Boys in a Pasture, which are rebuilt as
- * places instead: the coast, the hill and the field or the pasture, the
- * figures, trees and sails laid out round the spot each was painted from, the
- * paint carried on past its edges and in behind its near things, to walk into
- * and look round. Poppy Field and Boys in a Pasture go all the way round: the
- * field, the sky and the tree line are brushed on in the painting's own
- * colours wherever it does not show them, and the painting itself lies over
- * them from where it was painted. Homer's two boys sit in the grass a few
- * steps in, the walk goes up past their shoulders, and the rail fence runs on
- * round the pasture. Credits are in the README.
+ * The Cliff Walk, Poppy Field, Boys in a Pasture and Snap the Whip, which are
+ * rebuilt as places instead: the coast, the hill and the field, the pasture or
+ * the schoolyard, the figures, trees and sails laid out round the spot each
+ * was painted from, the paint carried on past its edges and in behind its near
+ * things, to walk into and look round. Poppy Field and both Homers go all the
+ * way round: the field, the sky and the tree line are brushed on in the
+ * painting's own colours wherever it does not show them, and the painting
+ * itself lies over them from where it was painted. Homer's two boys sit in the
+ * grass a few steps in, the walk goes up past their shoulders, and the rail
+ * fence runs on round the pasture. His chain of boys in Snap the Whip runs
+ * across the meadow before the red schoolhouse, each boy as far off as his feet
+ * say, the walk goes in among them, and the schoolhouse they hid stands whole
+ * behind them, the woods going on round. Credits are in the README.
  *
  * Back steps out of a painting that has been stepped inside, then away from
  * one that has been walked up to, before it leaves the room.
@@ -172,12 +181,25 @@ fun GalleryWallDemoScreen() {
         pastureLayout?.let { GalleryWallScene(it, listOf(pastureFar, pastureGround, pasturePaint, pastureBand, pastureCards)) }
     }
 
+    // Snap the Whip the same way: the sky, the meadow and the schoolyard, the painting laid back over both, the
+    // schoolhouse, woods and far fields, the chain of boys and the fallen one, and how they lie.
+    val whip = imageResource(Res.drawable.museum_whip)
+    val whipFar = imageResource(Res.drawable.museum_whip_far)
+    val whipGround = imageResource(Res.drawable.museum_whip_ground)
+    val whipPaint = imageResource(Res.drawable.museum_whip_paint)
+    val whipBand = imageResource(Res.drawable.museum_whip_band)
+    val whipCards = imageResource(Res.drawable.museum_whip_cards)
+    val whipLayout by produceState<ByteArray?>(null) { value = Res.readBytes("files/museum_whip_scene.bin") }
+    val whipScene = remember(whipLayout, whipFar, whipGround, whipPaint, whipBand, whipCards) {
+        whipLayout?.let { GalleryWallScene(it, listOf(whipFar, whipGround, whipPaint, whipBand, whipCards)) }
+    }
+
     val items = remember(
         sunflowers, boating, june, bridge, roses, armchair, kiss,
         almond, boatingparty, cliffwalk, cliffwalkBack, venus, poppies, poppiesBack, fan, seashore,
         sunflowersDepth, boatingDepth, juneDepth, bridgeDepth, rosesDepth, armchairDepth, kissDepth,
         almondDepth, boatingpartyDepth, cliffwalkDepth, venusDepth, poppiesDepth, fanDepth, seashoreDepth,
-        pasture, cliffwalkScene, poppiesScene, pastureScene,
+        pasture, whip, cliffwalkScene, poppiesScene, pastureScene, whipScene,
     ) {
         listOf(
             GalleryWallItem(sunflowers, "Sunflowers", "Vincent van Gogh", "1888–1889", "Oil on canvas", frame = gilt(YELLOW_GOLD, Shell), depth = sunflowersDepth),
@@ -188,6 +210,7 @@ fun GalleryWallDemoScreen() {
             GalleryWallItem(pasture, "Boys in a Pasture", "Winslow Homer", "1874", "Oil on canvas", frame = gilt(ANTIQUE_GOLD, Acanthus, width = 0.09f), scene = pastureScene),
             GalleryWallItem(armchair, "Little Girl in a Blue Armchair", "Mary Cassatt", "1878", "Oil on canvas", frame = gilt(GREEN_GOLD, Gadroon, width = 0.095f), depth = armchairDepth),
             GalleryWallItem(kiss, "The Kiss", "Gustav Klimt", "1907–1908", "Oil and gold leaf on canvas", frame = wood(EBONISED, Acanthus), depth = kissDepth),
+            GalleryWallItem(whip, "Snap the Whip", "Winslow Homer", "1872", "Oil on canvas", frame = gilt(PALE_GOLD, Gadroon, width = 0.085f), scene = whipScene),
             GalleryWallItem(almond, "Almond Blossoms", "Vincent van Gogh", "1890", "Oil on canvas", frame = gilt(ANTIQUE_GOLD, Shell), depth = almondDepth),
             GalleryWallItem(boatingparty, "Luncheon of the Boating Party", "Pierre-Auguste Renoir", "1881", "Oil on canvas", frame = wood(WALNUT, Gadroon), depth = boatingpartyDepth),
             GalleryWallItem(cliffwalk, "The Cliff Walk at Pourville", "Claude Monet", "1882", "Oil on canvas", frame = wood(OAK, Classical, width = 0.07f), back = cliffwalkBack, depth = cliffwalkDepth, scene = cliffwalkScene),

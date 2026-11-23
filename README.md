@@ -173,6 +173,13 @@ scan (public domain). Its scene generator paints the pasture, the sky, the
 fence, the tree line and the two shade elms beyond the painting's edges in the
 painting's own colours. See the [scene notes](scripts/boys-in-a-pasture/README.md).
 
+The walk into Homer's *Snap the Whip* starts from the
+[Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Winslow_Homer_-_Snap_the_Whip_(1872).jpg)
+scan (public domain). Its scene generator rebuilds the schoolhouse behind the
+boys and paints the meadow, the schoolyard, the sky, the woods, the far fields
+and hills, and the two shade trees beyond the painting's edges in the
+painting's own colours. See the [scene notes](scripts/snap-the-whip/README.md).
+
 CD Rack's disc labels come from the
 [LaunchBox Games Database](https://gamesdb.launchbox-app.com) and its manuals
 from [Emu-Land](https://www.emu-land.net/library/manuals/psx). The artwork
