@@ -2,9 +2,9 @@
 
 The framed image is the supplied photograph of Johannes Vermeer’s *The Art of Painting*. The studio uses the photograph for the figures, chandelier, curtain, map and visible furnishings. The floor’s vanishing points set the entry camera, and the intersections of the black and ivory tiles determine the pattern underfoot. The route moves just over a metre from the original viewpoint.
 
-The supplied chess painting hangs in a shallow black-and-gold frame between the two windows. The approved ImageGen studies supplied the flower vase, the sloped artist’s desk with its unfinished river study, and the girl and her father at the door. Earlier studies supplied the studio walls and the paint hidden behind the original figures.
+The supplied chess painting hangs in a shallow black-and-gold frame between the two windows. The approved ImageGen studies supplied the flower vase, the sloped artist’s desk with its unfinished river study, the girl peeking through the door and the elderly woman seated beside it. She wears blue brocade and holds a folding fan to her cheek. Earlier studies supplied the studio walls and the paint hidden behind the original figures.
 
-`studio.py` projects the approved artwork back into the room from the viewpoint where each edit was reviewed. The vase and the father meet the marble floor at their painted feet. The door has a recessed opening and a projecting leaf. The desk has cabinet sides, a sloping board and a recessed rear stretcher. Their shadows follow the walls and floor as the viewer turns.
+`studio.py` projects the approved artwork back into the room from the viewpoint where each edit was reviewed. The woman’s slippers, the chair feet and the base of the vase meet the marble floor. The door has a recessed opening and a projecting leaf. The desk has cabinet sides, a sloping board and a recessed rear stretcher. Their shadows follow the walls and floor as the viewer turns.
 
 To rebuild the bundled textures and geometry from the checked-in artwork, use Python with Pillow and NumPy.
 

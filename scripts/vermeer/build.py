@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageChops, ImageFilter
 
+from atlas import pack_sprites
 from chandelier import chandelier_mask
 from extensions import chair_mask, curtain_mask, dark_cloth_mask, front_chair_mask
 from foreground import PHOTO_SIZE, masks
@@ -164,7 +165,7 @@ def surfaces(photo, covered, studio):
             (-1.31,-4.47,.62,.39,.32), (1.50,-6.33,.45,.35,.20),
             (-.41,-3.34,.45,.31,.39),
             (3.19,-7.13,.29,.14,.34),        # Delft vase foot
-            (-.32,1.83,.49,.19,.24),         # father against the door wall
+            (-.21,1.90,.65,.30,.24),         # skirt and chair at the door
             (3.51,-1.41,.44,1.17,.35),       # artist's desk
         ]:
             light = light - strength*np.exp(-((x-cx)/rx)**2-((z-cz)/rz)**2)
@@ -360,20 +361,10 @@ def object_mesh(name, box, atlas_bounds):
 
 
 def figures(pieces):
-    # Pack with clear gutters so bilinear filtering cannot pick up a neighbour.
-    atlas = Image.new("RGBA", (2048, 2048))
-    heights = np.zeros(atlas.width, int)
-    layout = {}
-    for name, (box, sprite) in sorted(pieces.items(), key=lambda item: -item[1][1].height):
-        w, h = round(sprite.width*.66), round(sprite.height*.66)
-        peaks = np.lib.stride_tricks.sliding_window_view(heights, w+4).max(axis=1)
-        x = int(peaks.argmin())
-        y = int(peaks[x])
-        assert y+h+4 <= atlas.height
-        atlas.paste(sprite.resize((w,h), RESAMPLE), (x+2,y+2))
-        layout[name] = (x+2,y+2,w,h)
-        heights[x:x+w+4] = y+h+4
-    texture("figures", atlas.crop((0,0,atlas.width,int(heights.max()))))
+    sprites = {name: sprite.resize((round(sprite.width*.66), round(sprite.height*.66)), RESAMPLE)
+               for name, (_, sprite) in pieces.items()}
+    atlas, layout = pack_sprites(sprites)
+    texture("figures", atlas)
     return [object_mesh(key, pieces[key][0], layout[key])
             for key in ("model","easel","chandelier","painter","table","chair","curtain")]
 

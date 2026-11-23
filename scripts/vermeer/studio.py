@@ -3,6 +3,8 @@
 import numpy as np
 from PIL import Image, ImageFilter
 
+from atlas import pack_sprites
+
 
 class _View:
     def __init__(self, eye, tilt, focal, width, yaw, pitch):
@@ -116,44 +118,32 @@ def _shadow(sprite, origin, offset, radius, strength):
 
 
 def build_studio(art, eye, tilt, focal, front, rear, right, mesh):
-    origins = {"open-door": (617, 45), "door-leaf": (703, 113), "father": (1013, 129),
+    origins = {"open-door": (617, 45), "door-leaf": (703, 113), "seated-woman": (887, 312),
                "artist-desk": (284, 290), "flower-vase": (1180, 250)}
     sprites = {name: Image.open(art / f"{name}.webp").convert("RGBA") for name in origins}
-    atlas = Image.new("RGBA", (sum(im.width+4 for im in sprites.values()),
-                                max(im.height for im in sprites.values())+4))
-    textures = {}
-    rects = {}
-    tx = 2
-    for name, im in sprites.items():
-        atlas.paste(im, (tx, 2))
-        textures[name] = (tx, 2, *im.size)
-        rects[name] = (*origins[name], *im.size)
-        tx += im.width+4
+    rects = {name: (*origins[name], *im.size) for name, im in sprites.items()}
 
     door = _View(eye, tilt, focal, 1586, 169, -3)
     desk = _View(eye, tilt, focal, 1585, 94, -4)
     vase = _View(eye, tilt, focal, 1586, -1, -.6)
     z = np.array([0, 0, 1])
     x = np.array([1, 0, 0])
-    layers = []
-    # The back legs and soft shadow masks fit below the desk and vase.
-    tx = textures["artist-desk"][0]
-    ty = 4 + max(sprites["artist-desk"].height, sprites["flower-vase"].height)
-    back = Image.open(art / "artist-desk-back.webp").convert("RGBA")
-    rects["desk-back"] = (381, 659, *back.size)
-    textures["desk-back"] = (tx, ty, *back.size)
-    atlas.paste(back, (tx, ty))
-    tx += back.width+4
-    for name, view, normal, wall, offset, blur, strength in [
-        ("father", door, z, rear-eye[2], (-12, 16), 18, .29),
+    sprites["desk-back"] = Image.open(art / "artist-desk-back.webp").convert("RGBA")
+    rects["desk-back"] = (381, 659, *sprites["desk-back"].size)
+    casters = [
+        ("seated-woman", door, z, rear-eye[2], (-12, 16), 18, .29),
         ("artist-desk", desk, x, right-eye[0], (27, 66), 28, .67),
         ("flower-vase", vase, z, front-eye[2], (17, 12), 14, .38),
-    ]:
-        shadow, rect = _shadow(sprites[name], origins[name], offset, blur, strength)
-        assert tx+shadow.width <= atlas.width and ty+shadow.height <= atlas.height
-        atlas.paste(shadow, (tx, ty))
-        layers.append(_panel(view, rect, (tx, ty, *shadow.size), normal, wall, mesh))
-        tx += shadow.width+4
+    ]
+    for name, _, _, _, offset, blur, strength in casters:
+        key = name + "-shadow"
+        sprites[key], rects[key] = _shadow(sprites[name], origins[name], offset, blur, strength)
+
+    atlas, textures = pack_sprites(sprites)
+    layers = []
+    for name, view, normal, wall, *_ in casters:
+        key = name + "-shadow"
+        layers.append(_panel(view, rects[key], textures[key], normal, wall, mesh))
 
     def door_plane(px, py):
         return rear-eye[2] + _door_recess(px, py)
@@ -161,10 +151,15 @@ def build_studio(art, eye, tilt, focal, front, rear, right, mesh):
     def leaf_plane(px, py):
         return rear-eye[2] - .01 - .17*np.clip((958-px)/(958-712), 0, 1)
 
-    def father_plane(px, py):
-        feet = door.floor_distance(np.array([1051, 1189]), np.array([930, 929]), z)
-        body = .065*np.exp(-((px-1140)/96)**2-((py-433)/219)**2)
-        return np.interp(px, [1051, 1189], feet) - body
+    def sitter_plane(px, py):
+        # Register the hem, slippers and two chair feet to the marble. Above the
+        # lap the figure sits farther back, with the chair just clear of the wall.
+        foot_x = [905, 1010, 1063, 1209, 1250]
+        feet = door.floor_distance(foot_x, [878, 925, 926, 904, 879], z)
+        hem = np.interp(px, foot_x, feet)
+        back = np.interp(px, [1090, 1248], [rear-eye[2]-.27, rear-eye[2]-.04])
+        lap = np.clip((py-550)/180, 0, 1)
+        return np.minimum(back + lap*(hem-back), rear-eye[2]-.02)
 
     def desk_front(px):
         feet = desk.floor_distance(np.array([336, 949]), np.array([860, 857]), desk.ahead)
@@ -188,7 +183,7 @@ def build_studio(art, eye, tilt, focal, front, rear, right, mesh):
         _panel(door, rects["open-door"], textures["open-door"], z, door_plane, mesh,
                xs=(677, 685, 708, 958), ys=(140, 502, 524, 545, 835)),
         _panel(door, rects["door-leaf"], textures["door-leaf"], z, leaf_plane, mesh),
-        _panel(door, rects["father"], textures["father"], z, father_plane, mesh),
+        _panel(door, rects["seated-woman"], textures["seated-woman"], z, sitter_plane, mesh),
         _panel(desk, rects["desk-back"], textures["desk-back"], desk.ahead, back_plane, mesh),
         *_stretchers(desk, textures["artist-desk"], desk_front, desk_back, mesh),
         *_cabinet_sides(desk, origins["artist-desk"], textures["artist-desk"], desk_front, mesh),
