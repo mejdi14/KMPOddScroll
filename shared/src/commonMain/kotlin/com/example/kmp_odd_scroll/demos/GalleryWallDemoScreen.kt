@@ -63,6 +63,7 @@ import kmpoddscroll.shared.generated.resources.museum_venus
 import kmpoddscroll.shared.generated.resources.museum_vermeer
 import kmpoddscroll.shared.generated.resources.museum_vermeer_figures
 import kmpoddscroll.shared.generated.resources.museum_vermeer_front
+import kmpoddscroll.shared.generated.resources.museum_vermeer_studio
 import kmpoddscroll.shared.generated.resources.museum_vermeer_surfaces
 import kmpoddscroll.shared.generated.resources.museum_vermeer_walls
 import kmpoddscroll.shared.generated.resources.museum_whip
@@ -112,7 +113,7 @@ import org.jetbrains.compose.resources.imageResource
  * behind them, the woods going on round. In Automat a short walk brings the
  * viewer beside the table, with the cafeteria built all the way round. In
  * The Art of Painting, the tapestry opens onto Vermeer's model and easel,
- * with the studio windows, oak door and pigment bench around the viewer.
+ * with a framed chess scene between the windows and two onlookers at the door.
  * Credits are in the README.
  *
  * Back steps out of a painting that has been stepped inside, then away from
@@ -230,9 +231,14 @@ fun GalleryWallDemoScreen() {
     val vermeerWalls = imageResource(Res.drawable.museum_vermeer_walls)
     val vermeerSurfaces = imageResource(Res.drawable.museum_vermeer_surfaces)
     val vermeerFigures = imageResource(Res.drawable.museum_vermeer_figures)
+    val vermeerStudio = imageResource(Res.drawable.museum_vermeer_studio)
     val vermeerLayout by produceState<ByteArray?>(null) { value = Res.readBytes("files/museum_vermeer_scene.bin") }
-    val vermeerScene = remember(vermeerLayout, vermeerFront, vermeerWalls, vermeerSurfaces, vermeerFigures) {
-        vermeerLayout?.let { GalleryWallScene(it, listOf(vermeerFront, vermeerWalls, vermeerSurfaces, vermeerFigures)) }
+    val vermeerScene = remember(
+        vermeerLayout, vermeerFront, vermeerWalls, vermeerSurfaces, vermeerFigures, vermeerStudio,
+    ) {
+        vermeerLayout?.let {
+            GalleryWallScene(it, listOf(vermeerFront, vermeerWalls, vermeerSurfaces, vermeerFigures, vermeerStudio))
+        }
     }
 
     val items = remember(

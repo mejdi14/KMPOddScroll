@@ -187,8 +187,10 @@ imagined views created with ImageGen extend the room beyond the painting.
 
 The gallery hangs the supplied photograph of Johannes Vermeer's *The Art of
 Painting*. Step inside to look past the tapestry and turn from the painter and his
-model toward the studio windows, pigment bench and oak door. ImageGen supplied
-the views beyond the frame and the surfaces hidden behind the figures.
+model toward a Delft flower vase and an artist’s desk with an unfinished river
+study. A girl peeks through the open door beside her white-haired father. The
+supplied chess painting hangs between the windows. ImageGen supplied the
+imagined studio furnishings and the views beyond the original frame.
 [Museum entry](https://www.khm.at/en/visit/only-in-vienna) · [Studio preview](scripts/vermeer/studio-preview.jpg) · [Scene notes](scripts/vermeer/README.md).
 
 CD Rack's disc labels come from the

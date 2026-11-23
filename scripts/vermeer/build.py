@@ -10,6 +10,7 @@ from PIL import Image, ImageChops, ImageFilter
 from chandelier import chandelier_mask
 from extensions import chair_mask, curtain_mask, dark_cloth_mask, front_chair_mask
 from foreground import PHOTO_SIZE, masks
+from studio import build_studio
 from walls import build_walls
 
 HERE = Path(__file__).resolve().parent
@@ -162,6 +163,9 @@ def surfaces(photo, covered, studio):
             (.61,-5.07,.57,.48,.35), (-.82,-5.34,.90,.50,.25),
             (-1.31,-4.47,.62,.39,.32), (1.50,-6.33,.45,.35,.20),
             (-.41,-3.34,.45,.31,.39),
+            (3.19,-7.13,.29,.14,.34),        # Delft vase foot
+            (-.32,1.83,.49,.19,.24),         # father against the door wall
+            (3.51,-1.41,.44,1.17,.35),       # artist's desk
         ]:
             light = light - strength*np.exp(-((x-cx)/rx)**2-((z-cz)/rz)**2)
         floor *= light[...,None]
@@ -400,6 +404,10 @@ def build():
     studio = clean_front(photo, covered)
     texture("front", studio)
     layers = architecture(surfaces(photo, covered, studio))
+    view_focal = .66 * 525 * FOCAL / PH
+    fittings, fitting_layers = build_studio(ART, ROUTE[-1], TILT, view_focal, FRONT, REAR, RIGHT, mesh)
+    texture("studio", fittings)
+    layers.extend(fitting_layers)
     layers.extend(figures(foreground(photo, mattes)))
     camera = dict(hFov=np.degrees(2*np.arctan(CX/FOCAL)), tilt=np.degrees(TILT),
                   yawMax=180, pitchDown=89, pitchUp=87)

@@ -152,51 +152,32 @@ def _sprite(wall, box, depth, texture):
     return wall.surface(x, y, depth, u, v, texture)
 
 
-def _bench(wall, source, pack):
-    box = (393, 166, 593, 311)
-    bench = _cutout(source, box, [
-        [(396, 206), (405, 201), (422, 201), (420, 197), (428, 193),
-         (442, 193), (445, 196), (452, 195), (465, 192), (476, 196),
-         (475, 201), (490, 201), (491, 194), (506, 190), (516, 186),
-         (521, 181), (519, 177), (520, 172), (526, 169), (532, 172),
-         (534, 177), (531, 184), (538, 189), (539, 194), (551, 197),
-         (562, 195), (574, 198), (579, 202), (589, 202), (592, 207),
-         (590, 213), (583, 214), (583, 310), (572, 311), (570, 287),
-         (417, 289), (415, 311), (402, 311), (405, 213), (396, 213)],
-        [(415, 220), (428, 220), (425, 310), (417, 310)],
-    ])
-    # Preserve the opening between the bench legs and the cloth hanging down.
-    alpha = bench.getchannel("A")
-    cut = Image.new("L", (alpha.width * 2, alpha.height * 2))
-    draw = ImageDraw.Draw(cut)
-    scale = (alpha.width * 2) / (box[2] - box[0])
-    draw.polygon([(round((x - box[0]) * scale), round((y - box[1]) * scale)) for x, y in [
-        (430, 226), (545, 225), (550, 236), (561, 247), (567, 237),
-        (569, 280), (427, 280),
-    ]], fill=255)
-    draw.polygon([(round((x - box[0]) * scale), round((y - box[1]) * scale)) for x, y in [
-        (424, 290), (570, 289), (572, 312), (425, 312),
-    ]], fill=255)
-    bench.putalpha(Image.fromarray(np.minimum(np.asarray(alpha),
-                    255 - np.asarray(cut.resize(alpha.size, RESAMPLE)))))
-    panel = pack(bench)
-    top = pack(_crop(source, (475, 205, 545, 212)))
-    wood = pack(_crop(source, (493, 214, 543, 222)))
-    leg = pack(_crop(source, (406, 229, 416, 278)))
-    ground = wall.bottom
-    offset = .60
+# Position of the approved frame in the window elevation. The width preserves
+# the proportions of the supplied chess picture once the wall is in 3D.
+CHESS_FRAME = (317, 54, 463, 232.5)
 
-    def level(y):
-        return box[1] + (y - box[1]) * (ground - box[1]) / (box[3] - box[1])
 
-    return [
-        _sprite(wall, (410, level(213), 422, ground), .08, leg),
-        _sprite(wall, (575, level(213), 585, ground), .08, leg),
-        wall.extrusion((397, level(207)), (590, level(207)), .04, offset, top),
-        wall.extrusion((405, level(211)), (405, level(224)), .04, offset, wood),
-        wall.extrusion((582, level(211)), (582, level(224)), .04, offset, wood),
-        _sprite(wall, (box[0], box[1], box[2], ground), offset, panel),
-    ]
+def _frame_shadow(windows):
+    x0, y0, x1, y1 = CHESS_FRAME
+    scale = windows.width / REFERENCE_WIDTH
+    shadow = Image.new("L", windows.size)
+    ImageDraw.Draw(shadow).rectangle(
+        [(round((x0 + 3)*scale), round((y0 + 3)*scale)),
+         (round((x1 + 3)*scale), round((y1 + 3)*scale))], fill=80,
+    )
+    return Image.composite(Image.new("RGB", windows.size, (24, 21, 17)), windows,
+                           shadow.filter(ImageFilter.GaussianBlur(3*scale)))
+
+
+def _chess_frame(wall, art, pack):
+    frame = Image.open(art / "chess-players.webp")
+    face = pack(frame)
+    edge = pack(frame.crop((1, 20, 4, 52)))
+    x0, y0, x1, y1 = CHESS_FRAME
+    corners = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+    sides = [wall.extrusion(a, b, 0, .047, edge)
+             for a, b in zip(corners, corners[1:] + corners[:1])]
+    return sides + [_sprite(wall, CHESS_FRAME, .047, face)]
 
 
 def build_walls(art, left, right, front, rear, height, grade, mesh):
@@ -226,7 +207,7 @@ def build_walls(art, left, right, front, rear, height, grade, mesh):
         return region
 
     left_wall = _Wall((left, rear), (left, front), (1, 0), height, 311,
-                      paste_wall(windows, 311), mesh)
+                      paste_wall(_frame_shadow(windows), 311), mesh)
     door_wall = _underpaint(door, (0, 237, 277, 389),
                             lambda x: 250 + (x / 4) % 55, tiled=True)
     rear_wall = _Wall((right, rear), (left, rear), (0, -1), height, 372,
@@ -241,6 +222,6 @@ def build_walls(art, left, right, front, rear, height, grade, mesh):
         right_wall.quad(np.linspace(0, 780, 41), np.linspace(0, right_wall.bottom, 23), 0),
     ]
     walls.extend(_chest(rear_wall, door, paste_detail))
-    walls.extend(_bench(right_wall, workbench, paste_detail))
+    walls.extend(_chess_frame(left_wall, art, paste_detail))
     assert wall_y <= ATLAS_LIMIT
     return atlas.crop((0, 0, ATLAS_LIMIT, max(wall_y, prop_y))), walls
