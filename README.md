@@ -185,6 +185,12 @@ short walk and a full 360° turn inside the compact, enclosed cafeteria. Three
 imagined views created with ImageGen extend the room beyond the painting.
 [Painting reproduction via Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Automat-edward-hopper-1927.jpg) · [Compare the painting and the three views](scripts/automat/art-review.jpg).
 
+The gallery hangs the supplied photograph of Johannes Vermeer's *The Art of
+Painting*. Step inside to look past the tapestry and turn from the painter and his
+model toward the studio windows, pigment bench and oak door. ImageGen supplied
+the views beyond the frame and the surfaces hidden behind the figures.
+[Museum entry](https://www.khm.at/en/visit/only-in-vienna) · [Studio preview](scripts/vermeer/studio-preview.jpg) · [Scene notes](scripts/vermeer/README.md).
+
 CD Rack's disc labels come from the
 [LaunchBox Games Database](https://gamesdb.launchbox-app.com) and its manuals
 from [Emu-Land](https://www.emu-land.net/library/manuals/psx). The artwork

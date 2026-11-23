@@ -60,6 +60,11 @@ import kmpoddscroll.shared.generated.resources.museum_roses
 import kmpoddscroll.shared.generated.resources.museum_seashore
 import kmpoddscroll.shared.generated.resources.museum_sunflowers
 import kmpoddscroll.shared.generated.resources.museum_venus
+import kmpoddscroll.shared.generated.resources.museum_vermeer
+import kmpoddscroll.shared.generated.resources.museum_vermeer_figures
+import kmpoddscroll.shared.generated.resources.museum_vermeer_front
+import kmpoddscroll.shared.generated.resources.museum_vermeer_surfaces
+import kmpoddscroll.shared.generated.resources.museum_vermeer_walls
 import kmpoddscroll.shared.generated.resources.museum_whip
 import kmpoddscroll.shared.generated.resources.museum_whip_band
 import kmpoddscroll.shared.generated.resources.museum_whip_cards
@@ -105,7 +110,9 @@ import org.jetbrains.compose.resources.imageResource
  * across the meadow before the red schoolhouse, each boy as far off as his feet
  * say, the walk goes in among them, and the schoolhouse they hid stands whole
  * behind them, the woods going on round. In Automat a short walk brings the
- * viewer beside the table, with the cafeteria built all the way round.
+ * viewer beside the table, with the cafeteria built all the way round. In
+ * The Art of Painting, the tapestry opens onto Vermeer's model and easel,
+ * with the studio windows, oak door and pigment bench around the viewer.
  * Credits are in the README.
  *
  * Back steps out of a painting that has been stepped inside, then away from
@@ -134,6 +141,7 @@ fun GalleryWallDemoScreen() {
     val poppiesBack = imageResource(Res.drawable.museum_poppies_back)
     val fan = imageResource(Res.drawable.museum_fan)
     val seashore = imageResource(Res.drawable.museum_seashore)
+    val vermeer = imageResource(Res.drawable.museum_vermeer)
 
     // Depth Anything V2 Small, white near and black far, for stepping inside.
     val sunflowersDepth = imageResource(Res.drawable.museum_sunflowers_depth)
@@ -218,12 +226,21 @@ fun GalleryWallDemoScreen() {
         }
     }
 
+    val vermeerFront = imageResource(Res.drawable.museum_vermeer_front)
+    val vermeerWalls = imageResource(Res.drawable.museum_vermeer_walls)
+    val vermeerSurfaces = imageResource(Res.drawable.museum_vermeer_surfaces)
+    val vermeerFigures = imageResource(Res.drawable.museum_vermeer_figures)
+    val vermeerLayout by produceState<ByteArray?>(null) { value = Res.readBytes("files/museum_vermeer_scene.bin") }
+    val vermeerScene = remember(vermeerLayout, vermeerFront, vermeerWalls, vermeerSurfaces, vermeerFigures) {
+        vermeerLayout?.let { GalleryWallScene(it, listOf(vermeerFront, vermeerWalls, vermeerSurfaces, vermeerFigures)) }
+    }
+
     val items = remember(
         sunflowers, boating, june, bridge, roses, armchair, kiss,
-        almond, boatingparty, cliffwalk, cliffwalkBack, venus, poppies, poppiesBack, fan, seashore,
+        almond, boatingparty, cliffwalk, cliffwalkBack, venus, poppies, poppiesBack, fan, seashore, vermeer,
         sunflowersDepth, boatingDepth, juneDepth, bridgeDepth, rosesDepth, armchairDepth, kissDepth,
         almondDepth, boatingpartyDepth, cliffwalkDepth, venusDepth, poppiesDepth, fanDepth, seashoreDepth,
-        pasture, whip, automat, cliffwalkScene, poppiesScene, pastureScene, whipScene, automatScene,
+        pasture, whip, automat, cliffwalkScene, poppiesScene, pastureScene, whipScene, automatScene, vermeerScene,
     ) {
         listOf(
             GalleryWallItem(sunflowers, "Sunflowers", "Vincent van Gogh", "1888–1889", "Oil on canvas", frame = gilt(YELLOW_GOLD, Shell), depth = sunflowersDepth),
@@ -242,6 +259,7 @@ fun GalleryWallDemoScreen() {
             GalleryWallItem(poppies, "Poppy Field", "Claude Monet", "1873", "Oil on canvas", frame = gilt(RED_GOLD, Acanthus, width = 0.095f), back = poppiesBack, depth = poppiesDepth, scene = poppiesScene),
             GalleryWallItem(fan, "Lady with a Fan", "Gustav Klimt", "1917–1918", "Oil on canvas", frame = wood(ROSEWOOD, Gadroon), depth = fanDepth),
             GalleryWallItem(seashore, "Strolling along the Seashore", "Joaquín Sorolla", "1909", "Oil on canvas", frame = gilt(YELLOW_GOLD, Classical, width = 0.075f), depth = seashoreDepth),
+            GalleryWallItem(vermeer, "The Art of Painting", "Johannes Vermeer", "c. 1666–1668", "Oil on canvas", frame = gilt(ANTIQUE_GOLD, Shell), scene = vermeerScene),
             GalleryWallItem(automat, "Automat", "Edward Hopper", "1927", "Oil on canvas", frame = GalleryWallFrame(color = EBONISED), scene = automatScene),
         )
     }
