@@ -91,6 +91,9 @@ class RunwayScrollState internal constructor(
     internal var tick by mutableIntStateOf(0)
         private set
 
+    internal var lastDeltaSec: Float = 1f / 60f
+        private set
+
     internal var dragging = false
         private set
 
@@ -132,7 +135,7 @@ class RunwayScrollState internal constructor(
         if (stops.isEmpty()) {
             scrollPx = scrollPx.clamped(0f, RUNWAY_FINISH_PX)
         } else if (!autoplay && !dragging) {
-            scrollPx = stops[nearestStop(scrollPx)]
+            scrollPx = if (scrollPx <= 0f) stops.first() else stops[nearestStop(scrollPx)]
             targetPx = scrollPx
             velocityPxPerSec = 0f
             settling = false
@@ -245,6 +248,7 @@ class RunwayScrollState internal constructor(
     internal fun advance(deltaMs: Float) {
         tick++
         val dt = (deltaMs / 1000f).clamped(0.0005f, 0.05f)
+        lastDeltaSec = dt
         clockSec += dt
 
         if (launching) {

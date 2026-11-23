@@ -108,9 +108,10 @@ private val allScrollDemos: List<ScrollDemo> = listOf(
     ),
     ScrollDemo(
         route = "runway",
-        category = "Blueprint",
+        category = "Pop-up",
         title = "Runway",
-        subtitle = "A colour-banded runway of raised card plinths curving up into the distance, tethered to a margin index",
+        subtitle = "A perspective runway of papercraft dioramas whose cutouts flip upright as you scroll past",
+        ready = true,
         screen = { RunwayDemoScreen() },
     ),
 )

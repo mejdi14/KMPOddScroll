@@ -37,7 +37,6 @@ import com.example.kmp_odd_scroll.showcase.internal.PI_F
 import com.example.kmp_odd_scroll.showcase.internal.cardBitmap
 import com.example.kmp_odd_scroll.showcase.internal.clamped
 import com.example.kmp_odd_scroll.showcase.internal.lerp
-import com.example.kmp_odd_scroll.showcase.internal.smoothstep
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.cos
@@ -46,7 +45,6 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
-import kotlin.math.sqrt
 
 /** Which lateral slot a [RunwayItem] occupies on the runway. */
 enum class RunwaySpan {
@@ -114,7 +112,7 @@ val DefaultRunwaySections: List<RunwaySection> = listOf(
  */
 private const val RAIL_OUTER_U = 0.369f
 private const val RAIL_GUTTER_U = 0.0074f
-private const val PLINTH_THICKNESS_NORM = 20.0f / 1080.0f
+internal const val PLINTH_THICKNESS_NORM = 20.0f / 1080.0f
 internal const val PAGE_WIDTH_PX = 993.0f
 private const val TAP_SLOP = 8f
 
@@ -124,51 +122,35 @@ private const val HUD_TOP_Y_NORM = 404.0f / 1080.0f
 private const val HUD_ROW_PITCH_NORM = 26.0f / 1080.0f
 
 /*
- * Paper buildings. With them on, the runway is retiled into one band of colour
- * per item, no two neighbours alike, and each band holds one platform with a
- * paper pagoda on its centre. Flat, the pagoda is its own plan drawn on the
- * platform; as the platform comes to the middle of the frame it telescopes up
- * storey by storey, and it folds back down as the platform leaves. Nothing is
- * written anywhere: the runway is only the bands, the platforms and the towers.
+ * Pop-up diorama stops. When [popupScenes] is non-empty, the runway is retiled
+ * into one themed band per stop, each holding a matte cardstock platform with
+ * layered illustrated cutouts hinged along their bottom edges. Cutouts lie flat
+ * on their platform until they enter the lower viewport, flip upright with a
+ * cardstock spring bounce as they reach the middle, and fold back flat as they
+ * climb toward the horizon.
  */
 
-/** Screen row a pagoda's axis rests on when its platform is the one in focus. */
-private const val FOCUS_AXIS_YN = 0.60f
-
-/** Runway px from the focus row inside which a pagoda stands square, and past which it is flat. */
-private const val FOLD_UP_PX = 140f
-private const val FOLD_FLAT_PX = 780f
+/** Screen row a diorama stop's centre rests on when it is in focus. */
+private const val FOCUS_AXIS_YN = 0.55f
 
 /** Length of one band, and how many bare bands run up to the first so the runway has a far end to show. */
-private const val PAPER_BAND_PX = 1500f
+private const val PAPER_BAND_PX = 1120f
 private const val PAPER_LEAD_IN_BANDS = 2
 
-/** A platform: half its width in runway widths, and its length in runway px. */
-private const val PAPER_PLATFORM_U = 0.28f
-private const val PAPER_PLATFORM_PX = 600f
-
-/** Storeys above the hall, item by item, so that no pagoda is its neighbour's twin. */
-private val PAGODA_STOREYS = intArrayOf(4, 3, 4, 2, 4, 3)
-
-/** Colours close enough to pass for one another on two bands side by side. */
-private fun alike(a: Color, b: Color): Boolean =
-    abs(a.red - b.red) + abs(a.green - b.green) + abs(a.blue - b.blue) < 0.12f
+/** A diorama platform: half its width in runway widths, and its length in runway px. */
+private const val PAPER_PLATFORM_U = 0.40f
+private const val PAPER_PLATFORM_PX = 760f
 
 /**
- * The runway of [sections] cut again into equal bands, taking the sections'
- * colours in turn and passing over any that would repeat the band before.
+ * The runway retiled into equal bands matching the ground colours of [scenes],
+ * plus [PAPER_LEAD_IN_BANDS] bare lead-in bands above the first stop.
  */
-private fun paperBands(sections: List<RunwaySection>): List<RunwaySection> {
+private fun popupBands(sections: List<RunwaySection>, scenes: List<PopupScene>): List<RunwaySection> {
     val count = ceil(sections.last().endPx / PAPER_BAND_PX).toInt()
     val bands = ArrayList<RunwaySection>(count + PAPER_LEAD_IN_BANDS)
-    var pick = 0
     for (k in -PAPER_LEAD_IN_BANDS until count) {
-        var section = sections[pick++ % sections.size]
-        var passes = 0
-        while (bands.isNotEmpty() && alike(section.color, bands.last().color) && passes++ < sections.size) {
-            section = sections[pick++ % sections.size]
-        }
-        bands.add(RunwaySection(section.name, section.color, k * PAPER_BAND_PX, (k + 1) * PAPER_BAND_PX))
+        val sceneIdx = ((k % scenes.size) + scenes.size) % scenes.size
+        bands.add(RunwaySection("", scenes[sceneIdx].groundColor, k * PAPER_BAND_PX, (k + 1) * PAPER_BAND_PX))
     }
     return bands
 }
@@ -184,11 +166,10 @@ private fun paperBands(sections: List<RunwaySection>): List<RunwaySection> {
  * a wheel or trackpad, tap any section in the left-margin index to jump there,
  * or tap the `start ↑` plinth at the finish line to fold it and launch.
  *
- * With [paperBuildings] the runway becomes a street of paper pagodas: one band
- * of colour per item, one platform on it, and a pagoda that lies flat as its
- * own plan until the platform nears the middle of the frame and folds up to
- * stand there. The runway then scrolls in steps, one platform at a time, and
- * draws no text at all. Pair it with `rememberRunwayScrollState(autoplay = false)`.
+ * With [popupScenes] non-empty, the runway becomes a pop-up book diorama: one
+ * themed band and platform per stop, with illustrated cutout standees that lie
+ * flat until they scroll into view and hinge upright with a spring bounce.
+ * Pair it with `rememberRunwayScrollState(autoplay = false, initialScrollPx = 0f)`.
  */
 @Composable
 fun RunwayScroll(
@@ -197,25 +178,28 @@ fun RunwayScroll(
     sections: List<RunwaySection> = DefaultRunwaySections,
     background: Color = Color(0xFF050507),
     state: RunwayScrollState = rememberRunwayScrollState(),
-    paperBuildings: Boolean = false,
+    popupScenes: List<PopupScene> = emptyList(),
 ) {
-    if (items.isEmpty() || sections.isEmpty()) {
+    val hasPopups = popupScenes.isNotEmpty()
+    if ((!hasPopups && items.isEmpty()) || sections.isEmpty()) {
         Box(modifier)
         return
     }
 
     val measurer = rememberTextMeasurer()
-    val bakedImages = remember(items, paperBuildings) {
-        if (paperBuildings) emptyList() else items.map { cardBitmap(it.image, 1.45f, 0.045f) }
+    val bakedImages = remember(items, hasPopups) {
+        if (hasPopups) emptyList() else items.map { cardBitmap(it.image, 1.45f, 0.045f) }
     }
-    val bands = remember(sections, paperBuildings) { if (paperBuildings) paperBands(sections) else sections }
-    val layout = remember(items, bands, paperBuildings) { RunwayLayout(items, bands, paperBuildings) }
+    val bands = remember(sections, popupScenes) {
+        if (hasPopups) popupBands(sections, popupScenes) else sections
+    }
+    val layout = remember(items, bands, hasPopups) { RunwayLayout(items, bands, hasPopups) }
     val projector = remember { RunwayProjector() }
-    val pagoda = remember { PaperPagoda() }
+    val popupStage = remember { PaperPopupStage() }
 
-    LaunchedEffect(state, layout, paperBuildings) {
-        if (paperBuildings) {
-            // One stop per platform, where its pagoda's axis sits on the focus row, and a last one at the finish.
+    LaunchedEffect(state, layout, hasPopups) {
+        if (hasPopups) {
+            // One stop per platform, where its centre sits on the focus row, and a last one at the finish.
             val focusXi = projector.evalPhiCard(FOCUS_AXIS_YN)
             val rows = layout.rowAnchors.size
             state.setSnapStops(
@@ -271,7 +255,7 @@ fun RunwayScroll(
                         if (started) {
                             state.onDragEnd()
                         } else {
-                            handleTap(down.position, size.width.toFloat(), size.height.toFloat(), if (paperBuildings) 0 else sections.size, state)
+                            handleTap(down.position, size.width.toFloat(), size.height.toFloat(), if (hasPopups) 0 else sections.size, state)
                         }
                     }
                 }
@@ -296,7 +280,8 @@ fun RunwayScroll(
                 sections = bands,
                 projector = projector,
                 measurer = measurer,
-                pagoda = if (paperBuildings) pagoda else null,
+                popupStage = if (hasPopups) popupStage else null,
+                popupScenes = popupScenes,
             )
         }
     }
@@ -426,7 +411,7 @@ internal class RunwayProjector {
 
 internal class PlacedCard(
     val itemIndex: Int,
-    val item: RunwayItem,
+    val item: RunwayItem?,
     val sectionIndex: Int,
     val sTop: Float,
     val sBot: Float,
@@ -447,7 +432,7 @@ internal class RunwayLayout(
     val rowSections: IntArray
 
     init {
-        val list = ArrayList<PlacedCard>(items.size * 3)
+        val list = ArrayList<PlacedCard>(max(items.size * 3, sections.size))
         // Populate each of the 11 sections with raised 3D card plinths (alternating full-width and paired half-width plinths)
         var cursor = 0
         if (paper) {
@@ -459,7 +444,7 @@ internal class RunwayLayout(
                 list.add(
                     PlacedCard(
                         itemIndex = cursor,
-                        item = items[cursor % items.size],
+                        item = items.getOrNull(cursor % max(items.size, 1)),
                         sectionIndex = secIdx,
                         sTop = middle - PAPER_PLATFORM_PX * 0.5f,
                         sBot = middle + PAPER_PLATFORM_PX * 0.5f,
@@ -549,7 +534,8 @@ private fun DrawScope.drawRunwayScene(
     sections: List<RunwaySection>,
     projector: RunwayProjector,
     measurer: TextMeasurer,
-    pagoda: PaperPagoda?,
+    popupStage: PaperPopupStage?,
+    popupScenes: List<PopupScene>,
 ) {
     val w = size.width
     val h = size.height
@@ -564,7 +550,7 @@ private fun DrawScope.drawRunwayScene(
         cx + u * projector.widthFraction(yNorm) * runwayScale
 
     // 1. Background 3D ground grid, twin curved trajectory arcs, wireframe blocks & math equations
-    val labels = pagoda == null
+    val labels = popupStage == null
     drawGroundEnvironment(S, w, h, cx, runwayScale, projector, measurer, labels, ::xAt)
 
     // 2. Runway floor polygon & colour-banded sections
@@ -601,7 +587,7 @@ private fun DrawScope.drawRunwayScene(
                 // Thin crisp section divider line
                 if (xiStart in projector.xiFloorMin..projector.xiFloorMax) {
                     drawLine(
-                        color = Color.White.copy(alpha = 0.28f),
+                        color = Color.White.copy(alpha = if (labels) 0.28f else 0.18f),
                         start = Offset(0f, yTop),
                         end = Offset(w, yTop),
                         strokeWidth = 1.2f,
@@ -611,16 +597,18 @@ private fun DrawScope.drawRunwayScene(
         }
 
         // Subtle longitudinal blueprint guide rails at u = +-0.369 and centre gutter u = +-0.0074
-        for (uRail in floatArrayOf(-RAIL_OUTER_U, -RAIL_GUTTER_U, RAIL_GUTTER_U, RAIL_OUTER_U)) {
-            val railPath = Path()
-            val steps = 24
-            for (i in 0..steps) {
-                val yn = i.toFloat() / steps
-                val rx = xAt(uRail, yn)
-                val ry = yn * h
-                if (i == 0) railPath.moveTo(rx, ry) else railPath.lineTo(rx, ry)
+        if (labels) {
+            for (uRail in floatArrayOf(-RAIL_OUTER_U, -RAIL_GUTTER_U, RAIL_GUTTER_U, RAIL_OUTER_U)) {
+                val railPath = Path()
+                val steps = 24
+                for (i in 0..steps) {
+                    val yn = i.toFloat() / steps
+                    val rx = xAt(uRail, yn)
+                    val ry = yn * h
+                    if (i == 0) railPath.moveTo(rx, ry) else railPath.lineTo(rx, ry)
+                }
+                drawPath(railPath, Color.White.copy(alpha = 0.08f), style = Stroke(1f))
             }
-            drawPath(railPath, Color.White.copy(alpha = 0.08f), style = Stroke(1f))
         }
     }
 
@@ -641,30 +629,25 @@ private fun DrawScope.drawRunwayScene(
             rightBorder.lineTo(xR, yPx)
         }
     }
-    drawPath(leftBorder, Color.White.copy(alpha = 0.42f), style = Stroke(1.4f))
-    drawPath(rightBorder, Color.White.copy(alpha = 0.42f), style = Stroke(1.4f))
+    val edgeAlpha = if (labels) 0.42f else 0.30f
+    drawPath(leftBorder, Color.White.copy(alpha = edgeAlpha), style = Stroke(1.4f))
+    drawPath(rightBorder, Color.White.copy(alpha = edgeAlpha), style = Stroke(1.4f))
 
     // 3. 500-px coordinate ruler ticks & labels on both outside borders of the runway
     drawBorderRulerTicks(S, h, projector, measurer, labels, ::xAt)
 
     // 4. Section titles, constellation node clusters & 4-column feature bullets on the runway floor
     val tetherTargets = ArrayList<Offset>(8)
-    drawSectionHeadersAndClusters(S, h, sections, state.activeSection, projector, measurer, labels, ::xAt, tetherTargets)
+    if (labels) {
+        drawSectionHeadersAndClusters(S, h, sections, state.activeSection, projector, measurer, labels, ::xAt, tetherTargets)
+    }
 
-    // 5. Raised 3D card plinths, wireframe dimension callouts & projective-warped images (drawn back-to-front: top of screen to bottom)
+    // 5. Raised 3D card plinths or pop-up papercraft diorama stops (drawn back-to-front: top of screen to bottom)
     val corners = FloatArray(8)
     val matrix = Matrix()
 
-    // Pagodas: where the focus row is along the runway, and how many screen px a runway px of
-    // height is worth. Heights are drawn straight up the screen at the scale of the ground they
-    // stand on. A flat plane seen at the focus row's pitch makes a standing wall 1.6 times as tall
-    // as the same wall lying down; a tall frame stretches the floor, and the towers take half of
-    // that stretch rather than all of it, which would leave them needles.
-    val focusXi = projector.evalPhiCard(FOCUS_AXIS_YN)
-    val lateral = projector.widthFraction(FOCUS_AXIS_YN + PLINTH_THICKNESS_NORM) * runwayScale / PAGE_WIDTH_PX
-    val longitudinal = h / max(projector.dPhiCardDyNorm(FOCUS_AXIS_YN), 1f)
-    val pagodaLift = runwayScale / PAGE_WIDTH_PX *
-        (0.95f * sqrt(1.6f * longitudinal / max(lateral, 1e-3f))).clamped(0.7f, 1.5f)
+    // Match vertical standing scale to horizontal scale so upright cutouts keep their exact bitmap aspect ratio.
+    val popupLift = runwayScale / PAGE_WIDTH_PX
 
     for (card in layout.placedCards) {
         val xiTop = card.sTop - S
@@ -672,49 +655,47 @@ private fun DrawScope.drawRunwayScene(
         if (xiBot < projector.xiCardMin || xiTop > projector.xiCardMax) continue
         val ynTop = projector.xiToYNormCard(xiTop)
         val ynBot = projector.xiToYNormCard(xiBot)
-        if (ynBot <= -0.08f || ynTop >= 1.08f) continue
+        if (ynBot <= -0.14f || ynTop >= 1.12f) continue
 
-        drawCardPlinth(
-            card = card,
-            ynTop = ynTop,
-            ynBot = ynBot,
-            image = bakedImages.getOrNull(card.itemIndex),
-            h = h,
-            xAt = ::xAt,
-            corners = corners,
-            matrix = matrix,
-            measurer = measurer,
-            labels = labels,
-        )
-
-        if (pagoda != null) {
-            // The pagoda takes the runway's projection as linear about its own axis: the row the
-            // axis stands on, and how fast rows and the runway's width change toward the viewer.
-            val xi = 0.5f * (card.sTop + card.sBot) - S
-            val yn = projector.xiToYNormCard(xi)
-            val ynPerS = (projector.xiToYNormCard(xi + 150f) - projector.xiToYNormCard(xi - 150f)) / 300f
-            val ground = yn + PLINTH_THICKNESS_NORM
-            val widthPerYn = (projector.widthFraction(ground + 0.01f) - projector.widthFraction(ground - 0.01f)) / 0.02f
-            val storeys = PAGODA_STOREYS[card.itemIndex % PAGODA_STOREYS.size]
-            pagoda.draw(
+        if (popupStage != null && popupScenes.isNotEmpty()) {
+            val scene = popupScenes[card.itemIndex % popupScenes.size]
+            drawPopupPlatform(
+                card = card,
+                ynTop = ynTop,
+                ynBot = ynBot,
+                platformColor = scene.platformColor,
+                h = h,
+                xAt = ::xAt,
+            )
+            popupStage.drawStop(
                 scope = this,
-                fold = 1f - smoothstep(FOLD_UP_PX, FOLD_FLAT_PX, abs(xi - focusXi)),
-                storeys = storeys,
-                // A tenth over life size fills the platform; the shorter towers are drawn a little
-                // larger again, so theirs never looks under-filled.
-                scale = 1.1f * (1f + 0.07f * (PAGODA_MAX_STOREYS - storeys)),
-                originX = cx,
-                u = 0.5f * (card.uLeft + card.uRight),
-                yn = yn,
-                ynPerS = ynPerS,
-                widthFraction = projector.widthFraction(ground),
-                widthPerS = widthPerYn * ynPerS,
-                across = runwayScale,
-                lift = pagodaLift,
+                stopIndex = card.itemIndex,
+                scene = scene,
+                midS = 0.5f * (card.sTop + card.sBot),
+                scrollPx = S,
+                dtSec = state.lastDeltaSec,
+                cx = cx,
+                h = h,
+                runwayScale = runwayScale,
+                popupLift = popupLift,
+                projector = projector,
+            )
+        } else {
+            drawCardPlinth(
+                card = card,
+                ynTop = ynTop,
+                ynBot = ynBot,
+                image = bakedImages.getOrNull(card.itemIndex),
+                h = h,
+                xAt = ::xAt,
+                corners = corners,
+                matrix = matrix,
+                measurer = measurer,
+                labels = labels,
             )
         }
 
-        if (card.sectionIndex == state.activeSection && ynTop in 0.05f..0.92f) {
+        if (labels && card.sectionIndex == state.activeSection && ynTop in 0.05f..0.92f) {
             val ynMid = 0.5f * (ynTop + ynBot)
             tetherTargets.add(Offset(xAt(card.uLeft, ynMid + PLINTH_THICKNESS_NORM), ynMid * h))
         }
@@ -961,6 +942,63 @@ private fun DrawScope.drawSectionHeadersAndClusters(
     }
 }
 
+// --- Pop-Up Diorama Cardstock Platform ---------------------------------------
+
+private fun DrawScope.drawPopupPlatform(
+    card: PlacedCard,
+    ynTop: Float,
+    ynBot: Float,
+    platformColor: Color,
+    h: Float,
+    xAt: (Float, Float) -> Float,
+) {
+    val yTopPx = ynTop * h
+    val yBotPx = ynBot * h
+    val thicknessPx = (PLINTH_THICKNESS_NORM * h * (0.48f + 0.52f * ynBot)).clamped(5f, 24f)
+
+    val ynTopEff = ynTop + PLINTH_THICKNESS_NORM
+    val ynBotEff = ynBot + PLINTH_THICKNESS_NORM
+
+    val xTL = xAt(card.uLeft, ynTopEff)
+    val xTR = xAt(card.uRight, ynTopEff)
+    val xBL = xAt(card.uLeft, ynBotEff)
+    val xBR = xAt(card.uRight, ynBotEff)
+    val yBaseBotPx = yBotPx + thicknessPx
+
+    // Soft cast shadow beneath the raised cardstock platform
+    val shadow = Path().apply {
+        moveTo(xTL - 6f, yTopPx + thicknessPx * 0.65f)
+        lineTo(xTR + 4f, yTopPx + thicknessPx * 0.65f)
+        lineTo(xBR + 6f, yBaseBotPx + 5f)
+        lineTo(xBL - 8f, yBaseBotPx + 5f)
+        close()
+    }
+    drawPath(shadow, Color.Black.copy(alpha = 0.24f))
+
+    // Front cardstock thickness wall
+    val frontWall = Path().apply {
+        moveTo(xBL, yBotPx)
+        lineTo(xBR, yBotPx)
+        lineTo(xBR, yBaseBotPx)
+        lineTo(xBL, yBaseBotPx)
+        close()
+    }
+    drawPath(frontWall, platformColor)
+    drawPath(frontWall, Color.Black.copy(alpha = 0.34f))
+    drawPath(frontWall, Color(0xFFF3EBD8).copy(alpha = 0.32f), style = Stroke(1f))
+
+    // Matte cardstock top stage surface with warm cream die-cut border
+    val topFace = Path().apply {
+        moveTo(xTL, yTopPx)
+        lineTo(xTR, yTopPx)
+        lineTo(xBR, yBotPx)
+        lineTo(xBL, yBotPx)
+        close()
+    }
+    drawPath(topFace, platformColor)
+    drawPath(topFace, Color(0xFFF3EBD8).copy(alpha = 0.42f), style = Stroke(1.3f))
+}
+
 // --- 3D Extruded Card Plinths & Projective Images ----------------------------
 
 private fun DrawScope.drawCardPlinth(
@@ -1071,6 +1109,7 @@ private fun DrawScope.drawCardPlinth(
     }
 
     // 4. Card title & subtitle copy on the plinth top face + wireframe callout leader line
+    val item = card.item ?: return
     val scale = (0.5f + 0.7f * ynBot).clamped(0.48f, 1.15f)
     val padX = (xTR - xTL) * 0.05f
     val padY = (yBotPx - yTopPx) * 0.10f
@@ -1083,11 +1122,11 @@ private fun DrawScope.drawCardPlinth(
         )
         drawText(
             textMeasurer = measurer,
-            text = "• ${card.item.title}",
+            text = "• ${item.title}",
             topLeft = Offset(xTL + padX, yTopPx + padY),
             style = cardTitleStyle,
         )
-        if (card.item.subtitle.isNotEmpty() && yBotPx - yTopPx > 54f) {
+        if (item.subtitle.isNotEmpty() && yBotPx - yTopPx > 54f) {
             val subStyle = TextStyle(
                 color = Color.White.copy(alpha = 0.68f),
                 fontSize = (8.5f * scale).sp,
@@ -1095,7 +1134,7 @@ private fun DrawScope.drawCardPlinth(
             )
             drawText(
                 textMeasurer = measurer,
-                text = card.item.subtitle,
+                text = item.subtitle,
                 topLeft = Offset(xTL + padX, yTopPx + padY + 16f * scale),
                 style = subStyle,
             )
@@ -1127,7 +1166,7 @@ private fun DrawScope.drawCardPlinth(
         val textX = if (card.calloutRight) elbowX + 4f else endX + 2f
         drawText(
             textMeasurer = measurer,
-            text = card.item.callout,
+            text = item.callout,
             topLeft = Offset(textX.clamped(6f, size.width - 130f), (elbowY - 15f * scale).coerceAtLeast(2f)),
             style = calloutStyle,
         )
@@ -1316,7 +1355,7 @@ private fun DrawScope.drawLeftHudAndTethers(
  * Exact projective homography mapping a [w] by [h] bitmap onto four screen
  * corners `[x0, y0, x1, y1, x2, y2, x3, y3]` (top-left clockwise).
  */
-private fun quadMatrix(q: FloatArray, w: Float, h: Float, out: Matrix): Boolean {
+internal fun quadMatrix(q: FloatArray, w: Float, h: Float, out: Matrix): Boolean {
     val x0 = q[0]; val y0 = q[1]
     val x1 = q[2]; val y1 = q[3]
     val x2 = q[4]; val y2 = q[5]
