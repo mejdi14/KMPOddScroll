@@ -49,26 +49,32 @@ data class PopupScene(
 )
 
 /*
- * Pop-up hinge zone along normalized screen y (0 = top horizon, 1 = bottom edge).
- * Cutouts enter from the bottom lying flat on their platform (angle = 0), swing
- * upright across ENTER_FLAT_YN -> ENTER_UP_YN with a cardstock spring overshoot,
- * stand tall across the middle of the frame, and fold back flat as they climb
- * past EXIT_UP_YN -> EXIT_FLAT_YN toward the horizon.
+ * Center-driven pop-up curve in runway px measured from the focus row.
+ * Only the stop sitting at the centre of the frame stands upright:
+ * - inside FOLD_UP_PX of the focus row: standing full upright (90 deg)
+ * - between FOLD_UP_PX and FOLD_FLAT_PX: smoothly hinging up/down as distance changes
+ * - past FOLD_FLAT_PX (every neighbouring stop above and below): flat on the floor (0 deg)
  */
-private const val ENTER_FLAT_YN = 0.95f
-private const val ENTER_UP_YN = 0.78f
-private const val EXIT_UP_YN = 0.31f
-private const val EXIT_FLAT_YN = 0.14f
+private const val FOLD_UP_PX = 270f
+private const val FOLD_FLAT_PX = 680f
 
-/** Maximum stand-up angle allowed during spring overshoot (~110 deg) so paper never folds forward to the floor. */
-private const val MAX_ANGLE = 1.92f
+/**
+ * Foreshortening of a cutout lying completely flat on the platform surface (0 deg)
+ * relative to its full upright standing height (90 deg), plus perspective taper of
+ * its far edge into the floor plane.
+ */
+private const val FLAT_HEIGHT_RATIO = 0.10f
+private const val FLAT_TOP_TAPER = 0.22f
+
+/** Maximum stand-up angle allowed during spring overshoot (~105 deg) so paper never folds forward. */
+private const val MAX_ANGLE = 1.84f
 private const val RIGHT_ANGLE = PI_F * 0.5f
 
-/** Underdamped cardstock hinge spring when flipping upright, and gentler settle when folding down. */
-private const val RISE_OMEGA = 19.5f
-private const val RISE_ZETA = 0.45f
-private const val FALL_OMEGA = 15.5f
-private const val FALL_ZETA = 0.74f
+/** Snappy cardstock hinge spring: tracks slow drags closely and pops cleanly on flicks/steps. */
+private const val RISE_OMEGA = 24f
+private const val RISE_ZETA = 0.52f
+private const val FALL_OMEGA = 22f
+private const val FALL_ZETA = 0.78f
 private const val SPRING_MAX_STEP = 0.004f
 
 /** Maximum distinct `(stop, cutout)` spring slots tracked without allocation. */
@@ -80,14 +86,14 @@ private const val MAX_SLOTS = MAX_STOPS * MAX_CUTOUTS_PER_STOP
 private val SHADOW_FILTER = ColorFilter.tint(Color(0xFF0B0912), BlendMode.SrcIn)
 
 /**
- * Pre-allocated brightness steps (`0.76 .. 1.00`) so cutouts darken subtly when
- * lying flat and catch warm light as they hinge upright, with zero per-frame allocation.
+ * Pre-allocated brightness steps (`0.70 .. 1.00`) so cutouts look pressed onto the
+ * shaded floor when flat and brighten into the light as they flip upright.
  */
 private val SHADE_FILTERS: Array<ColorFilter?> = Array(17) { step ->
     if (step == 16) {
         null
     } else {
-        val k = 0.76f + 0.24f * (step / 16f)
+        val k = 0.70f + 0.30f * (step / 16f)
         ColorFilter.colorMatrix(ColorMatrix().apply { setToScale(k, k, k, 1f) })
     }
 }
@@ -114,6 +120,7 @@ internal class PaperPopupStage {
         scene: PopupScene,
         midS: Float,
         scrollPx: Float,
+        focusXi: Float,
         dtSec: Float,
         cx: Float,
         h: Float,
@@ -128,16 +135,13 @@ internal class PaperPopupStage {
         val baseSlot = (stopIndex % MAX_STOPS) * MAX_CUTOUTS_PER_STOP
         val dt = dtSec.clamped(0.0005f, 0.033f)
 
-        // 1. Update each cutout's hinge angle spring and prepare back-to-front sort order.
+        // 1. Update each cutout's hinge angle spring from its distance to the centre focus row.
         for (i in 0 until count) {
             order[i] = i
             val c = cutouts[i]
             val xiHinge = midS + c.localS - scrollPx
-            val ynHinge = projector.xiToYNormCard(xiHinge)
-
-            val enterT = ((ENTER_FLAT_YN - ynHinge) / (ENTER_FLAT_YN - ENTER_UP_YN)).clamped(0f, 1f)
-            val exitT = ((ynHinge - EXIT_FLAT_YN) / (EXIT_UP_YN - EXIT_FLAT_YN)).clamped(0f, 1f)
-            val targetAngle = smoothstep(0f, 1f, min(enterT, exitT)) * RIGHT_ANGLE
+            val distFromCenter = abs(xiHinge - focusXi)
+            val targetAngle = (1f - smoothstep(FOLD_UP_PX, FOLD_FLAT_PX, distFromCenter)) * RIGHT_ANGLE
 
             val slot = baseSlot + i
             var angle = angles[slot]
@@ -185,54 +189,46 @@ internal class PaperPopupStage {
             order[j + 1] = key
         }
 
-        fun projX(u: Float, s: Float): Float {
-            val yn = projector.xiToYNormCard(s - scrollPx)
-            val wf = projector.widthFraction(yn + PLINTH_THICKNESS_NORM)
-            return cx + u * wf * runwayScale
-        }
-
-        fun projY(s: Float, z: Float): Float {
-            val yn = projector.xiToYNormCard(s - scrollPx)
-            val wf = projector.widthFraction(yn + PLINTH_THICKNESS_NORM)
-            return yn * h - z * wf * popupLift
-        }
-
         with(scope) {
-            // Pass 0: Cast silhouette shadows on the platform floor beneath every rising/standing cutout.
+            // Pass 0: Cast silhouette shadows on the platform floor beneath rising/standing cutouts.
             for (k in 0 until count) {
                 val idx = order[k]
                 val c = cutouts[idx]
                 val theta = angles[baseSlot + idx]
                 val sSin = sin(theta).clamped(0f, 1.05f)
-                val hSin = c.heightPx * sSin
-                if (hSin < 10f) continue
+                if (sSin < 0.05f) continue
 
                 val s0 = midS + c.localS
+                val yn0 = projector.xiToYNormCard(s0 - scrollPx)
+                val wf0 = projector.widthFraction(yn0 + PLINTH_THICKNESS_NORM)
                 val imgW = c.image.width.toFloat()
                 val imgH = c.image.height.toFloat()
                 val halfU = (c.heightPx * (imgW / max(imgH, 1f)) * 0.5f) / PAGE_WIDTH_PX
 
-                val sTop = s0 - hSin * 0.55f
-                val uShift = -hSin * 0.28f / PAGE_WIDTH_PX
-                val uL = c.u - halfU
-                val uR = c.u + halfU
-                val uTopL = uL + uShift
-                val uTopR = uR + uShift
+                val standingH = c.heightPx * wf0 * popupLift
+                val shadowH = standingH * 0.24f * sSin
+                val shadowShiftX = -standingH * 0.26f * sSin
+                if (shadowH < 2f) continue
 
-                val yTop = projY(sTop, 0f)
-                val yBot = projY(s0, 0f)
-                if (abs(yBot - yTop) < 1.5f) continue
+                val yBot = yn0 * h
+                val yTop = yBot - shadowH
+                val xBL = cx + (c.u - halfU) * wf0 * runwayScale
+                val xBR = cx + (c.u + halfU) * wf0 * runwayScale
+                val topHalfW = (xBR - xBL) * 0.44f
+                val topCx = 0.5f * (xBL + xBR) + shadowShiftX
+                val xTL = topCx - topHalfW
+                val xTR = topCx + topHalfW
 
                 if (!c.mirror) {
-                    corners[0] = projX(uTopL, sTop); corners[1] = yTop
-                    corners[2] = projX(uTopR, sTop); corners[3] = yTop
-                    corners[4] = projX(uR, s0); corners[5] = yBot
-                    corners[6] = projX(uL, s0); corners[7] = yBot
+                    corners[0] = xTL; corners[1] = yTop
+                    corners[2] = xTR; corners[3] = yTop
+                    corners[4] = xBR; corners[5] = yBot
+                    corners[6] = xBL; corners[7] = yBot
                 } else {
-                    corners[0] = projX(uTopR, sTop); corners[1] = yTop
-                    corners[2] = projX(uTopL, sTop); corners[3] = yTop
-                    corners[4] = projX(uL, s0); corners[5] = yBot
-                    corners[6] = projX(uR, s0); corners[7] = yBot
+                    corners[0] = xTR; corners[1] = yTop
+                    corners[2] = xTL; corners[3] = yTop
+                    corners[4] = xBL; corners[5] = yBot
+                    corners[6] = xBR; corners[7] = yBot
                 }
 
                 if (quadMatrix(corners, imgW, imgH, matrix)) {
@@ -259,9 +255,13 @@ internal class PaperPopupStage {
                 drawCutoutQuad(
                     c = cutouts[idx],
                     s0 = midS + cutouts[idx].localS,
+                    scrollPx = scrollPx,
                     theta = theta,
-                    projX = ::projX,
-                    projY = ::projY,
+                    cx = cx,
+                    h = h,
+                    runwayScale = runwayScale,
+                    popupLift = popupLift,
+                    projector = projector,
                 )
             }
 
@@ -273,9 +273,13 @@ internal class PaperPopupStage {
                 drawCutoutQuad(
                     c = cutouts[idx],
                     s0 = midS + cutouts[idx].localS,
+                    scrollPx = scrollPx,
                     theta = theta,
-                    projX = ::projX,
-                    projY = ::projY,
+                    cx = cx,
+                    h = h,
+                    runwayScale = runwayScale,
+                    popupLift = popupLift,
+                    projector = projector,
                 )
             }
         }
@@ -284,28 +288,46 @@ internal class PaperPopupStage {
     private fun DrawScope.drawCutoutQuad(
         c: PopupCutout,
         s0: Float,
+        scrollPx: Float,
         theta: Float,
-        projX: (Float, Float) -> Float,
-        projY: (Float, Float) -> Float,
+        cx: Float,
+        h: Float,
+        runwayScale: Float,
+        popupLift: Float,
+        projector: RunwayProjector,
     ) {
+        val yn0 = projector.xiToYNormCard(s0 - scrollPx)
+        val wf0 = projector.widthFraction(yn0 + PLINTH_THICKNESS_NORM)
         val imgW = c.image.width.toFloat()
         val imgH = c.image.height.toFloat()
         val halfU = (c.heightPx * (imgW / max(imgH, 1f)) * 0.5f) / PAGE_WIDTH_PX
 
-        val sTop = s0 - c.heightPx * cos(theta)
-        val zTop = c.heightPx * sin(theta)
+        val sinT = sin(theta)
+        val cosT = cos(theta)
+        val standingH = c.heightPx * wf0 * popupLift
+        // Exact 3D tabletop hinge projection: FLAT_HEIGHT_RATIO when flat on floor (0 deg),
+        // 1.0x exact bitmap aspect ratio when standing upright (90 deg).
+        val visibleH = standingH * (sinT + FLAT_HEIGHT_RATIO * cosT)
+        if (visibleH < 1.5f) return
 
-        val yTop = projY(sTop, zTop)
-        val yBot = projY(s0, 0f)
-        if (yBot - yTop < 1.5f) return
+        val yBot = yn0 * h
+        val yTop = yBot - visibleH
+        val baseXCenter = cx + c.u * wf0 * runwayScale
+        val baseHalfW = halfU * wf0 * runwayScale
+        val xBL = baseXCenter - baseHalfW
+        val xBR = baseXCenter + baseHalfW
 
-        val uL = c.u - halfU
-        val uR = c.u + halfU
-        val xBL = projX(uL, s0)
-        val xBR = projX(uR, s0)
+        // Top edge tapers inward toward the vanishing point when lying flat on the floor,
+        // straightens to full width upright, and widens slightly on overshoot past 90 deg.
+        val topScale = 1f - FLAT_TOP_TAPER * cosT
+        val topHalfW = baseHalfW * topScale
+        // Subtle inward perspective pull toward runway centre when lying flat on the floor.
+        val topXCenter = cx + c.u * wf0 * runwayScale * topScale
+        val xTL = topXCenter - topHalfW
+        val xTR = topXCenter + topHalfW
 
         // Subtle dark paper-slot crease line along the bottom hinge while standing.
-        val stand = sin(theta).clamped(0f, 1f)
+        val stand = sinT.clamped(0f, 1f)
         if (stand > 0.12f) {
             val inset = (xBR - xBL) * 0.14f
             drawLine(
@@ -317,13 +339,13 @@ internal class PaperPopupStage {
         }
 
         if (!c.mirror) {
-            corners[0] = projX(uL, sTop); corners[1] = yTop
-            corners[2] = projX(uR, sTop); corners[3] = yTop
+            corners[0] = xTL; corners[1] = yTop
+            corners[2] = xTR; corners[3] = yTop
             corners[4] = xBR; corners[5] = yBot
             corners[6] = xBL; corners[7] = yBot
         } else {
-            corners[0] = projX(uR, sTop); corners[1] = yTop
-            corners[2] = projX(uL, sTop); corners[3] = yTop
+            corners[0] = xTR; corners[1] = yTop
+            corners[2] = xTL; corners[3] = yTop
             corners[4] = xBL; corners[5] = yBot
             corners[6] = xBR; corners[7] = yBot
         }

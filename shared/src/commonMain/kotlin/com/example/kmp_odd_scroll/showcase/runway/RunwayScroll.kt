@@ -647,6 +647,7 @@ private fun DrawScope.drawRunwayScene(
     val matrix = Matrix()
 
     // Match vertical standing scale to horizontal scale so upright cutouts keep their exact bitmap aspect ratio.
+    val focusXi = projector.evalPhiCard(FOCUS_AXIS_YN)
     val popupLift = runwayScale / PAGE_WIDTH_PX
 
     for (card in layout.placedCards) {
@@ -673,6 +674,7 @@ private fun DrawScope.drawRunwayScene(
                 scene = scene,
                 midS = 0.5f * (card.sTop + card.sBot),
                 scrollPx = S,
+                focusXi = focusXi,
                 dtSec = state.lastDeltaSec,
                 cx = cx,
                 h = h,
