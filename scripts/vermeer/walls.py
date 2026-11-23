@@ -154,7 +154,7 @@ def _sprite(wall, box, depth, texture):
 
 # Position of the approved frame in the window elevation. The width preserves
 # the proportions of the supplied chess picture once the wall is in 3D.
-CHESS_FRAME = (317, 54, 463, 232.5)
+CHESS_FRAME = (331.6, 71.85, 448.4, 214.65)
 
 
 def _frame_shadow(windows):
