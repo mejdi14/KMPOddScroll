@@ -1,6 +1,8 @@
 # The Art of Painting
 
-The framed image is the supplied photograph of Johannes Vermeer’s *The Art of Painting*. The studio uses the photograph for the figures, chandelier, curtain, map and visible furnishings. The floor’s vanishing points set the entry camera, and the intersections of the black and ivory tiles determine the pattern underfoot. The route moves just over a metre from the original viewpoint.
+The gallery print uses the supplied photograph of Johannes Vermeer’s *The Art of Painting*. The paper shows through where the edges have rubbed away, following the wear on *Poppy Field*. Its reverse carries an imagined chalk study of the model and a few ruled floor lines. Both faces share a mirrored cut edge. The corner folded onto the reverse carries a little of the dark print from the front.
+
+The studio uses the original photograph in `art/the-art-of-painting.jpg` for the figures, chandelier, curtain, map and visible furnishings. The floor’s vanishing points set the entry camera, and the intersections of the black and ivory tiles determine the pattern underfoot. The route moves just over a metre from the original viewpoint.
 
 The supplied chess painting hangs in a shallow black-and-gold frame between the two windows. The approved ImageGen studies supplied the flower vase, the sloped artist’s desk with its unfinished river study, the girl peeking through the door and the elderly woman seated beside it. She wears blue brocade and holds a folding fan to her cheek. Earlier studies supplied the studio walls and the paint hidden behind the original figures.
 
@@ -16,6 +18,19 @@ python3 scripts/vermeer/build.py
 
 <details>
 <summary>ImageGen prompts for the source artwork</summary>
+
+#### Paper reverse
+
+```text
+Create the back of a loose paper reproduction of Vermeer's The Art of Painting as a single, high-resolution texture for a virtual museum. The attached Vermeer is a reference for the subject of a small drawing only. We have just turned over the sheet. The entire image is the material of this one leaf, straight-on, upright portrait about 9:11, cropped precisely flush to all four edges. Soft even conservation-scanner light. Quiet warm flax-grey handmade rag paper, fine erratic fibers, faint laid lines and widely spaced vertical chain lines that you almost miss, rubbed handled rim, one compressed dog-ear, a slightly darker thumb-sized handling mark. Real paper with variable tone, no noise overlay, hard crease down center, brown vignette, burn marks, heavy stains or elaborate damage.
+On the verso someone once tried to work out the fall of light on the blue sleeve in this picture. One modest unfinished black-chalk drawing in the upper middle, loose life-size-to-the-sheet graphite-grey lines of the female model in profile from her laurel and downturned head to her elbow, the bent forearm cradling the large closed book from the reference. This is a seventeenth-century studio working sketch fragment, made by hand: an exploratory doubled line correcting the book angle, patches of reserved bare paper in her face, a few accurate, broad dark hatched planes in the sleeve and a whisper of rubbed blue chalk. Drawing tails off without a bottom contour. Do not draw the entire painting, an elaborate finished portrait or a trumpet floating loose. Keep most of the sheet bare, especially below the elbow. At the lower side a few very light, interrupted straight lines of a floor perspective tried by hand, barely there. No writing, labels, seals, dates, fake signatures or accessories. The visual interest is in specific anatomical observation, a handful of decisive marks, the different pressures of the chalk, and the patina of the paper itself. Restrained ochre-grey, charcoal and a hint of muted dusty blue. Flat full-bleed archival material scan, with no lighting or shadow outside the leaf, no frame, desk, stretcher or surrounding background.
+```
+
+#### Wear on the printed face
+
+```text
+Precise object edit. Image 1 is the edit target, Vermeer's The Art of Painting. Preserve his exact photograph, full composition, edges, light, colour, position of every subject and aspect ratio. Change only the outermost few millimetres into the frayed, worn face of an old art reproduction printed to the very edge on rag paper. Image 2 (landscape Poppy Field) is only the reference for how little of the edge is rubbed: a few little islands of warm old paper show through broken ink; plenty of straight intact painted edge between them. Image 3 is the actual reverse material of this specific leaf; as we turn this sheet over horizontally, its folded-over upper RIGHT corner clips the upper LEFT corner of the front painting, with a short diagonal just across the extreme tip, subtly abraded. Only other small soft corners. Make the narrow broken paint and print loss truly convincing where old fibers lift against the dark paint of Vermeer's tapestry: occasional irregular scuffed flecks exposing flax-buff stock and tiny hairline creases where the lower tip has flexed. Uneven wear from handling rather than a symmetry filter. An extremely narrow ragged rim, interrupted, a paper-thin sliver and slightly larger spalls only at corners. No added rectangular border, passepartout, white margin, frame, shadow, props, scattered stains, lettering or large areas of yellow paper. The entire portrait is flat level, straight-on, occupies the entire portrait canvas flush to the edges, never floating in a larger scene. Absolutely preserve the artwork itself even very close to the edge.
+```
 
 #### Wide studio
 

@@ -61,6 +61,7 @@ import kmpoddscroll.shared.generated.resources.museum_seashore
 import kmpoddscroll.shared.generated.resources.museum_sunflowers
 import kmpoddscroll.shared.generated.resources.museum_venus
 import kmpoddscroll.shared.generated.resources.museum_vermeer
+import kmpoddscroll.shared.generated.resources.museum_vermeer_back
 import kmpoddscroll.shared.generated.resources.museum_vermeer_figures
 import kmpoddscroll.shared.generated.resources.museum_vermeer_front
 import kmpoddscroll.shared.generated.resources.museum_vermeer_studio
@@ -95,8 +96,8 @@ import org.jetbrains.compose.resources.imageResource
  * yellow, pale, red, green or antique gold, or carved walnut, mahogany, oak,
  * rosewood or ebonised wood, and carved shell, acanthus, gadroon or classical,
  * no two neighbours alike. The Cliff Walk carries Monet's notes from Pourville
- * on its back and Poppy Field his notes from Argenteuil, for when either is
- * taken out and turned over. Most carry a depth
+ * on its back and Poppy Field his notes from Argenteuil. Turn over The Art
+ * of Painting to see a chalk study of the model holding her book. Most carry a depth
  * map worked out by Depth Anything V2 Small, for stepping inside.
  * The Cliff Walk, Poppy Field, Boys in a Pasture and Snap the Whip are
  * rebuilt as places instead: the coast, the hill and the field, the pasture or
@@ -143,6 +144,7 @@ fun GalleryWallDemoScreen() {
     val fan = imageResource(Res.drawable.museum_fan)
     val seashore = imageResource(Res.drawable.museum_seashore)
     val vermeer = imageResource(Res.drawable.museum_vermeer)
+    val vermeerBack = imageResource(Res.drawable.museum_vermeer_back)
 
     // Depth Anything V2 Small, white near and black far, for stepping inside.
     val sunflowersDepth = imageResource(Res.drawable.museum_sunflowers_depth)
@@ -243,7 +245,7 @@ fun GalleryWallDemoScreen() {
 
     val items = remember(
         sunflowers, boating, june, bridge, roses, armchair, kiss,
-        almond, boatingparty, cliffwalk, cliffwalkBack, venus, poppies, poppiesBack, fan, seashore, vermeer,
+        almond, boatingparty, cliffwalk, cliffwalkBack, venus, poppies, poppiesBack, fan, seashore, vermeer, vermeerBack,
         sunflowersDepth, boatingDepth, juneDepth, bridgeDepth, rosesDepth, armchairDepth, kissDepth,
         almondDepth, boatingpartyDepth, cliffwalkDepth, venusDepth, poppiesDepth, fanDepth, seashoreDepth,
         pasture, whip, automat, cliffwalkScene, poppiesScene, pastureScene, whipScene, automatScene, vermeerScene,
@@ -265,7 +267,7 @@ fun GalleryWallDemoScreen() {
             GalleryWallItem(poppies, "Poppy Field", "Claude Monet", "1873", "Oil on canvas", frame = gilt(RED_GOLD, Acanthus, width = 0.095f), back = poppiesBack, depth = poppiesDepth, scene = poppiesScene),
             GalleryWallItem(fan, "Lady with a Fan", "Gustav Klimt", "1917–1918", "Oil on canvas", frame = wood(ROSEWOOD, Gadroon), depth = fanDepth),
             GalleryWallItem(seashore, "Strolling along the Seashore", "Joaquín Sorolla", "1909", "Oil on canvas", frame = gilt(YELLOW_GOLD, Classical, width = 0.075f), depth = seashoreDepth),
-            GalleryWallItem(vermeer, "The Art of Painting", "Johannes Vermeer", "c. 1666–1668", "Oil on canvas", frame = gilt(ANTIQUE_GOLD, Shell), scene = vermeerScene),
+            GalleryWallItem(vermeer, "The Art of Painting", "Johannes Vermeer", "c. 1666–1668", "Oil on canvas", frame = gilt(ANTIQUE_GOLD, Shell), back = vermeerBack, scene = vermeerScene),
             GalleryWallItem(automat, "Automat", "Edward Hopper", "1927", "Oil on canvas", frame = GalleryWallFrame(color = EBONISED), scene = automatScene),
         )
     }

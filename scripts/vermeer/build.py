@@ -385,7 +385,7 @@ def texture_batches(layers):
 
 
 def build():
-    photo = Image.open(DRAW / "museum_vermeer.jpg").convert("RGB")
+    photo = Image.open(ART / "the-art-of-painting.jpg").convert("RGB")
     mattes = masks()
     mattes["chandelier"] = chandelier_mask()
     covered = Image.new("L", PHOTO_SIZE)
