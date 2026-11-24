@@ -160,6 +160,11 @@ Flex Carousel's paintings are museum scans from [Unsplash](https://unsplash.com)
 [The Metropolitan Museum of Art](https://unsplash.com/@themet) and
 [Tofan Teodor](https://unsplash.com/@tofanteodor).
 
+The museum gallery ships relative depth maps and subject masks alongside each
+painting. Depth Anything V2 Small estimated depth. Apple Vision and SlimSAM
+identified subjects and details in the original scans.
+[Depth Anything V2 Small](https://huggingface.co/depth-anything/Depth-Anything-V2-Small-hf) · [Apple Vision](https://developer.apple.com/documentation/vision/vngenerateforegroundinstancemaskrequest) · [SlimSAM](https://huggingface.co/Zigeng/SlimSAM-uniform-77).
+
 In the gallery's walk through Monet's *Poppy Field*, the trees on the left
 use foliage from the painting. ImageGen supplied the windmill tower and the
 three sheep grazing in the distance on the right, beyond the river. The scene
