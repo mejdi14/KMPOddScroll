@@ -1,6 +1,8 @@
 package com.example.kmp_odd_scroll.showcase.gallerywall.inspection
 
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathFillType
 import kotlinx.coroutines.yield
@@ -10,22 +12,10 @@ import kotlin.math.min
 import kotlin.math.sqrt
 
 internal suspend fun inspectionRegions(
-    w: Int, h: Int, pixels: IntArray, depth: FloatArray, instances: IntArray?,
+    w: Int, h: Int, pixels: IntArray, depth: FloatArray,
 ): List<InspectionRegion> {
     val regions = mutableListOf<InspectionRegion>()
     val taken = BooleanArray(pixels.size)
-    if (instances != null) {
-        val population = IntArray(256)
-        for (pixel in instances) population[pixel and 255]++
-        // Zero is the background; any other grey value can identify a subject.
-        val labels = (1..255).filter { population[it] > 0 }.sortedByDescending { population[it] }.take(5).sorted()
-        for (label in labels) {
-            val mask = BooleanArray(pixels.size) { (instances[it] and 255) == label }
-            appendRegion(w, h, mask, depth, regions, taken)
-        }
-        if (regions.isNotEmpty()) return regions
-    }
-
     if (pixels.all { it == pixels[0] } && depth.all { it == depth[0] }) return emptyList()
 
     // For an unannotated image, build a minimum-spanning forest over its
@@ -62,7 +52,7 @@ internal suspend fun inspectionRegions(
     }
     for (proposal in proposals.sortedByDescending { it.score }) {
         val mask = BooleanArray(pixels.size) { proposal.roots[it] == proposal.id }
-        appendRegion(w, h, mask, depth, regions, taken)
+        appendRegion(w, h, mask, regions, taken)
         if (regions.size == 5) break
     }
     return regions
@@ -71,7 +61,7 @@ internal suspend fun inspectionRegions(
 private class RegionProposal(val roots: IntArray, val id: Int, val score: Float)
 
 private fun appendRegion(
-    w: Int, h: Int, mask: BooleanArray, depth: FloatArray,
+    w: Int, h: Int, mask: BooleanArray,
     out: MutableList<InspectionRegion>, taken: BooleanArray,
 ) {
     var x0 = w
@@ -80,7 +70,6 @@ private fun appendRegion(
     var y1 = 0
     var area = 0
     var overlapping = 0
-    var sum = 0f
     for (i in mask.indices) if (mask[i]) {
         if (taken[i]) {
             overlapping++
@@ -94,12 +83,86 @@ private fun appendRegion(
         x1 = max(x1, x + 1)
         y1 = max(y1, y + 1)
         area++
-        sum += depth[i]
     }
     if (area == 0 || overlapping > area * 0.12f) return
-    val outline = inspectionOutline(mask, w, h)
-    out += InspectionRegion(mask, outline, Rect(x0.toFloat(), y0.toFloat(), x1.toFloat(), y1.toFloat()), sum / area)
+    val width = x1 - x0
+    val coverage = BooleanArray(width * (y1 - y0)) { mask[(y0 + it / width) * w + x0 + it % width] }
+    out += InspectionRegion(Rect(x0.toFloat(), y0.toFloat(), x1.toFloat(), y1.toFloat()), width, coverage)
     for (i in mask.indices) if (mask[i]) taken[i] = true
+}
+
+/** A tightly cropped silhouette in its original pixels, positioned in the shared analysis grid. */
+internal class InspectionRegion(val bounds: Rect, private val width: Int, private val coverage: BooleanArray) {
+    private val height = coverage.size / width
+    private val stepX = bounds.width / width
+    private val stepY = bounds.height / height
+
+    val outline = inspectionOutline(coverage, width, height).apply {
+        transform(Matrix().apply {
+            this[0, 0] = stepX
+            this[1, 1] = stepY
+            this[3, 0] = bounds.left
+            this[3, 1] = bounds.top
+        })
+    }
+
+    fun contains(point: Offset): Boolean {
+        if (!bounds.contains(point)) return false
+        val x = ((point.x - bounds.left) / stepX).toInt().coerceAtMost(width - 1)
+        val y = ((point.y - bounds.top) / stepY).toInt().coerceAtMost(height - 1)
+        return coverage[y * width + x]
+    }
+
+    // A leader ends on visible paint even when the centre falls inside a hole.
+    val anchor: Offset = run {
+        val center = bounds.center
+        var nearest = Float.MAX_VALUE
+        var anchor = center
+        for (i in coverage.indices) if (coverage[i]) {
+            val point = Offset(bounds.left + (i % width + 0.5f) * stepX, bounds.top + (i / width + 0.5f) * stepY)
+            val distance = (point - center).getDistanceSquared()
+            if (distance < nearest) {
+                nearest = distance
+                anchor = point
+            }
+        }
+        anchor
+    }
+}
+
+/** Trace each nonzero ID at the mask's native resolution, including holes and occluded parts. */
+internal suspend fun authoredInspectionRegions(
+    labels: ByteArray, width: Int, height: Int, analysisWidth: Int, analysisHeight: Int,
+): List<InspectionRegion> {
+    val left = IntArray(256) { width }
+    val top = IntArray(256) { height }
+    val right = IntArray(256)
+    val bottom = IntArray(256)
+    for (y in 0 until height) for (x in 0 until width) {
+        val id = labels[y * width + x].toInt() and 255
+        if (id == 0) continue
+        left[id] = min(left[id], x)
+        top[id] = min(top[id], y)
+        right[id] = max(right[id], x + 1)
+        bottom[id] = max(bottom[id], y + 1)
+    }
+
+    val sx = analysisWidth.toFloat() / width
+    val sy = analysisHeight.toFloat() / height
+    val regions = mutableListOf<InspectionRegion>()
+    for (id in 1..255) {
+        val cropWidth = right[id] - left[id]
+        if (cropWidth <= 0) continue
+        yield()
+        val coverage = BooleanArray(cropWidth * (bottom[id] - top[id])) { index ->
+            val x = left[id] + index % cropWidth
+            val y = top[id] + index / cropWidth
+            labels[y * width + x] == id.toByte()
+        }
+        val bounds = Rect(left[id] * sx, top[id] * sy, right[id] * sx, bottom[id] * sy)
+        regions += InspectionRegion(bounds, cropWidth, coverage)
+    }
+    return regions
 }
 
 private fun gridEdges(w: Int, h: Int, pixels: IntArray, depth: FloatArray): IntArray {

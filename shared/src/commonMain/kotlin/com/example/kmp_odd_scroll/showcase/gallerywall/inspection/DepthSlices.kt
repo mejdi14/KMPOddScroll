@@ -1,5 +1,6 @@
 package com.example.kmp_odd_scroll.showcase.gallerywall.inspection
 
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
@@ -16,7 +17,10 @@ internal fun depthSlices(a: PaintingAnalysis): List<DepthSlice> {
     val groundCount = 3
     val owner = IntArray(a.depth.size) { -1 }
     a.objects.forEachIndexed { i, region ->
-        for (n in region.mask.indices) if (region.mask[n]) owner[n] = groundCount + i
+        for (n in owner.indices) {
+            val center = Offset(n % a.width + 0.5f, n / a.width + 0.5f)
+            if (region.contains(center)) owner[n] = groundCount + i
+        }
     }
     val scenery = FloatArray(owner.count { it == -1 })
     var nScenery = 0
@@ -52,11 +56,11 @@ internal fun depthSlices(a: PaintingAnalysis): List<DepthSlice> {
             bottom = max(bottom, y + 1)
         }
         if (count == 0) continue
-        val bounds = Rect(left.toFloat(), top.toFloat(), right.toFloat(), bottom.toFloat())
-        val path = inspectionOutline(mask, a.width, a.height)
-        val obj = layer >= groundCount
+        val subject = a.objects.getOrNull(layer - groundCount)
+        val bounds = subject?.bounds ?: Rect(left.toFloat(), top.toFloat(), right.toFloat(), bottom.toFloat())
+        val path = subject?.outline ?: inspectionOutline(mask, a.width, a.height)
         // Lift a separately resolved subject clear of the terrain it sits on.
-        val depth = (near / count + if (obj) 0.09f else 0f).coerceIn(0f, 1f)
+        val depth = (near / count + if (subject != null) 0.09f else 0f).coerceIn(0f, 1f)
         if (layer == rear) {
             val underpaint = continueScenery(a, mask)
             val whole = Rect(0f, 0f, a.width.toFloat(), a.height.toFloat())

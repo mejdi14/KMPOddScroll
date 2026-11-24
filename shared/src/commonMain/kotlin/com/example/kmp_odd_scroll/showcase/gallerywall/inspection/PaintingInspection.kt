@@ -32,18 +32,33 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.kmp_odd_scroll.showcase.gallerywall.GalleryWallItem
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.jetbrains.compose.resources.ExperimentalResourceApi
+import org.jetbrains.compose.resources.decodeToImageBitmap
+import org.jetbrains.compose.resources.getDrawableResourceBytes
+import org.jetbrains.compose.resources.getSystemResourceEnvironment
 import kotlin.math.exp
 
 /** Keep the expensive image measurements when revisiting a painting. The gallery owns this cache. */
 internal class AnalysisCache {
     private val entries = mutableListOf<Pair<GalleryWallItem, PaintingAnalysis>>()
 
+    @OptIn(ExperimentalResourceApi::class)
     suspend fun get(item: GalleryWallItem): PaintingAnalysis {
         val index = entries.indexOfFirst {
-            it.first.image === item.image && it.first.depth === item.depth && it.first.inspectionMask === item.inspectionMask
+            it.first.image === item.image && it.first.depth === item.depth &&
+                it.first.inspectionMask === item.inspectionMask &&
+                it.first.inspectionMaskResource == item.inspectionMaskResource
         }
         if (index >= 0) return entries.removeAt(index).also { entries.add(it) }.second
-        val result = analyzePainting(item.image, item.depth, item.inspectionMask)
+        // Decode the original PNG so density scaling cannot mix categorical label values.
+        val mask = item.inspectionMask ?: item.inspectionMaskResource?.let { resource ->
+            withContext(Dispatchers.Default) {
+                getDrawableResourceBytes(getSystemResourceEnvironment(), resource).decodeToImageBitmap()
+            }
+        }
+        val result = analyzePainting(item.image, item.depth, mask)
         if (entries.size >= 3) entries.removeAt(0)
         entries.add(item to result)
         return result

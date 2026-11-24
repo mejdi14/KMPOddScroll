@@ -161,8 +161,10 @@ Flex Carousel's paintings are museum scans from [Unsplash](https://unsplash.com)
 [Tofan Teodor](https://unsplash.com/@tofanteodor).
 
 The museum gallery ships relative depth maps and subject masks alongside each
-painting. Depth Anything V2 Small estimated depth. Apple Vision and SlimSAM
-identified subjects and details in the original scans.
+painting. Depth Anything V2 Small estimated depth. The subject masks combine
+hand-traced contours with selections from Apple Vision and SlimSAM. Each mask
+uses the bundled scan's dimensions so the study can preserve fine edges and
+openings when a cutout is enlarged.
 [Depth Anything V2 Small](https://huggingface.co/depth-anything/Depth-Anything-V2-Small-hf) · [Apple Vision](https://developer.apple.com/documentation/vision/vngenerateforegroundinstancemaskrequest) · [SlimSAM](https://huggingface.co/Zigeng/SlimSAM-uniform-77).
 
 In the gallery's walk through Monet's *Poppy Field*, the trees on the left

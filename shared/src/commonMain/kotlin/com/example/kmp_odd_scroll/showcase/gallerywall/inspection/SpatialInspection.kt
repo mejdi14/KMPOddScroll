@@ -28,7 +28,7 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
-/** Cutouts keep the painting's own pixels. Only the masks are measured on the analysis grid. */
+/** Cutouts sample the original painting through its registered subject contours. */
 internal class SpatialInspection(
     private val image: ImageBitmap,
     private val a: PaintingAnalysis,
@@ -42,7 +42,7 @@ internal class SpatialInspection(
     private val pieces = if (objectsMode) emptyList() else a.slices.map { slice ->
         DepthPiece(slice.depth, croppedTexture(slice.bounds, slice.outline, slice.underpaint), slice.bounds)
     }
-    private val specimens = if (objectsMode) a.objects.map { Specimen(it, interiorPoint(it)) } else emptyList()
+    private val specimens = if (objectsMode) a.objects.map { Specimen(it) } else emptyList()
     private var sourcePose = Pose(Offset.Zero, 1f)
     private var lastFrame = Rect.Zero
     private var lastSelected = -1
@@ -57,8 +57,7 @@ internal class SpatialInspection(
         if (!objectsMode || frame != lastFrame || controls.selected != lastSelected) return null
         fun contains(index: Int, pose: Pose): Boolean {
             val local = (point - pose.origin) / pose.scale
-            if (!grid.contains(local)) return false
-            return specimens[index].region.mask[local.y.toInt() * a.width + local.x.toInt()]
+            return specimens[index].region.contains(local)
         }
         if (lastSelected in specimens.indices && contains(lastSelected, specimens[lastSelected].pose)) return lastSelected
         for (i in specimens.indices.reversed()) if (contains(i, specimens[i].pose)) return i
@@ -158,7 +157,7 @@ internal class SpatialInspection(
         fun toward(other: Pose, t: Float) = Pose(origin + (other.origin - origin) * t, scale + (other.scale - scale) * t)
     }
 
-    private class Specimen(val region: InspectionRegion, val anchor: Offset) {
+    private class Specimen(val region: InspectionRegion) {
         var pose = Pose(Offset.Zero, 1f)
         val trace = PathMeasure().apply { setPath(region.outline, true) }
         val segment = Path()
@@ -225,8 +224,8 @@ internal class SpatialInspection(
             val to = normal.toward(focused, focus)
             s.pose = sourcePose.toward(to, separate)
             if (separate <= 0f) continue
-            val from = sourcePose.map(s.anchor)
-            val target = s.pose.map(s.anchor)
+            val from = sourcePose.map(s.region.anchor)
+            val target = s.pose.map(s.region.anchor)
             val lineAlpha = (if (selected == null || i == selected) 0.59f else 0.16f) * separate
             val lead = if (beside) Offset((from.x + target.x) / 2f, from.y) else Offset(from.x, (from.y + target.y) / 2f)
             val tail = if (beside) Offset(lead.x, target.y) else Offset(target.x, lead.y)
@@ -293,20 +292,5 @@ internal class SpatialInspection(
         val dx = width * fraction
         val dy = height * fraction
         return Rect(left + dx, top + dy, right - dx, bottom - dy)
-    }
-
-    /** Use a point on the painted mass for the end of its leader, including crescent-shaped subjects. */
-    private fun interiorPoint(region: InspectionRegion): Offset {
-        var nearest = Float.MAX_VALUE
-        var point = region.bounds.center
-        for (n in region.mask.indices) if (region.mask[n]) {
-            val candidate = Offset(n % a.width + 0.5f, n / a.width + 0.5f)
-            val d = (candidate - region.bounds.center).getDistanceSquared()
-            if (d < nearest) {
-                nearest = d
-                point = candidate
-            }
-        }
-        return point
     }
 }

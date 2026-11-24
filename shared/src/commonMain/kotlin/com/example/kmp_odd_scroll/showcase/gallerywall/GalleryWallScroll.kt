@@ -68,6 +68,7 @@ import com.example.kmp_odd_scroll.showcase.gallerywall.inspection.AnalysisCache
 import com.example.kmp_odd_scroll.showcase.gallerywall.inspection.PaintingAnalysis
 import com.example.kmp_odd_scroll.showcase.gallerywall.inspection.PaintingInspection
 import com.example.kmp_odd_scroll.showcase.internal.clamped
+import org.jetbrains.compose.resources.DrawableResource
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -117,6 +118,8 @@ data class GalleryWallItem(
     val scene: GalleryWallScene? = null,
     /** An optional subject mask aligned to the painting. Zero is background and each subject has its own grey value. */
     val inspectionMask: ImageBitmap? = null,
+    /** A bundled subject mask decoded at its original size when opening the study. [inspectionMask] takes precedence. */
+    val inspectionMaskResource: DrawableResource? = null,
 )
 
 /** What is carved into a [GalleryWallFrame]'s moulding. */
@@ -412,7 +415,9 @@ fun GalleryWallScroll(
     val inspectionCache = remember { AnalysisCache() }
     val painting = items[hang.wrap(state.subject)]
     // Start measuring during the walk up so the first tool can use the masks immediately.
-    val analysis = if (state.looking) key(painting.image, painting.depth, painting.inspectionMask) {
+    val analysis = if (state.looking) key(
+        painting.image, painting.depth, painting.inspectionMask, painting.inspectionMaskResource,
+    ) {
         produceState<PaintingAnalysis?>(null) { value = inspectionCache.get(painting) }.value
     } else null
 

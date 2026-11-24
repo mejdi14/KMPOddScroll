@@ -1,11 +1,9 @@
 package com.example.kmp_odd_scroll.showcase.gallerywall.inspection
 
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Paint
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import com.example.kmp_odd_scroll.showcase.gallerywall.estimatePaintingDepth
@@ -31,13 +29,6 @@ internal class PaintingAnalysis(
     val relief by lazy { PaintingRelief(this) }
     val drawing by lazy { traceBlueprint(this) }
 }
-
-internal class InspectionRegion(
-    val mask: BooleanArray,
-    val outline: Path,
-    val bounds: Rect,
-    val depth: Float,
-)
 
 /** Pixel centres, contours and masks share one aspect-correct coordinate system. */
 internal suspend fun analyzePainting(
@@ -75,8 +66,10 @@ internal suspend fun analyzePainting(
     yield()
     val pigments = clusterPigments(pixels)
     yield()
-    val instances = instanceMap?.let { sampleImage(it, w, h, FilterQuality.None) }
-    val regions = inspectionRegions(w, h, pixels, depth, instances)
+    val regions = if (instanceMap != null) {
+        val labels = readLabels(instanceMap)
+        authoredInspectionRegions(labels, instanceMap.width, instanceMap.height, w, h)
+    } else inspectionRegions(w, h, pixels, depth)
     val result = PaintingAnalysis(w, h, pixels, depth, pigments.colors, pigments.weights, pigments.labels, regions)
     // Warm the derived products on the analysis dispatcher. Opening an effect
     // can then allocate its drawing resources without tracing the whole work.
@@ -93,16 +86,31 @@ internal suspend fun analyzePainting(
     result
 }
 
+/** Read straight from the resource bitmap; a short reusable strip avoids a second full-size ARGB plane. */
+private fun readLabels(image: ImageBitmap): ByteArray {
+    val labels = ByteArray(image.width * image.height)
+    val rows = 64
+    val strip = IntArray(image.width * min(rows, image.height))
+    var y = 0
+    while (y < image.height) {
+        val height = min(rows, image.height - y)
+        image.readPixels(strip, 0, y, image.width, height)
+        val offset = y * image.width
+        for (i in 0 until image.width * height) labels[offset + i] = (strip[i] and 255).toByte()
+        y += height
+    }
+    return labels
+}
+
 private fun sampleImage(
     image: ImageBitmap,
     width: Int,
     height: Int,
-    quality: FilterQuality = FilterQuality.Medium,
 ): IntArray {
     val bitmap = ImageBitmap(width, height)
     Canvas(bitmap).drawImageRect(
         image, IntOffset.Zero, IntSize(image.width, image.height),
-        IntOffset.Zero, IntSize(width, height), Paint().apply { filterQuality = quality },
+        IntOffset.Zero, IntSize(width, height), Paint().apply { filterQuality = FilterQuality.Medium },
     )
     return IntArray(width * height).also { bitmap.readPixels(it) }
 }
