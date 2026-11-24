@@ -87,6 +87,28 @@ import kmpoddscroll.shared.generated.resources.museum_roses_depth
 import kmpoddscroll.shared.generated.resources.museum_seashore_depth
 import kmpoddscroll.shared.generated.resources.museum_sunflowers_depth
 import kmpoddscroll.shared.generated.resources.museum_venus_depth
+import kmpoddscroll.shared.generated.resources.museum_sunflowers_subjects
+import kmpoddscroll.shared.generated.resources.museum_boating_subjects
+import kmpoddscroll.shared.generated.resources.museum_june_subjects
+import kmpoddscroll.shared.generated.resources.museum_bridge_subjects
+import kmpoddscroll.shared.generated.resources.museum_roses_subjects
+import kmpoddscroll.shared.generated.resources.museum_pasture_subjects
+import kmpoddscroll.shared.generated.resources.museum_armchair_subjects
+import kmpoddscroll.shared.generated.resources.museum_kiss_subjects
+import kmpoddscroll.shared.generated.resources.museum_whip_subjects
+import kmpoddscroll.shared.generated.resources.museum_almond_subjects
+import kmpoddscroll.shared.generated.resources.museum_boating_party_subjects
+import kmpoddscroll.shared.generated.resources.museum_cliff_walk_subjects
+import kmpoddscroll.shared.generated.resources.museum_venus_subjects
+import kmpoddscroll.shared.generated.resources.museum_poppies_subjects
+import kmpoddscroll.shared.generated.resources.museum_fan_subjects
+import kmpoddscroll.shared.generated.resources.museum_seashore_subjects
+import kmpoddscroll.shared.generated.resources.museum_vermeer_subjects
+import kmpoddscroll.shared.generated.resources.museum_automat_subjects
+import kmpoddscroll.shared.generated.resources.museum_pasture_depth
+import kmpoddscroll.shared.generated.resources.museum_whip_depth
+import kmpoddscroll.shared.generated.resources.museum_vermeer_depth
+import kmpoddscroll.shared.generated.resources.museum_automat_depth
 import org.jetbrains.compose.resources.imageResource
 
 /**
@@ -97,8 +119,7 @@ import org.jetbrains.compose.resources.imageResource
  * rosewood or ebonised wood, and carved shell, acanthus, gadroon or classical,
  * no two neighbours alike. The Cliff Walk carries Monet's notes from Pourville
  * on its back and Poppy Field his notes from Argenteuil. Turn over The Art
- * of Painting to see a chalk study of the model holding her book. Most carry a depth
- * map worked out by Depth Anything V2 Small, for stepping inside.
+ * of Painting to see a chalk study of the model holding her book. Each carries a Depth Anything V2 Small map for spatial inspection.
  * The Cliff Walk, Poppy Field, Boys in a Pasture and Snap the Whip are
  * rebuilt as places instead: the coast, the hill and the field, the pasture or
  * the schoolyard, the figures, trees and sails laid out round the spot each
@@ -243,7 +264,35 @@ fun GalleryWallDemoScreen() {
         }
     }
 
+    val pastureDepth = imageResource(Res.drawable.museum_pasture_depth)
+    val whipDepth = imageResource(Res.drawable.museum_whip_depth)
+    val vermeerDepth = imageResource(Res.drawable.museum_vermeer_depth)
+    val automatDepth = imageResource(Res.drawable.museum_automat_depth)
+
+    // Separate label maps keep the original paint available at its native resolution.
+    val subjectMasks = mapOf(
+        sunflowers to imageResource(Res.drawable.museum_sunflowers_subjects),
+        boating to imageResource(Res.drawable.museum_boating_subjects),
+        june to imageResource(Res.drawable.museum_june_subjects),
+        bridge to imageResource(Res.drawable.museum_bridge_subjects),
+        roses to imageResource(Res.drawable.museum_roses_subjects),
+        pasture to imageResource(Res.drawable.museum_pasture_subjects),
+        armchair to imageResource(Res.drawable.museum_armchair_subjects),
+        kiss to imageResource(Res.drawable.museum_kiss_subjects),
+        whip to imageResource(Res.drawable.museum_whip_subjects),
+        almond to imageResource(Res.drawable.museum_almond_subjects),
+        boatingparty to imageResource(Res.drawable.museum_boating_party_subjects),
+        cliffwalk to imageResource(Res.drawable.museum_cliff_walk_subjects),
+        venus to imageResource(Res.drawable.museum_venus_subjects),
+        poppies to imageResource(Res.drawable.museum_poppies_subjects),
+        fan to imageResource(Res.drawable.museum_fan_subjects),
+        seashore to imageResource(Res.drawable.museum_seashore_subjects),
+        vermeer to imageResource(Res.drawable.museum_vermeer_subjects),
+        automat to imageResource(Res.drawable.museum_automat_subjects),
+    )
+
     val items = remember(
+        subjectMasks, pastureDepth, whipDepth, vermeerDepth, automatDepth,
         sunflowers, boating, june, bridge, roses, armchair, kiss,
         almond, boatingparty, cliffwalk, cliffwalkBack, venus, poppies, poppiesBack, fan, seashore, vermeer, vermeerBack,
         sunflowersDepth, boatingDepth, juneDepth, bridgeDepth, rosesDepth, armchairDepth, kissDepth,
@@ -256,10 +305,10 @@ fun GalleryWallDemoScreen() {
             GalleryWallItem(june, "Flaming June", "Frederic Leighton", "1895", "Oil on canvas", frame = gilt(RED_GOLD, Gadroon, width = 0.105f), depth = juneDepth),
             GalleryWallItem(bridge, "Water Lilies and Japanese Bridge", "Claude Monet", "1899", "Oil on canvas", frame = gilt(PALE_GOLD, Acanthus, width = 0.09f), depth = bridgeDepth),
             GalleryWallItem(roses, "The Roses of Heliogabalus", "Lawrence Alma-Tadema", "1888", "Oil on canvas", frame = wood(MAHOGANY, Shell, width = 0.11f), depth = rosesDepth),
-            GalleryWallItem(pasture, "Boys in a Pasture", "Winslow Homer", "1874", "Oil on canvas", frame = gilt(ANTIQUE_GOLD, Acanthus, width = 0.09f), scene = pastureScene),
+            GalleryWallItem(pasture, "Boys in a Pasture", "Winslow Homer", "1874", "Oil on canvas", frame = gilt(ANTIQUE_GOLD, Acanthus, width = 0.09f), depth = pastureDepth, scene = pastureScene),
             GalleryWallItem(armchair, "Little Girl in a Blue Armchair", "Mary Cassatt", "1878", "Oil on canvas", frame = gilt(GREEN_GOLD, Gadroon, width = 0.095f), depth = armchairDepth),
             GalleryWallItem(kiss, "The Kiss", "Gustav Klimt", "1907–1908", "Oil and gold leaf on canvas", frame = wood(EBONISED, Acanthus), depth = kissDepth),
-            GalleryWallItem(whip, "Snap the Whip", "Winslow Homer", "1872", "Oil on canvas", frame = gilt(PALE_GOLD, Gadroon, width = 0.085f), scene = whipScene),
+            GalleryWallItem(whip, "Snap the Whip", "Winslow Homer", "1872", "Oil on canvas", frame = gilt(PALE_GOLD, Gadroon, width = 0.085f), depth = whipDepth, scene = whipScene),
             GalleryWallItem(almond, "Almond Blossoms", "Vincent van Gogh", "1890", "Oil on canvas", frame = gilt(ANTIQUE_GOLD, Shell), depth = almondDepth),
             GalleryWallItem(boatingparty, "Luncheon of the Boating Party", "Pierre-Auguste Renoir", "1881", "Oil on canvas", frame = wood(WALNUT, Gadroon), depth = boatingpartyDepth),
             GalleryWallItem(cliffwalk, "The Cliff Walk at Pourville", "Claude Monet", "1882", "Oil on canvas", frame = wood(OAK, Classical, width = 0.07f), back = cliffwalkBack, depth = cliffwalkDepth, scene = cliffwalkScene),
@@ -267,9 +316,9 @@ fun GalleryWallDemoScreen() {
             GalleryWallItem(poppies, "Poppy Field", "Claude Monet", "1873", "Oil on canvas", frame = gilt(RED_GOLD, Acanthus, width = 0.095f), back = poppiesBack, depth = poppiesDepth, scene = poppiesScene),
             GalleryWallItem(fan, "Lady with a Fan", "Gustav Klimt", "1917–1918", "Oil on canvas", frame = wood(ROSEWOOD, Gadroon), depth = fanDepth),
             GalleryWallItem(seashore, "Strolling along the Seashore", "Joaquín Sorolla", "1909", "Oil on canvas", frame = gilt(YELLOW_GOLD, Classical, width = 0.075f), depth = seashoreDepth),
-            GalleryWallItem(vermeer, "The Art of Painting", "Johannes Vermeer", "c. 1666–1668", "Oil on canvas", frame = gilt(ANTIQUE_GOLD, Shell), back = vermeerBack, scene = vermeerScene),
-            GalleryWallItem(automat, "Automat", "Edward Hopper", "1927", "Oil on canvas", frame = GalleryWallFrame(color = EBONISED), scene = automatScene),
-        )
+            GalleryWallItem(vermeer, "The Art of Painting", "Johannes Vermeer", "c. 1666–1668", "Oil on canvas", frame = gilt(ANTIQUE_GOLD, Shell), back = vermeerBack, depth = vermeerDepth, scene = vermeerScene),
+            GalleryWallItem(automat, "Automat", "Edward Hopper", "1927", "Oil on canvas", frame = GalleryWallFrame(color = EBONISED), depth = automatDepth, scene = automatScene),
+        ).map { painting -> painting.copy(inspectionMask = subjectMasks[painting.image]) }
     }
 
     GalleryWallScroll(

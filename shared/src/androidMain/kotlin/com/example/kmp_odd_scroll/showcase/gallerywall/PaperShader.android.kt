@@ -44,7 +44,7 @@ internal actual fun paperShader(): PaperShader? {
 }
 
 /** Hardware-accelerated canvases draw a mesh from 29; below that it draws nothing. */
-internal actual val paperFolds: Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+internal actual val supportsHardwareMeshes: Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
 
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 private class AgslPaper : PaperShader {

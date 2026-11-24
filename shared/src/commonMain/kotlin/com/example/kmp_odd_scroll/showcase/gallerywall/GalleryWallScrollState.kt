@@ -138,6 +138,10 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
     var canFlip by mutableStateOf(false)
         private set
 
+    /** The unframed front is stationary and ready for the inspection tools on every renderer. */
+    internal var canStudy by mutableStateOf(false)
+        private set
+
     /** The inspected painting is lying face up and still, so [stepInside] will go into it. */
     var canStepInside by mutableStateOf(false)
         private set
@@ -255,6 +259,7 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
         if (!canFlip) return
         flipping = true
         canFlip = false
+        canStudy = false
         canStepInside = false
     }
 
@@ -267,6 +272,7 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
         if (!canStepInside) return
         inside = true
         canFlip = false
+        canStudy = false
         canStepInside = false
         walkPending = scene != null
     }
@@ -288,6 +294,7 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
         looking = false
         inspected = false
         canFlip = false
+        canStudy = false
         canStepInside = false
         flipping = false
         fold = 0f
@@ -438,9 +445,10 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
 
         if (moved) tick++
         val hang = hang ?: return
-        val paintingReady = arrived && inspected && lift >= 1f && !flipping && !inside && !stepping && paperFolds
-        canFlip = paintingReady && hang.framed(visited)
-        canStepInside = paintingReady && !over
+        val paintingReady = arrived && inspected && lift >= 1f && !flipping && !inside && !stepping
+        canStudy = paintingReady && !over
+        canFlip = paintingReady && hang.framed(visited) && supportsHardwareMeshes
+        canStepInside = canStudy && supportsHardwareMeshes
         val nearest = hang.nearest(position)
         if (nearest != centred) centred = nearest
 

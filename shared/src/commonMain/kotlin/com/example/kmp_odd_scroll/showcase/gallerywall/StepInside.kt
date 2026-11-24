@@ -142,7 +142,7 @@ internal class StepInside {
         val h = rows + 1
         val count = w * h
 
-        val near = if (depth != null) mapped(depth, w, h) else guessed(image, w, h)
+        val near = if (depth != null) mapped(depth, w, h) else estimatePaintingDepth(image, w, h)
         val back = behindOf(near, w, h)
         front.build(cols, rows, image, near, FloatArray(count) { 1f }, TEAR)
         val shade = FloatArray(count) { 1f - SHADOW * smoothstep(GAP * 0.5f, GAP * 2f, near[it] - back[it]) }
@@ -678,7 +678,7 @@ private fun mapped(depth: ImageBitmap, w: Int, h: Int): FloatArray {
  * colour, so the depth jumps where the colour does, along the outlines of
  * things, and holds still across them.
  */
-private fun guessed(image: ImageBitmap, w: Int, h: Int): FloatArray {
+internal fun estimatePaintingDepth(image: ImageBitmap, w: Int, h: Int): FloatArray {
     val (r, g, b, spread) = sampled(image, w, h)
     val count = w * h
     val sat = FloatArray(count) {

@@ -1,5 +1,8 @@
 package com.example.kmp_odd_scroll.showcase.gallerywall
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -9,9 +12,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,6 +21,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.withFrameNanos
@@ -61,6 +64,9 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.kmp_odd_scroll.showcase.gallerywall.inspection.AnalysisCache
+import com.example.kmp_odd_scroll.showcase.gallerywall.inspection.PaintingAnalysis
+import com.example.kmp_odd_scroll.showcase.gallerywall.inspection.PaintingInspection
 import com.example.kmp_odd_scroll.showcase.internal.clamped
 import kotlin.math.PI
 import kotlin.math.abs
@@ -109,6 +115,8 @@ data class GalleryWallItem(
      * bounds and a scroll walks on or back. Null steps inside on [depth].
      */
     val scene: GalleryWallScene? = null,
+    /** An optional subject mask aligned to the painting. Zero is background and each subject has its own grey value. */
+    val inspectionMask: ImageBitmap? = null,
 )
 
 /** What is carved into a [GalleryWallFrame]'s moulding. */
@@ -401,6 +409,12 @@ fun GalleryWallScroll(
     val enter = remember { EnterPainting() }
     val canvas = remember { FloatArray(4) }
     SideEffect { state.hang = hang }
+    val inspectionCache = remember { AnalysisCache() }
+    val painting = items[hang.wrap(state.subject)]
+    // Start measuring during the walk up so the first tool can use the masks immediately.
+    val analysis = if (state.looking) key(painting.image, painting.depth, painting.inspectionMask) {
+        produceState<PaintingAnalysis?>(null) { value = inspectionCache.get(painting) }.value
+    } else null
 
     LaunchedEffect(state) {
         var previous = 0L
@@ -514,32 +528,27 @@ fun GalleryWallScroll(
             }
         }
         if (exitLabel != null) {
-            HudButton(exitLabel, state.arrived && state.inspected, background, contentColor, Modifier.align(Alignment.BottomStart).padding(start = HUD_SIDE, bottom = HUD_BOTTOM)) {
+            HudButton(exitLabel, state.arrived && state.inspected && !state.canStudy, background, contentColor, Modifier.align(Alignment.BottomStart).padding(start = HUD_SIDE, bottom = HUD_BOTTOM)) {
                 state.leave()
             }
         }
-        // Flip takes Inspect's place, with Step inside just above it.
-        Column(
+        // The original wall controls remain available for the reverse of the painting.
+        Box(
             Modifier.align(Alignment.BottomEnd).padding(end = HUD_SIDE, bottom = HUD_BOTTOM),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalAlignment = Alignment.End,
+            contentAlignment = Alignment.CenterEnd,
         ) {
-            if (stepInsideLabel != null) {
-                HudButton(stepInsideLabel, state.canStepInside, background, contentColor, Modifier) {
-                    state.stepInside()
-                }
+            if (inspectLabel != null) {
+                HudButton(inspectLabel, state.canInspect, background, contentColor, Modifier, state::inspect)
             }
-            Box(contentAlignment = Alignment.CenterEnd) {
-                if (inspectLabel != null) {
-                    HudButton(inspectLabel, state.canInspect, background, contentColor, Modifier) {
-                        state.inspect()
-                    }
-                }
-                if (flipLabel != null) {
-                    HudButton(flipLabel, state.canFlip, background, contentColor, Modifier) {
-                        state.flip()
-                    }
-                }
+            if (flipLabel != null) {
+                HudButton(flipLabel, state.canFlip && !state.canStudy, background, contentColor, Modifier, state::flip)
+            }
+        }
+        AnimatedVisibility(visible = state.canStudy, enter = fadeIn(tween(400)), exit = fadeOut(tween(240))) {
+            key(painting.image) {
+                PaintingInspection(painting, analysis, background, contentColor, exitLabel,
+                    flipLabel.takeIf { state.canFlip }, stepInsideLabel.takeIf { state.canStepInside },
+                    onExit = state::leave, onFlip = state::flip, onStep = state::stepInside)
             }
         }
     }

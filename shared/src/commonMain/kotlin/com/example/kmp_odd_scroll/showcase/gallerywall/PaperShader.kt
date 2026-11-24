@@ -24,5 +24,5 @@ internal interface PaperShader {
 /** The platform's paper, or null to turn the painting over without the grain. */
 internal expect fun paperShader(): PaperShader?
 
-/** The platform can draw a textured mesh at all, so a painting can be turned over. */
-internal expect val paperFolds: Boolean
+/** Whether vertex meshes can be rendered directly into the gallery’s on-screen canvas. */
+internal expect val supportsHardwareMeshes: Boolean
