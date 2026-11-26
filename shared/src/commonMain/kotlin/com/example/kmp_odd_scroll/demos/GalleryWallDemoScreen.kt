@@ -260,7 +260,11 @@ fun GalleryWallDemoScreen() {
         vermeerLayout, vermeerFront, vermeerWalls, vermeerSurfaces, vermeerFigures, vermeerStudio,
     ) {
         vermeerLayout?.let {
-            GalleryWallScene(it, listOf(vermeerFront, vermeerWalls, vermeerSurfaces, vermeerFigures, vermeerStudio))
+            GalleryWallScene(
+                it,
+                listOf(vermeerFront, vermeerWalls, vermeerSurfaces, vermeerFigures, vermeerStudio),
+                panoramic = true,
+            )
         }
     }
 

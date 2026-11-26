@@ -20,10 +20,12 @@ import com.example.kmp_odd_scroll.showcase.internal.clamped
 import com.example.kmp_odd_scroll.showcase.internal.lerp
 import com.example.kmp_odd_scroll.showcase.internal.smoothstep
 import kotlin.math.PI
+import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlin.math.sin
+import kotlin.math.sqrt
 import kotlin.math.tan
 
 /*
@@ -62,7 +64,11 @@ import kotlin.math.tan
  * texture coordinates in texture pixels, a weight per vertex and the triangle
  * indices, padded to four bytes.
  */
-class GalleryWallScene(geometry: ByteArray, internal val textures: List<ImageBitmap>) {
+class GalleryWallScene(
+    geometry: ByteArray,
+    internal val textures: List<ImageBitmap>,
+    internal val panoramic: Boolean = false,
+) {
     internal val hFov: Float
     internal val tilt: Float
     internal val yawMax: Float
@@ -209,7 +215,6 @@ internal class EnterPainting {
         val cx = (left + right) / 2f
         val cy = (top + bottom) / 2f
         val focal = (right - left) / 2f / tan(scene.hFov / 2f)
-        this.focal = focal
         path(scene.route, smoothstep(0f, 1f, route.clamped(0f, 1f)), eye)
         val turn = yaw * free
         val tilt = scene.tilt + pitch * free
@@ -225,11 +230,16 @@ internal class EnterPainting {
         val walked = smoothstep(DECAL_FROM, DECAL_TO, route)
 
         val through = frame(scene, left, top, right, bottom, cx, cy, focal, fx, fy, fz, rx, rz, ux, uy, uz)
+        // Ease into the studio panorama after the eye passes the picture frame.
+        // Keep the outermost ray within 60 degrees, including on ultrawide screens.
+        val panorama = if (scene.panoramic && through) free * smoothstep(.5f, .85f, route) else 0f
+        val panoramaFocal = max(focal, max(cx, scope.size.width - cx) / (PI.toFloat() / 3f))
+        this.focal = lerp(focal, panoramaFocal, panorama)
         val layers: DrawScope.() -> Unit = {
             for (mesh in meshes) {
                 val layer = mesh.layer
                 if (layer.kind == WATER && water <= 0.001f) continue
-                project(mesh, focal, cx, cy, fx, fy, fz, rx, rz, ux, uy, uz, water, walked, time)
+                project(mesh, focal, panoramaFocal, panorama, cx, cy, fx, fy, fz, rx, rz, ux, uy, uz, water, walked, time)
                 drawIntoCanvas { it.drawVertices(mesh.vertices, BlendMode.Modulate, mesh.paint) }
             }
             // The painting itself over the scene until it gives way.
@@ -340,6 +350,8 @@ internal class EnterPainting {
     private fun project(
         mesh: Mesh,
         focal: Float,
+        panoramaFocal: Float,
+        panorama: Float,
         cx: Float,
         cy: Float,
         fx: Float, fy: Float, fz: Float,
@@ -366,8 +378,19 @@ internal class EnterPainting {
             val zc = dx * fx + dy * fy + dz * fz
             z[n] = zc
             val zz = if (zc < clip) clip else zc
-            out[2 * n] = cx + focal * (dx * rx + dz * rz) / zz
-            out[2 * n + 1] = cy - focal * (dx * ux + dy * uy + dz * uz) / zz
+            val x = dx * rx + dz * rz
+            val y = dx * ux + dy * uy + dz * uz
+            var screenX = focal * x / zz
+            var screenY = focal * y / zz
+            if (panorama > 0f && zc >= clip) {
+                // On a cylinder, yaw changes the bearing of an upright figure
+                // while its distance from the eye (and hence its height) holds.
+                val radius = sqrt(x * x + zc * zc)
+                screenX = lerp(screenX, panoramaFocal * atan2(x, zc), panorama)
+                screenY = lerp(screenY, panoramaFocal * y / radius, panorama)
+            }
+            out[2 * n] = cx + screenX
+            out[2 * n + 1] = cy - screenY
         }
         if (layer.kind == WATER) {
             // A small drift of the brushwork over the fixed sea, faded at the shore and the horizon.
