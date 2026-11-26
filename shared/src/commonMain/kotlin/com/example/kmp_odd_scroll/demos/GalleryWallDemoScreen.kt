@@ -103,7 +103,8 @@ fun GalleryWallDemoScreen() {
     val baseItems = remember(pictures) {
         pictures?.let { images -> museum.map { it.hang(images) } }
     }
-    val selected = if (state.looking) state.subject.mod(museum.size) else null
+    // Wait for the walk to finish before starting detail work on the web's UI thread.
+    val selected = if (state.looking && state.arrived) state.subject.mod(museum.size) else null
     var loaded by remember { mutableStateOf<Pair<Int, GalleryWallItem>?>(null) }
     LaunchedEffect(baseItems, selected) {
         if (baseItems != null && selected != null && selected != loaded?.first) {
@@ -128,7 +129,7 @@ fun GalleryWallDemoScreen() {
                 contentColor = palette.ink,
                 frame = gilt(YELLOW_GOLD, Shell),
                 state = state,
-                detailsReady = selected == loaded?.first,
+                detailsReady = selected != null && selected == loaded?.first,
                 onWallReady = { drawn = true },
             )
         }

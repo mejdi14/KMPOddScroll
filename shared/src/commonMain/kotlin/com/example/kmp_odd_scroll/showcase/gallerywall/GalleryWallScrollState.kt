@@ -123,6 +123,10 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
     var canLook by mutableStateOf(false)
         private set
 
+    /** The wall is centred and idle during the pause before the Look button appears. */
+    internal var resting by mutableStateOf(false)
+        private set
+
     /** Walking up to, or standing in front of, a painting; [leave] steps back. */
     var looking by mutableStateOf(false)
         private set
@@ -486,9 +490,9 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
         val nearest = hang.nearest(position)
         if (nearest != centred) centred = nearest
 
-        val ready = !looking && walk == 0f && apart == 0f && settled && idleMs >= LOOK_AFTER_MS &&
+        resting = entry == 1f && !looking && walk == 0f && apart == 0f && settled && !held &&
             abs(position - hang.centre(nearest)) < CENTRED
-        if (ready != canLook) canLook = ready
+        canLook = resting && idleMs >= LOOK_AFTER_MS
     }
 
     /** One frame of the hang springing after its target; false if it was already there. */
