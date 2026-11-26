@@ -17,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -40,9 +41,9 @@ import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 
 @Composable
-internal fun ToolButton(label: String, ink: Color, background: Color, action: () -> Unit) {
-    Box(Modifier.heightIn(min = 38.dp).clip(CircleShape).background(background)
-        .border(1.dp, ink.copy(alpha = 0.32f), CircleShape).clickable(role = Role.Button, onClick = action)
+internal fun ToolButton(label: String, ink: Color, background: Color, enabled: Boolean = true, action: () -> Unit) {
+    Box(Modifier.heightIn(min = 38.dp).alpha(if (enabled) 1f else 0.38f).clip(CircleShape).background(background)
+        .border(1.dp, ink.copy(alpha = 0.32f), CircleShape).clickable(enabled = enabled, role = Role.Button, onClick = action)
         .padding(horizontal = 14.dp), contentAlignment = Alignment.Center) {
         BasicText(label, style = TextStyle(color = ink, fontSize = 14.sp, fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic))
     }
@@ -52,9 +53,10 @@ internal fun ToolButton(label: String, ink: Color, background: Color, action: ()
 @Composable
 internal fun InspectionToolbar(
     requested: InspectionMode?, active: InspectionMode?, analysis: PaintingAnalysis?, c: InspectionControls,
-    selected: Int, compact: Boolean, short: Boolean, ink: Color, background: Color,
+    selected: Int, compact: Boolean, short: Boolean, ink: Color, background: Color, toolsEnabled: Boolean,
     onMode: (InspectionMode) -> Unit, onSelect: (Int?) -> Unit, onReplay: () -> Unit,
-    flipLabel: String?, stepLabel: String?, onFlip: () -> Unit, onStep: () -> Unit,
+    flipLabel: String?, stepLabel: String?, flipEnabled: Boolean, stepEnabled: Boolean,
+    onFlip: () -> Unit, onStep: () -> Unit,
 ) {
     Column(Modifier.fillMaxWidth().padding(horizontal = if (compact || short) 8.dp else 26.dp),
         horizontalAlignment = Alignment.CenterHorizontally) {
@@ -79,7 +81,7 @@ internal fun InspectionToolbar(
                     }
                     InspectionMode.Blueprint -> {
                         Adjust("Detail", c.amount, ink) { c.amount = it }
-                        ToolButton("Retrace", ink, background, onReplay)
+                        ToolButton("Retrace", ink, background, action = onReplay)
                     }
                     InspectionMode.Objects -> {
                         if (analysis != null && analysis.objects.isNotEmpty()) {
@@ -108,8 +110,8 @@ internal fun InspectionToolbar(
             }
         } else {
             Row(Modifier.padding(vertical = 3.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (flipLabel != null) ToolButton(flipLabel, ink, background, onFlip)
-                if (stepLabel != null) ToolButton(stepLabel, ink, background, onStep)
+                if (flipLabel != null) ToolButton(flipLabel, ink, background, flipEnabled, onFlip)
+                if (stepLabel != null) ToolButton(stepLabel, ink, background, stepEnabled, onStep)
             }
         }
         Spacer(Modifier.fillMaxWidth().padding(vertical = if (short) 2.dp else 6.dp)
@@ -119,8 +121,9 @@ internal fun InspectionToolbar(
             for (mode in InspectionMode.entries) {
                 val chosen = mode == requested
                 val tone = if (chosen) background else ink
-                Row(Modifier.clip(CircleShape).background(if (chosen) ink else Color.Transparent)
-                    .selectable(chosen, role = Role.Tab) { onMode(mode) }
+                Row(Modifier.alpha(if (toolsEnabled) 1f else 0.38f).clip(CircleShape)
+                    .background(if (chosen) ink else Color.Transparent)
+                    .selectable(chosen, enabled = toolsEnabled, role = Role.Tab) { onMode(mode) }
                     .heightIn(min = if (short) 34.dp else 40.dp)
                     .padding(horizontal = when { compact -> 5.dp; short -> 6.dp; else -> 13.dp }),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 6.dp)) {

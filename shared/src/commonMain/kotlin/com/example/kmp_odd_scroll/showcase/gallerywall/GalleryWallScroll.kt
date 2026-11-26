@@ -492,12 +492,12 @@ fun GalleryWallScroll(
             room.fit(size.width, size.height)
             art.ensure(room.backPx * BITMAP_SCALE)
             val subject = state.subject
-            room.stroll(state.entry, state.walk, state.apart, state.lift, state.fold, state.over, hang, subject)
+            room.stroll(state.entry, state.walk, state.apart, state.lift, hang, subject)
             // The painting up close is drawn again at the size it will end at,
             // and taken apart, as soon as it can be walked up to, so neither
             // the walk nor the inspection starts on a dropped frame.
             val close = if (state.canLook || state.walk > 0f) {
-                art.close(hang.wrap(subject), room.closePx).also { it.bare; it.sticks; it.reverse; it.sides }
+                art.close(hang.wrap(subject), room.closePx).also { it.bare; it.sticks; it.sides }
             } else {
                 null
             }
@@ -544,27 +544,21 @@ fun GalleryWallScroll(
             }
         }
         if (exitLabel != null) {
-            HudButton(exitLabel, state.arrived && state.inspected && !state.canStudy, background, contentColor, Modifier.align(Alignment.BottomStart).padding(start = HUD_SIDE, bottom = HUD_BOTTOM)) {
+            HudButton(exitLabel, state.arrived && state.inspected && !state.studyVisible, background, contentColor, Modifier.align(Alignment.BottomStart).padding(start = HUD_SIDE, bottom = HUD_BOTTOM)) {
                 state.leave()
             }
         }
-        // The original wall controls remain available for the reverse of the painting.
-        Box(
-            Modifier.align(Alignment.BottomEnd).padding(end = HUD_SIDE, bottom = HUD_BOTTOM),
-            contentAlignment = Alignment.CenterEnd,
-        ) {
-            if (inspectLabel != null) {
-                HudButton(inspectLabel, state.canInspect, background, contentColor, Modifier, state::inspect)
-            }
-            if (flipLabel != null) {
-                HudButton(flipLabel, state.canFlip && !state.canStudy, background, contentColor, Modifier, state::flip)
-            }
+        if (inspectLabel != null) {
+            HudButton(inspectLabel, state.canInspect, background, contentColor,
+                Modifier.align(Alignment.BottomEnd).padding(end = HUD_SIDE, bottom = HUD_BOTTOM), state::inspect)
         }
-        AnimatedVisibility(visible = state.canStudy, enter = fadeIn(tween(400)), exit = fadeOut(tween(240))) {
+        AnimatedVisibility(visible = state.studyVisible, enter = fadeIn(tween(400)), exit = fadeOut(tween(240))) {
             key(painting.image) {
                 PaintingInspection(painting, analysis, hung::value, background, contentColor, exitLabel,
-                    flipLabel.takeIf { state.canFlip }, stepInsideLabel.takeIf { state.canStepInside },
-                    onExit = state::leave, onFlip = state::flip, onStep = state::stepInside)
+                    flipLabel, stepInsideLabel, state) { bounds, progress, over ->
+                    val card = art.close(hang.wrap(state.subject), room.closePx)
+                    drawFold(card, bounds, progress, over)
+                }
             }
         }
     }
@@ -715,12 +709,6 @@ private class Room {
     var label = 1f
     var lift = 0f
 
-    /** How far the bare painting has turned over, linear in time; 0 lying still. */
-    var fold = 0f
-
-    /** The bare painting lies turned over, its back showing. */
-    var over = false
-
     /** How far the paintings either side of it have slid away, in card heights. */
     var part = 0f
 
@@ -745,11 +733,10 @@ private class Room {
 
     /**
      * Puts the eye [entry] of the way into the room and [walk] of the way up to
-     * painting [index], whose frame is [apart] of the way off, its glass
-     * [glass] of the way away and the painting itself [fold] of the way over,
-     * from its back if it lies [over].
+     * painting [index], whose frame is [apart] of the way off and its glass
+     * [glass] of the way away.
      */
-    fun stroll(entry: Float, walk: Float, apart: Float, glass: Float, fold: Float, over: Boolean, hang: Hang, index: Int) {
+    fun stroll(entry: Float, walk: Float, apart: Float, glass: Float, hang: Hang, index: Int) {
         val i = hang.wrap(index)
         // Near enough that the painting fills the frame one way or the other.
         val stand = max(
@@ -766,8 +753,6 @@ private class Room {
         val flown = ((apart - CRACK_TO) / (1f - CRACK_TO)).coerceIn(0f, 1f)
         fly = flown * flown
         lift = LIFT_EASE.transform(glass)
-        this.fold = fold
-        this.over = over
         val away = ((walk - PART_FROM) / (PART_TO - PART_FROM)).coerceIn(0f, 1f)
         part = PART * away * away * (3f - 2f * away)
         val straight = (walk / FLATTEN_TO).coerceIn(0f, 1f)
@@ -988,8 +973,7 @@ private fun DrawScope.drawCard(card: CardArt, left: Float, room: Room, wall: Col
  * The painting walked up to, being inspected, square on: the label and shadow
  * fading, the bare canvas, its glass sliding up off it, and the four sticks of
  * the frame on their way out past the four edges of the screen — each pushed
- * just far enough, from wherever the eye stands, to clear it. With all of that
- * gone, the canvas can be turned over to its back and lie that way.
+ * just far enough, from wherever the eye stands, to clear it.
  */
 private fun DrawScope.drawApart(card: CardArt, left: Float, room: Room, wall: Color) {
     val px = card.pxPerUnit
@@ -1009,11 +993,7 @@ private fun DrawScope.drawApart(card: CardArt, left: Float, room: Room, wall: Co
     } else {
         null
     }
-    when {
-        room.fold > 0f -> drawFold(card, left, sunk, room)
-        room.over -> drawSheet(card.reverse ?: bare, px, card.top, left, sunk, room)
-        else -> drawSheet(bare, px, card.top, left, sunk, room, glaze = glass)
-    }
+    drawSheet(bare, px, card.top, left, sunk, room, glaze = glass)
 
     val sticks = card.sticks ?: return
     val z = DEPTH - card.depth - room.eyeZ
@@ -1036,17 +1016,11 @@ private fun DrawScope.drawApart(card: CardArt, left: Float, room: Room, wall: Co
 private val paper = PaperFold()
 
 /**
- * The canvas, [inset] off the wall, turned [Room.fold] of the way over — to
- * its back, or from it if it lies [Room.over]. Only ever with the eye square
- * on and the glass gone, so the canvas lies on the screen as a plain
- * rectangle the fold starts and ends on.
+ * The canvas turned [progress] of the way over from its current side.
+ * The fold starts and ends on the inspection stage's [frame].
  */
-private fun DrawScope.drawFold(card: CardArt, left: Float, inset: Float, room: Room) {
+private fun DrawScope.drawFold(card: CardArt, frame: Rect, progress: Float, over: Boolean) {
     val sides = card.sides ?: return
-    val px = card.pxPerUnit
-    val f = room.focal
-    val z = DEPTH - inset - room.eyeZ
-    if (z <= 0.05f) return
     val w = card.face.width
     val h = card.face.height
     val o = card.opening.toFloat()
@@ -1056,16 +1030,16 @@ private fun DrawScope.drawFold(card: CardArt, left: Float, inset: Float, room: R
     paper.draw(
         scope = this,
         image = sides,
-        frontLeft = if (room.over) back else painting,
-        backLeft = if (room.over) painting else back,
+        frontLeft = if (over) back else painting,
+        backLeft = if (over) painting else back,
         srcTop = o,
         srcWidth = w - 2f * o,
         srcHeight = h - 2f * o,
-        left = room.cx + f * (left + o / px - room.eyeX) / z,
-        top = room.cy + f * (card.top + o / px - room.eyeY) / z,
-        right = room.cx + f * (left + (w - o) / px - room.eyeX) / z,
-        bottom = room.cy + f * (card.top + (h - o) / px - room.eyeY) / z,
-        progress = room.fold,
+        left = frame.left,
+        top = frame.top,
+        right = frame.right,
+        bottom = frame.bottom,
+        progress = progress,
     )
 }
 
@@ -1560,7 +1534,6 @@ private class CardArt(
     /** The face's opening, in from each side, in its pixels. */
     val opening: Int = 0,
     unframe: (() -> ImageBitmap)? = null,
-    turn: (() -> ImageBitmap)? = null,
     pair: (() -> ImageBitmap)? = null,
     split: (() -> List<Stick>)? = null,
 ) {
@@ -1570,11 +1543,8 @@ private class CardArt(
     /** The canvas out of its frame, the size of the face; drawn the first time it is asked for. */
     val bare: ImageBitmap? by lazy { unframe?.invoke() }
 
-    /** The back of the canvas as [bare] lies; drawn the first time it is asked for. */
-    val reverse: ImageBitmap? by lazy { turn?.invoke() }
-
     /**
-     * [bare] and [reverse] side by side, the face's width apart, so one mesh
+     * The front and back side by side, the face's width apart, so one mesh
      * can turn the canvas over showing both; drawn the first time asked for.
      */
     val sides: ImageBitmap? by lazy { pair?.invoke() }
@@ -1700,7 +1670,6 @@ private class WallArt(
             glass = frame.glass,
             opening = border,
             unframe = { paint(outerW, outerH) { canvas() } },
-            turn = { paint(outerW, outerH) { canvas(reverse) } },
             pair = { paint(2 * outerW, outerH) { canvas(); canvas(reverse, outerW + border) } },
             split = { cut(face, border) },
         )

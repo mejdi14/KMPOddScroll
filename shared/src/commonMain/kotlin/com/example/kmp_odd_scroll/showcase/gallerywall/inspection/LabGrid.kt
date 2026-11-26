@@ -15,22 +15,24 @@ import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.hypot
 import kotlin.math.max
+import kotlin.math.min
 
 /*
  * The bench the painting is studied on: squared paper, as under a
  * conservator's lens. Fine lines a cell apart, a heavier one every few cells
- * and heavier still the two through the painting's middle, with a ruler's
- * ticks along those two. It is laid out from the middle of the painting, so
- * the painting sits square on it, and it fades out before the edges of the
- * stage rather than stop at them.
+ * and heavier still the two through the painting's middle, with ruler ticks
+ * along those two and marked intersections on the major lines. The grid is
+ * anchored to the painting's middle and fades out towards the stage edges.
  */
 
 private val CELL = 12.dp
 private const val MAJOR = 5
 
-private const val MINOR_ALPHA = 0.07f
-private const val MAJOR_ALPHA = 0.14f
-private const val AXIS_ALPHA = 0.24f
+private const val MINOR_ALPHA = 0.09f
+private const val MAJOR_ALPHA = 0.18f
+private const val AXIS_ALPHA = 0.28f
+private const val POINT_ALPHA = 0.60f
+private val POINT_RADIUS = 2.dp
 
 /** Ruler ticks across the two axes, a minor and a major one. */
 private val TICK = 2.5.dp
@@ -122,6 +124,26 @@ internal fun LabGrid(ink: Color, centre: DrawScope.() -> Offset, reveal: () -> F
             if (t <= 0f) continue
             val l = tickLength(k)
             drawLine(ink.copy(alpha = AXIS_ALPHA * t), Offset(o.x - l, y), Offset(o.x + l, y), hair)
+        }
+
+        // Mark the major intersections as soon as both lines reach them.
+        val spacing = cell * MAJOR
+        val majorColumns = ceil(reachX / spacing).toInt()
+        val majorRows = ceil(reachY / spacing).toInt()
+        val radius = POINT_RADIUS.toPx()
+        for (i in -majorColumns..majorColumns) {
+            val dx = i * spacing
+            val x = o.x + dx
+            if (x < 0f || x > size.width) continue
+            val vertical = reachY * drawn(dx)
+            for (j in -majorRows..majorRows) {
+                val dy = j * spacing
+                val y = o.y + dy
+                if (y < 0f || y > size.height) continue
+                val horizontal = reachX * drawn(dy)
+                val t = (min(vertical - abs(dy), horizontal - abs(dx)) / cell).coerceIn(0f, 1f)
+                if (t > 0f) drawCircle(ink.copy(alpha = POINT_ALPHA * t), radius, Offset(x, y))
+            }
         }
 
         val fade = FADE.toPx()

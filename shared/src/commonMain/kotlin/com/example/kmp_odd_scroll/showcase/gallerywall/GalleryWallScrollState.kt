@@ -1,6 +1,7 @@
 package com.example.kmp_odd_scroll.showcase.gallerywall
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -138,9 +139,12 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
     var canFlip by mutableStateOf(false)
         private set
 
-    /** The unframed front is stationary and ready for the inspection tools on every renderer. */
-    internal var canStudy by mutableStateOf(false)
+    /** The inspection stage stays open while the bare painting turns over. */
+    internal var studyVisible by mutableStateOf(false)
         private set
+
+    /** The unframed front is stationary and ready for the inspection tools on every renderer. */
+    internal val canStudy: Boolean get() = studyVisible && !flipping && !over
 
     /** The inspected painting is lying face up and still, so [stepInside] will go into it. */
     var canStepInside by mutableStateOf(false)
@@ -183,13 +187,13 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
         private set
 
     /** How far the bare painting has turned over, 0 to 1, linear in time; 0 lying still. */
-    internal var fold = 0f
+    internal var fold by mutableFloatStateOf(0f)
         private set
 
-    private var flipping = false
+    private var flipping by mutableStateOf(false)
 
     /** The bare painting lies turned over, its back showing, until it is flipped again or stepped away from. */
-    internal var over = false
+    internal var over by mutableStateOf(false)
         private set
 
     /** How far into the painting, 0 in front of it and 1 inside, linear in time. */
@@ -259,7 +263,6 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
         if (!canFlip) return
         flipping = true
         canFlip = false
-        canStudy = false
         canStepInside = false
     }
 
@@ -272,7 +275,7 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
         if (!canStepInside) return
         inside = true
         canFlip = false
-        canStudy = false
+        studyVisible = false
         canStepInside = false
         walkPending = scene != null
     }
@@ -294,7 +297,7 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
         looking = false
         inspected = false
         canFlip = false
-        canStudy = false
+        studyVisible = false
         canStepInside = false
         flipping = false
         fold = 0f
@@ -420,7 +423,6 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
                 over = !over
                 flipping = false
             }
-            moved = true
         }
 
         // Into the painting and back out, the head easing after the drags.
@@ -445,9 +447,8 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
 
         if (moved) tick++
         val hang = hang ?: return
-        val paintingReady = arrived && inspected && lift >= 1f && !flipping && !inside && !stepping
-        canStudy = paintingReady && !over
-        canFlip = paintingReady && hang.framed(visited) && supportsHardwareMeshes
+        studyVisible = arrived && inspected && lift >= 1f && !inside && !stepping
+        canFlip = studyVisible && !flipping && hang.framed(visited) && supportsHardwareMeshes
         canStepInside = canStudy && supportsHardwareMeshes
         val nearest = hang.nearest(position)
         if (nearest != centred) centred = nearest

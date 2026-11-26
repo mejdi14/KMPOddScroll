@@ -35,6 +35,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.kmp_odd_scroll.showcase.gallerywall.GalleryWallItem
+import com.example.kmp_odd_scroll.showcase.gallerywall.GalleryWallScrollState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.ExperimentalResourceApi
@@ -97,10 +98,11 @@ internal fun PaintingInspection(
     exitLabel: String?,
     flipLabel: String?,
     stepLabel: String?,
-    onExit: () -> Unit,
-    onFlip: () -> Unit,
-    onStep: () -> Unit,
+    state: GalleryWallScrollState,
+    drawFold: DrawScope.(frame: Rect, progress: Float, over: Boolean) -> Unit,
 ) {
+    val canStudy = state.canStudy
+    val reverseOrTurning = state.studyVisible && !canStudy
     var requested by remember(item.image) { mutableStateOf<InspectionMode?>(null) }
     var active by remember(item.image) { mutableStateOf<InspectionMode?>(null) }
     var leaving by remember { mutableStateOf(false) }
@@ -127,7 +129,10 @@ internal fun PaintingInspection(
         }
     }
     DisposableEffect(effect) { onDispose { effect?.close() } }
-    val onExitNow by rememberUpdatedState(onExit)
+    LaunchedEffect(reverseOrTurning) {
+        if (reverseOrTurning) requested = null
+    }
+    val onExitNow by rememberUpdatedState(state::leave)
     LaunchedEffect(requested, analysis, replay, leaving) {
         if (active != requested || leaving || (active == InspectionMode.Blueprint && replay > 0)) {
             progress.animateTo(0f, tween(350))
@@ -194,7 +199,7 @@ internal fun PaintingInspection(
                 LabGrid(ink, { rest().center }, grid::value, Modifier.matchParentSize())
                 Canvas(Modifier.matchParentSize()
                     .semantics { contentDescription = listOfNotNull(item.title, active?.label).joinToString(", ") }
-                    .pointerInput(effect, c) {
+                    .pointerInput(effect, c, canStudy, exitLabel) {
                         awaitEachGesture {
                             val down = awaitFirstDown()
                             val microscope = effect as? MicroscopeInspection
@@ -225,6 +230,7 @@ internal fun PaintingInspection(
                             } while (true)
                             if (!moved && (active == InspectionMode.Objects || active == InspectionMode.Colors))
                                 toggle(effect?.hit(geometry.frame, down.position, c))
+                            if (!moved && !canStudy && exitLabel == null) leaving = true
                             down.consume()
                         }
                     }
@@ -247,16 +253,27 @@ internal fun PaintingInspection(
                     val t = progress.value
                     val from = hungAt()
                     val home = if (from.isEmpty) rest() else lerp(from, rest(), ease(settle.value))
-                    val frame = lerp(home, toolFrame(home, active), ease(t))
+                    val fold = state.fold
+                    val over = state.over
+                    val frame = if (fold > 0f || over) home else lerp(home, toolFrame(home, active), ease(t))
                     geometry.frame = frame
                     if (!frame.isEmpty) {
-                        if (effect == null) paintImage(item.image, frame) else effect.draw(this, frame, t, c)
+                        when {
+                            fold > 0f -> drawFold(frame, fold, over)
+                            over -> paintImage(item.back ?: item.image, frame)
+                            effect != null -> effect.draw(this, frame, t, c)
+                            else -> paintImage(item.image, frame)
+                        }
                     }
                 }
             }
+            // Keep the action buttons measured while turning so the stage keeps its height.
             InspectionToolbar(requested, active, analysis, c, selection, compact, short, ink, background,
-                onMode = { if (!leaving) requested = it }, onSelect = toggle, onReplay = { replay++ },
-                flipLabel = flipLabel, stepLabel = stepLabel, onFlip = onFlip, onStep = onStep)
+                toolsEnabled = canStudy, onMode = { if (!leaving) requested = it }, onSelect = toggle, onReplay = { replay++ },
+                flipLabel = flipLabel.takeIf { state.canFlip || reverseOrTurning },
+                stepLabel = stepLabel.takeIf { state.canStepInside || reverseOrTurning },
+                flipEnabled = state.canFlip && requested == null, stepEnabled = state.canStepInside,
+                onFlip = state::flip, onStep = state::stepInside)
         }
     }
 }
