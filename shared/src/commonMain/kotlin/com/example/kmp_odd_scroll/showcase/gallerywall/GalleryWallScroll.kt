@@ -511,8 +511,6 @@ fun GalleryWallScroll(
                             last = change.position
                             if (travel > TAP_SLOP) dragging = true
                             if (dragging) {
-                                // The back wall follows the finger, pixel for
-                                // pixel; inside a painting, the scene does.
                                 if (state.inside) state.lookAround(dx, dy, if (state.scene != null) enter.focal else room.focal)
                                 else if (!state.looking) state.nudge(-dx / room.backPx)
                                 change.consume()

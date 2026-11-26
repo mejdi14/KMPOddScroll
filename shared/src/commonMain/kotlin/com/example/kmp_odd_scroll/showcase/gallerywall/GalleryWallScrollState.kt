@@ -347,17 +347,16 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
         if (scene == null) {
             lookBy(dx, dy, focal, look[0], look[1], look)
         } else {
-            // Into the scene: a drag right turns right, towards the cliff, and a drag up looks up.
             if (scene.yawMax >= PI_F) {
                 // Built all the way round, it turns on for ever, kept within half a turn of ahead so
                 // stepping out turns back the short way.
-                look[0] += dx / focal
+                look[0] -= dx / focal
                 if (look[0] > PI_F) { look[0] -= 2f * PI_F; yaw -= 2f * PI_F }
                 if (look[0] < -PI_F) { look[0] += 2f * PI_F; yaw += 2f * PI_F }
             } else {
-                look[0] = (look[0] + dx / focal).clamped(-scene.yawMax, scene.yawMax)
+                look[0] = (look[0] - dx / focal).clamped(-scene.yawMax, scene.yawMax)
             }
-            look[1] = (look[1] - dy / focal).clamped(-scene.pitchDown, scene.pitchUp)
+            look[1] = (look[1] + dy / focal).clamped(-scene.pitchDown, scene.pitchUp)
         }
     }
 

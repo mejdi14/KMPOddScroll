@@ -370,10 +370,10 @@ private inline fun cellIndices(cols: Int, rows: Int, keep: (Int) -> Boolean): Li
 /** How far stepped in the room has faded to dark behind the painting. */
 internal fun veil(progress: Float): Float = smoothstep(0f, 0.45f, progress)
 
-/** Turns the head by a drag of [dx], [dy] pixels through a focal length of [focal]: the scene follows the finger. */
+/** Turns the head by a drag of [dx], [dy] pixels through a focal length of [focal]. */
 internal fun lookBy(dx: Float, dy: Float, focal: Float, yaw: Float, pitch: Float, out: FloatArray) {
-    out[0] = (yaw - dx / focal).clamped(-YAW_MAX, YAW_MAX)
-    out[1] = (pitch - dy / focal).clamped(-PITCH_MAX, PITCH_MAX)
+    out[0] = (yaw + dx / focal).clamped(-YAW_MAX, YAW_MAX)
+    out[1] = (pitch + dy / focal).clamped(-PITCH_MAX, PITCH_MAX)
 }
 
 /** Walks in or back by a scroll of [by], within reach. */
