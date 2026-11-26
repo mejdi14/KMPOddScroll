@@ -11,7 +11,6 @@ import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.withTransform
-import kotlin.math.max
 import kotlin.math.min
 
 internal enum class InspectionMode(val label: String, val gesture: String) {
@@ -62,30 +61,15 @@ internal fun DrawScope.paintImage(
     }
 }
 
-/** The most of a stage of [size] the painting may cover. */
-private const val FIT = 0.93f
-
 /** The tools that orbit the painting stand it this much further back, to leave room to turn it. */
-private const val ORBIT_BACK = 0.80f / FIT
+private const val ORBIT_BACK = 0.86f
 
-/**
- * Where the painting lies in a stage of [size]: where it [hung] on the wall,
- * in the stage's coordinates, so the study opens on it as it is, without a
- * zoom. Only if that is more than the stage can hold is it brought down to
- * fit, and then moved in from the edges. Without [hung], it is fitted to the
- * stage with a margin.
- */
-internal fun restingFrame(size: Size, image: ImageBitmap, hung: Rect): Rect {
-    val fit = min(size.width / image.width, size.height / image.height) * (if (hung.isEmpty) FIT else 1f)
-    val w0 = if (hung.isEmpty) image.width * fit else hung.width
-    val h0 = if (hung.isEmpty) image.height * fit else hung.height
-    val k = min(1f, min(image.width * fit / w0, image.height * fit / h0))
-    val halfW = w0 * k * 0.5f
-    val halfH = h0 * k * 0.5f
-    val centre = if (hung.isEmpty) Offset(size.width * 0.5f, size.height * 0.5f) else hung.center
-    val x = centre.x.coerceIn(halfW, max(halfW, size.width - halfW))
-    val y = centre.y.coerceIn(halfH, max(halfH, size.height - halfH))
-    return Rect(x - halfW, y - halfH, x + halfW, y + halfH)
+/** Fit the full image in the space between the controls. */
+internal fun restingFrame(size: Size, image: ImageBitmap): Rect {
+    val scale = min(size.width / image.width, size.height / image.height) * 0.93f
+    val width = image.width * scale
+    val height = image.height * scale
+    return Rect(Offset((size.width - width) / 2f, (size.height - height) / 2f), Size(width, height))
 }
 
 /** The painting at [rest] as tool [mode] holds it. */

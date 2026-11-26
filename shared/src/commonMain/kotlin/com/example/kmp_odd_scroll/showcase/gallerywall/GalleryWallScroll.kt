@@ -3,6 +3,7 @@ package com.example.kmp_odd_scroll.showcase.gallerywall
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -26,6 +27,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -70,6 +72,7 @@ import com.example.kmp_odd_scroll.showcase.gallerywall.inspection.AnalysisCache
 import com.example.kmp_odd_scroll.showcase.gallerywall.inspection.PaintingAnalysis
 import com.example.kmp_odd_scroll.showcase.gallerywall.inspection.PaintingInspection
 import com.example.kmp_odd_scroll.showcase.internal.clamped
+import kotlinx.coroutines.flow.first
 import org.jetbrains.compose.resources.DrawableResource
 import kotlin.math.PI
 import kotlin.math.abs
@@ -379,10 +382,10 @@ fun rememberGalleryWallScrollState(walkIn: Boolean = true): GalleryWallScrollSta
  * @param inspectLabel the button, bottom right up close, that takes the frame
  *   and the glass off, or null for none — a host can show its own off
  *   [GalleryWallScrollState.canInspect].
- * @param flipLabel the button, bottom right once the frame and glass are off,
+ * @param flipLabel the button, bottom left once the frame and glass are off,
  *   that turns the painting over and back, or null for none — a host can show its own
  *   off [GalleryWallScrollState.canFlip].
- * @param stepInsideLabel the button above Flip that enters the inspected
+ * @param stepInsideLabel the button, bottom right, that enters the inspected
  *   painting while it is face up, or null for none. A host can show its own off
  *   [GalleryWallScrollState.canStepInside].
  * @param state also lets a host's own controls move it.
@@ -418,6 +421,15 @@ fun GalleryWallScroll(
     SideEffect { state.hang = hang }
     val inspectionCache = remember { AnalysisCache() }
     val painting = items[hang.wrap(state.subject)]
+    // The grid belongs to the whole inspection, including a trip inside and back.
+    val gridReveal = remember(state) { Animatable(0f) }
+    LaunchedEffect(state, state.inspected) {
+        if (state.inspected) {
+            gridReveal.snapTo(0f)
+            snapshotFlow { state.studyVisible }.first { it }
+            gridReveal.animateTo(1f, tween(640))
+        }
+    }
     // Start measuring during the walk up so the first tool can use the masks immediately.
     val analysis = if (state.looking) key(
         painting.image, painting.depth, painting.inspectionMask, painting.inspectionMaskResource,
@@ -554,7 +566,7 @@ fun GalleryWallScroll(
         }
         AnimatedVisibility(visible = state.studyVisible, enter = fadeIn(tween(400)), exit = fadeOut(tween(240))) {
             key(painting.image) {
-                PaintingInspection(painting, analysis, hung::value, background, contentColor, exitLabel,
+                PaintingInspection(painting, analysis, hung::value, gridReveal::value, exitLabel,
                     flipLabel, stepInsideLabel, state) { bounds, progress, over ->
                     val card = art.close(hang.wrap(state.subject), room.closePx)
                     drawFold(card, bounds, progress, over)

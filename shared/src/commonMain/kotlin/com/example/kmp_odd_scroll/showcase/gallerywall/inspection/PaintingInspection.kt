@@ -20,10 +20,9 @@ import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.lerp
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -35,6 +34,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.toSize
 import com.example.kmp_odd_scroll.showcase.gallerywall.GalleryWallItem
 import com.example.kmp_odd_scroll.showcase.gallerywall.GalleryWallScrollState
 import kotlinx.coroutines.Dispatchers
@@ -73,28 +73,22 @@ internal class AnalysisCache {
 private class StageGeometry {
     var frame = Rect.Zero
     var root: LayoutCoordinates? = null
-    var stage: LayoutCoordinates? = null
+    var bounds by mutableStateOf(Rect.Zero)
 }
 
-/**
- * The study fading in over the bare painting, which moves in from where it
- * hung only if the stage cannot hold it there.
- */
 private const val SETTLE_MS = 400
 
-/**
- * The study of [item], with its frame and glass off. It fills the same box as
- * the wall, where the bare canvas lies at [hung], so the painting stays as it
- * is and the bench comes up round it.
- */
+private val SurfaceModes = listOf(InspectionMode.Lighting, InspectionMode.Microscope, InspectionMode.Colors)
+private val StructureModes = listOf(InspectionMode.Explode, InspectionMode.PointCloud, InspectionMode.Blueprint, InspectionMode.Objects)
+
+/** The bare canvas travels between its wall position and the center of the archive. */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 internal fun PaintingInspection(
     item: GalleryWallItem,
     analysis: PaintingAnalysis?,
     hung: () -> Rect,
-    background: Color,
-    ink: Color,
+    gridReveal: () -> Float,
     exitLabel: String?,
     flipLabel: String?,
     stepLabel: String?,
@@ -108,6 +102,8 @@ internal fun PaintingInspection(
     var leaving by remember { mutableStateOf(false) }
     var replay by remember { mutableIntStateOf(0) }
     val progress = remember { Animatable(0f) }
+    val settle = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { settle.animateTo(1f, tween(SETTLE_MS)) }
     val c = remember(active, item.image) { InspectionControls(active) }
     val geometry = remember { StageGeometry() }
     var selection by remember(c) { mutableIntStateOf(-1) }
@@ -135,10 +131,11 @@ internal fun PaintingInspection(
     val onExitNow by rememberUpdatedState(state::leave)
     LaunchedEffect(requested, analysis, replay, leaving) {
         if (active != requested || leaving || (active == InspectionMode.Blueprint && replay > 0)) {
-            progress.animateTo(0f, tween(350))
+            if (progress.value > 0f) progress.animateTo(0f, tween(350))
             active = null
         }
         if (leaving) {
+            settle.animateTo(0f, tween(SETTLE_MS))
             onExitNow()
             return@LaunchedEffect
         }
@@ -159,43 +156,44 @@ internal fun PaintingInspection(
         c.selected = selection
         if (selection >= 0) focus.animateTo(1f, tween(460)) { c.focus = value }
     }
-    val exitStudy = { if (state.inside) state.leave() else leaving = true }
-    BackHandler(enabled = !leaving) {
-        if (requested != null || active != null) requested = null else exitStudy()
+    val exitStudy = {
+        if (!leaving && state.studyVisible) {
+            if (state.inside) state.leave() else leaving = true
+        }
     }
-    val settle = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
-        settle.animateTo(1f, tween(SETTLE_MS))
+    BackHandler(enabled = state.studyVisible) {
+        if (!leaving) {
+            if (requested != null || active != null) requested = null else exitStudy()
+        }
     }
-    // Where the painting hung, in the stage's own coordinates; read as the stage is drawn.
-    val hungAt: () -> Rect = {
-        val root = geometry.root
-        val stage = geometry.stage
-        if (root != null && stage != null && root.isAttached && stage.isAttached) {
-            hung().translate(-root.localPositionOf(stage, Offset.Zero))
-        } else Rect.Zero
-    }
-    val rest: Size.() -> Rect = { restingFrame(this, item.image, hungAt()) }
-    BoxWithConstraints(Modifier.fillMaxSize().background(background).onPlaced { geometry.root = it }) {
-        val compact = maxWidth < 620.dp
-        val short = maxHeight < 440.dp
-        val side = if (compact || short) 14.dp else 30.dp
-        Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-            Row(Modifier.fillMaxWidth().padding(start = side, end = side, top = if (short) 4.dp else 12.dp),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Column(Modifier.weight(1f)) {
-                    BasicText(item.title, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        style = TextStyle(color = ink, fontFamily = FontFamily.Serif, fontSize = if (short) 18.sp else 24.sp))
-                    if (!short) BasicText(listOf(item.artist, item.date).filter { it.isNotEmpty() }.joinToString("  ·  "),
-                        style = TextStyle(color = ink.copy(alpha = 0.70f), fontSize = 12.sp))
+    val tool = requested ?: active
+    Box(Modifier.fillMaxSize().clipToBounds().background(ArchivePaper).onPlaced { geometry.root = it }) {
+        LabGrid(ArchiveInk, ArchivePaper, {
+            restingFrame(geometry.bounds.size, item.image).translate(geometry.bounds.topLeft)
+        }, gridReveal, state::entryWave, Modifier.matchParentSize())
+        ArchiveLayout(
+            title = item.title, exitLabel = exitLabel, onExit = exitStudy,
+            index = { end, compact ->
+                val modes = if (end) StructureModes else SurfaceModes
+                if (tool != null && tool !in modes) {
+                    InspectionAdjustments(requested, active, analysis, c, selection, toggle) { replay++ }
+                } else {
+                    ArchiveModeIndex(modes, tool, canStudy && !leaving, end, compact,
+                        onMode = { requested = it })
                 }
-                if (requested != null || active != null) ToolButton("Reset", ink, background) { requested = null }
-                if (exitLabel != null) ToolButton(exitLabel, ink, background, action = exitStudy)
-            }
-            Box(Modifier.fillMaxWidth().weight(1f).clipToBounds().onPlaced { geometry.stage = it }) {
-                LabGrid(ink, background, rest, state::entryWave, Modifier.matchParentSize())
-                Canvas(Modifier.matchParentSize()
-                    .semantics { contentDescription = listOfNotNull(item.title, active?.label).joinToString(", ") }
+            },
+            action = { end ->
+                if (tool != null) {
+                    if (end) ArchiveAction("Reset", "↺", true, enabled = !leaving) { requested = null }
+                } else if (end && stepLabel != null && (state.canStepInside || studyLocked)) {
+                    ArchiveAction(stepLabel, "→", true, state.canStepInside && !leaving, ArchiveAccent, state::stepInside)
+                } else if (!end && flipLabel != null && (state.canFlip || studyLocked)) {
+                    ArchiveAction(flipLabel, "↪", false, state.canFlip && !leaving, onClick = state::flip)
+                }
+            },
+        ) { stage ->
+            val input = if (state.studyVisible && !leaving) {
+                Modifier
                     .pointerInput(effect, c, canStudy, exitLabel) {
                         awaitEachGesture {
                             val down = awaitFirstDown()
@@ -227,7 +225,7 @@ internal fun PaintingInspection(
                             } while (true)
                             if (!moved && (active == InspectionMode.Objects || active == InspectionMode.Colors))
                                 toggle(effect?.hit(geometry.frame, down.position, c))
-                            if (!moved && !canStudy && exitLabel == null) exitStudy()
+                            if (!moved && active == null && requested == null && exitLabel == null) exitStudy()
                             down.consume()
                         }
                     }
@@ -246,31 +244,88 @@ internal fun PaintingInspection(
                             }
                         }
                     }
-                ) {
-                    val t = progress.value
-                    val from = hungAt()
-                    val home = if (from.isEmpty) size.rest() else lerp(from, size.rest(), ease(settle.value))
-                    val fold = state.fold
-                    val over = state.over
-                    val frame = if (fold > 0f || over) home else lerp(home, toolFrame(home, active), ease(t))
-                    geometry.frame = frame
-                    if (!frame.isEmpty) {
-                        when {
-                            fold > 0f -> drawFold(frame, fold, over)
-                            over -> paintImage(item.back ?: item.image, frame)
-                            effect != null -> effect.draw(this, frame, t, c)
-                            else -> paintImage(item.image, frame)
-                        }
+            } else Modifier
+            Canvas(stage.onPlaced { coordinates ->
+                geometry.root?.let { root ->
+                    geometry.bounds = Rect(root.localPositionOf(coordinates, Offset.Zero), coordinates.size.toSize())
+                }
+            }.semantics {
+                contentDescription = listOfNotNull(item.title, active?.label).joinToString(", ")
+            }.then(input)) {
+                val t = progress.value
+                val from = hung().translate(-geometry.bounds.topLeft)
+                val rest = restingFrame(size, item.image)
+                // Step inside picks up the painting at the wall after its grid pulse ends.
+                val position = settle.value * (1f - ease(state.entryWave))
+                val home = if (from.isEmpty) rest else lerp(from, rest, position)
+                val fold = state.fold
+                val over = state.over
+                val frame = if (fold > 0f || over) home else lerp(home, toolFrame(home, active), ease(t))
+                geometry.frame = frame
+                if (!frame.isEmpty) {
+                    when {
+                        fold > 0f -> drawFold(frame, fold, over)
+                        over -> paintImage(item.back ?: item.image, frame)
+                        effect != null -> clipRect { effect.draw(this, frame, t, c) }
+                        else -> paintImage(item.image, frame)
                     }
                 }
             }
-            // Keep the action buttons measured while turning so the stage keeps its height.
-            InspectionToolbar(requested, active, analysis, c, selection, compact, short, ink, background,
-                toolsEnabled = canStudy, onMode = { if (!leaving) requested = it }, onSelect = toggle, onReplay = { replay++ },
-                flipLabel = flipLabel.takeIf { state.canFlip || studyLocked },
-                stepLabel = stepLabel.takeIf { state.canStepInside || studyLocked },
-                flipEnabled = state.canFlip && requested == null, stepEnabled = state.canStepInside && !leaving,
-                onFlip = state::flip, onStep = state::stepInside)
+        }
+    }
+}
+
+@Composable
+private fun ArchiveLayout(
+    title: String,
+    exitLabel: String?,
+    onExit: () -> Unit,
+    index: @Composable (end: Boolean, compact: Boolean) -> Unit,
+    action: @Composable (end: Boolean) -> Unit,
+    painting: @Composable (Modifier) -> Unit,
+) {
+    BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+        val portrait = maxHeight > maxWidth
+        val compact = maxHeight < 460.dp || maxWidth < 600.dp
+        val inset = (maxWidth * 0.025f).coerceIn(12.dp, 36.dp)
+        val verticalInset = (maxHeight * 0.025f).coerceIn(4.dp, 24.dp)
+        val rail = (maxWidth * 0.12f).coerceIn(88.dp, 150.dp).coerceAtMost(maxWidth * 0.35f)
+        val titleWidth = minOf(rail * 1.25f, maxWidth * 0.44f)
+        val titleHeight = minOf(if (compact) 62.dp else 86.dp, maxHeight * 0.23f)
+        val foot = minOf(48.dp, maxHeight * 0.18f)
+        // In tall windows the two indexes sit below the canvas, still at opposite edges.
+        val indexTop = if (portrait) maxOf(titleHeight, maxHeight * 0.59f) else titleHeight
+        val stage = if (portrait) {
+            Modifier.align(Alignment.TopCenter).padding(top = titleHeight + verticalInset)
+                .fillMaxWidth(0.85f).height((indexTop - titleHeight).coerceAtLeast(0.dp))
+        } else {
+            Modifier.align(Alignment.Center).padding(horizontal = inset * 2 + rail)
+                .fillMaxWidth().fillMaxHeight(0.74f)
+        }
+        painting(stage)
+
+        Box(Modifier.fillMaxSize().padding(horizontal = inset, vertical = verticalInset)) {
+            BasicText(
+                title, Modifier.align(Alignment.TopStart).widthIn(max = titleWidth).padding(top = 5.dp),
+                maxLines = 2, overflow = TextOverflow.Ellipsis,
+                style = TextStyle(color = ArchiveInk, fontFamily = FontFamily.Serif,
+                    fontSize = if (compact) 21.sp else 28.sp, lineHeight = if (compact) 23.sp else 31.sp),
+            )
+            if (exitLabel != null) {
+                Box(Modifier.align(Alignment.TopEnd).width(rail)) {
+                    ArchiveAction(exitLabel, "×", true, onClick = onExit)
+                }
+            }
+            Row(
+                Modifier.fillMaxSize().padding(top = indexTop, bottom = foot),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.width(rail)) { index(false, compact) }
+                Box(Modifier.width(rail)) { index(true, compact) }
+            }
+            Box(Modifier.align(Alignment.BottomStart).width(rail)) { action(false) }
+            Box(Modifier.align(Alignment.BottomEnd).width(rail)) { action(true) }
         }
     }
 }
