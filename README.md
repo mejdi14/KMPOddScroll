@@ -195,10 +195,11 @@ imagined views created with ImageGen extend the room beyond the painting.
 The gallery presents the supplied photograph of Johannes Vermeer's *The Art of
 Painting* as a worn paper print. Turn it over to see an imagined chalk study of
 the model holding her book, created for the demo with ImageGen.
-Step inside to look past the tapestry and turn from the painter and his
-model toward a Delft flower vase and an artist’s desk with an unfinished river
-study. A girl peeks through the open door while an elderly woman in blue brocade
-fans herself beside it. The supplied chess painting hangs between the windows.
+Step inside to see a girl leaning against the wall beside a Delft vase, watching
+the model pose. An unfinished painting of two girls playing chess rests on the
+artist’s desk, with a silver ewer on a side table nearby. A lute lies beneath the
+framed chess picture between the windows. On the door wall, a celestial globe
+stands on the linen chest and an elderly woman sits beside the peeking child.
 ImageGen supplied the imagined studio furnishings and the views beyond the
 original frame.
 [Museum entry](https://www.khm.at/en/visit/only-in-vienna) · [Studio preview](scripts/vermeer/studio-preview.jpg) · [Scene notes](scripts/vermeer/README.md).

@@ -120,7 +120,30 @@ def _shadow(sprite, origin, offset, radius, strength):
     return shadow, (origin[0]+offset[0]-pad, origin[1]+offset[1]-pad, w, h)
 
 
-def build_studio(art, eye, tilt, focal, front, rear, right, mesh):
+def _furnishing(rect, texture, size, base, height, yaw, relief, mesh, wall=None):
+    """Place a painted silhouette in metres, with its lowest point at the support."""
+    x0, y0, w, h = rect
+    tx, ty, tw, th = texture
+    u, v = np.meshgrid(np.linspace(0, 1, 17), np.linspace(0, 1, 25))
+    s = (x0 + u*w)/size[0]
+    t = (y0 + v*h)/size[1]
+    angle = np.radians(yaw)
+    across = np.array([np.cos(angle), 0, np.sin(angle)])
+    toward = np.array([-np.sin(angle), 0, np.cos(angle)])
+    # A shallow convex face gives the silhouette some depth as the eye moves.
+    depth = relief * np.maximum(0, 1-(2*s-1)**2) * np.clip(4*t*(1-t), 0, 1)
+    points = (base + across*((s-.5)*height*size[0]/size[1])[..., None]
+              + toward*depth[..., None])
+    points[..., 1] += (1-t)*height
+    if wall is not None:
+        axis, coordinate = wall
+        points[..., axis] = coordinate
+        points[..., 1] = np.maximum(0, points[..., 1]-.015)
+    uv = np.stack((tx+.5+u*(tw-1), ty+.5+v*(th-1)), axis=-1)
+    return mesh(4, points, uv)
+
+
+def build_studio(art, eye, tilt, focal, front, rear, left, right, mesh):
     origins = {"open-door": (617, 45), "door-leaf": (703, 113), "seated-woman": (629, 252),
                "artist-desk": (284, 290), "flower-vase": (1180, 250)}
     sprites = {name: Image.open(art / f"{name}.webp").convert("RGBA") for name in origins}
@@ -134,6 +157,25 @@ def build_studio(art, eye, tilt, focal, front, rear, right, mesh):
     vase = _View(eye, tilt, focal, 1586, -1, -.6)
     z = np.array([0, 0, 1])
     x = np.array([1, 0, 0])
+
+    # Both front posts meet the floor at the same depth, with the two
+    # slipper soles just ahead of them.
+    sx, sy = origins["seated-woman"]
+    foot_x = sx + np.array([20, 307, 126, 189])
+    foot_y = sy + np.array([661, 661, 675, 675])
+    sitter_feet = chair.floor_points(foot_x, foot_y)
+    sitter_anchor = sitter_feet.mean(axis=0)
+    sitter_anchor[1] = 0
+    # Keep the cast shadow on the rear wall and the marble after scaling.
+    shadow_anchor = np.array([sitter_anchor[0], 0, rear])
+    sitter_scale = .95
+
+    def sitter_mesh(tex, points, uv):
+        return mesh(tex, sitter_anchor + (points-sitter_anchor)*sitter_scale, uv)
+
+    def sitter_shadow_mesh(tex, points, uv):
+        return mesh(tex, shadow_anchor + (points-shadow_anchor)*sitter_scale, uv)
+
     sprites["desk-back"] = Image.open(art / "artist-desk-back.webp").convert("RGBA")
     rects["desk-back"] = (381, 659, *sprites["desk-back"].size)
     casters = [
@@ -145,11 +187,38 @@ def build_studio(art, eye, tilt, focal, front, rear, right, mesh):
         key = name + "-shadow"
         sprites[key], rects[key] = _shadow(sprites[name], origins[name], offset, blur, strength)
 
+    # Heights and supports are in room metres. The chest top follows the
+    # door elevation in walls.py. The bench is centred below the chess frame.
+    furnishings = [
+        ("celestial-globe", (2.30, .87, rear-.24), .52, 149, .11, (2, rear)),
+        ("lute-bench", (left+.29, 0, (front+rear)/2), .73, -90, .08, (0, left)),
+        # Match the blue model's scale in the reconstructed painting before
+        # applying the approved reduction, keeping the girl's soles in place.
+        ("standing-girl", (right-.19, 0, -5.36), 1.90*.90, 54, .10, (0, right)),
+        ("ewer-table", (right-.41, 0, -3.44), 1.08, 70, .09, (0, right)),
+    ]
+    for name, *_ in furnishings:
+        sprite = Image.open(art / f"{name}.webp").convert("RGBA")
+        sprite = sprite.crop(sprite.getchannel("A").getbbox())
+        sprites[name] = sprite
+        rects[name] = (0, 0, *sprite.size)
+        key = name + "-shadow"
+        sprites[key], rects[key] = _shadow(sprite, (0, 0), (8, 5), 16, .21)
+
     atlas, textures = pack_sprites(sprites)
     layers = []
     for name, view, normal, wall, *_ in casters:
         key = name + "-shadow"
-        layers.append(_panel(view, rects[key], textures[key], normal, wall, mesh))
+        shadow_mesh = sitter_shadow_mesh if name == "seated-woman" else mesh
+        layers.append(_panel(view, rects[key], textures[key], normal, wall, shadow_mesh))
+
+    for name, base, height, yaw, relief, wall in furnishings:
+        key = name + "-shadow"
+        layers.append(_furnishing(rects[key], textures[key], sprites[name].size,
+                                  base, height, yaw, relief, mesh, wall))
+    for name, base, height, yaw, relief, _ in furnishings:
+        layers.append(_furnishing(rects[name], textures[name], sprites[name].size,
+                                  base, height, yaw, relief, mesh))
 
     def door_plane(px, py):
         return rear-eye[2] + _door_recess(px, py)
@@ -157,12 +226,6 @@ def build_studio(art, eye, tilt, focal, front, rear, right, mesh):
     def leaf_plane(px, py):
         return rear-eye[2] - .01 - .17*np.clip((958-px)/(958-712), 0, 1)
 
-    # Both front posts meet the floor at the same depth, with the two
-    # slipper soles just ahead of them.
-    sx, sy = origins["seated-woman"]
-    foot_x = sx + np.array([20, 307, 126, 189])
-    foot_y = sy + np.array([661, 661, 675, 675])
-    sitter_feet = chair.floor_points(foot_x, foot_y)
     back = rear - chair.eye[2] - .06
     post, sole = sitter_feet[[0, 2], 2] - chair.eye[2]
 
@@ -198,7 +261,7 @@ def build_studio(art, eye, tilt, focal, front, rear, right, mesh):
         _panel(door, rects["open-door"], textures["open-door"], z, door_plane, mesh,
                xs=(677, 685, 708, 958), ys=(140, 502, 524, 545, 835)),
         _panel(door, rects["door-leaf"], textures["door-leaf"], z, leaf_plane, mesh),
-        _panel(chair, rects["seated-woman"], textures["seated-woman"], z, sitter_plane, mesh,
+        _panel(chair, rects["seated-woman"], textures["seated-woman"], z, sitter_plane, sitter_mesh,
                xs=foot_x, ys=foot_y),
         _panel(desk, rects["desk-back"], textures["desk-back"], desk.ahead, back_plane, mesh),
         *_stretchers(desk, textures["artist-desk"], desk_front, desk_back, mesh),
@@ -206,4 +269,4 @@ def build_studio(art, eye, tilt, focal, front, rear, right, mesh):
         _panel(desk, rects["artist-desk"], textures["artist-desk"], desk.ahead, desk_plane, mesh),
         _panel(vase, rects["flower-vase"], textures["flower-vase"], z, vase_plane, mesh),
     ]
-    return atlas, layers, sitter_feet
+    return atlas, layers, sitter_anchor + (sitter_feet-sitter_anchor)*sitter_scale
