@@ -74,6 +74,7 @@ private const val BACK_ON = 2f
 internal const val FLIP_MS = 1800f
 
 /** Stepping into the painting, and back out of it. */
+private const val ENTRY_WAVE_MS = 640f
 private const val STEP_IN_MS = 2600f
 private const val STEP_OUT_MS = 1600f
 
@@ -144,7 +145,7 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
         private set
 
     /** The unframed front is stationary and ready for the inspection tools on every renderer. */
-    internal val canStudy: Boolean get() = studyVisible && !flipping && !over
+    internal val canStudy: Boolean get() = studyVisible && !inside && !flipping && !over
 
     /** The inspected painting is lying face up and still, so [stepInside] will go into it. */
     var canStepInside by mutableStateOf(false)
@@ -194,6 +195,10 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
 
     /** The bare painting lies turned over, its back showing, until it is flipped again or stepped away from. */
     internal var over by mutableStateOf(false)
+        private set
+
+    /** Single outward pulse on the inspection grid before the camera starts moving. */
+    internal var entryWave by mutableFloatStateOf(0f)
         private set
 
     /** How far into the painting, 0 in front of it and 1 inside, linear in time. */
@@ -275,7 +280,6 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
         if (!canStepInside) return
         inside = true
         canFlip = false
-        studyVisible = false
         canStepInside = false
         walkPending = scene != null
     }
@@ -287,6 +291,7 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
     fun leave() {
         if (inside) {
             inside = false
+            entryWave = 0f
             look[0] = 0f
             look[1] = 0f
             wanderTo = 0f
@@ -312,7 +317,7 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
 
     /** A drag of [dx], [dy] pixels inside the painting, seen through a focal length of [focal]. */
     internal fun lookAround(dx: Float, dy: Float, focal: Float) {
-        if (!inside) return
+        if (!inside || stepIn == 0f) return
         val scene = scene
         if (scene == null) {
             lookBy(dx, dy, focal, look[0], look[1], look)
@@ -333,7 +338,7 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
 
     /** A scroll of [by] inside the painting walks in, or back. */
     internal fun walkInside(by: Float) {
-        if (!inside) return
+        if (!inside || stepIn == 0f) return
         if (scene != null) {
             routeTo = (routeTo - by * 0.04f).clamped(0f, 1f)
             walkPending = false
@@ -426,7 +431,14 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
         }
 
         // Into the painting and back out, the head easing after the drags.
-        val deep = if (inside) min(1f, stepIn + deltaMs / STEP_IN_MS) else max(0f, stepIn - deltaMs / STEP_OUT_MS)
+        val deep = when {
+            inside && entryWave < 1f -> {
+                entryWave = min(1f, entryWave + deltaMs / ENTRY_WAVE_MS)
+                0f
+            }
+            inside -> min(1f, stepIn + deltaMs / STEP_IN_MS)
+            else -> max(0f, stepIn - deltaMs / STEP_OUT_MS)
+        }
         if (deep > 0f || stepIn > 0f) {
             stepIn = deep
             val k = frameRate(LOOK_EASE, deltaMs)
@@ -447,8 +459,8 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
 
         if (moved) tick++
         val hang = hang ?: return
-        studyVisible = arrived && inspected && lift >= 1f && !inside && !stepping
-        canFlip = studyVisible && !flipping && hang.framed(visited) && supportsHardwareMeshes
+        studyVisible = arrived && inspected && lift >= 1f && (!inside || entryWave < 1f) && !stepping
+        canFlip = studyVisible && !inside && !flipping && hang.framed(visited) && supportsHardwareMeshes
         canStepInside = canStudy && supportsHardwareMeshes
         val nearest = hang.nearest(position)
         if (nearest != centred) centred = nearest

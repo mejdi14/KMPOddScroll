@@ -20,6 +20,7 @@ import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.lerp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -77,10 +78,9 @@ private class StageGeometry {
 
 /**
  * The study fading in over the bare painting, which moves in from where it
- * hung only if the stage cannot hold it there; then the grid spreading out.
+ * hung only if the stage cannot hold it there.
  */
 private const val SETTLE_MS = 400
-private const val GRID_MS = 1300
 
 /**
  * The study of [item], with its frame and glass off. It fills the same box as
@@ -102,7 +102,7 @@ internal fun PaintingInspection(
     drawFold: DrawScope.(frame: Rect, progress: Float, over: Boolean) -> Unit,
 ) {
     val canStudy = state.canStudy
-    val reverseOrTurning = state.studyVisible && !canStudy
+    val studyLocked = state.studyVisible && !canStudy
     var requested by remember(item.image) { mutableStateOf<InspectionMode?>(null) }
     var active by remember(item.image) { mutableStateOf<InspectionMode?>(null) }
     var leaving by remember { mutableStateOf(false) }
@@ -129,8 +129,8 @@ internal fun PaintingInspection(
         }
     }
     DisposableEffect(effect) { onDispose { effect?.close() } }
-    LaunchedEffect(reverseOrTurning) {
-        if (reverseOrTurning) requested = null
+    LaunchedEffect(studyLocked) {
+        if (studyLocked) requested = null
     }
     val onExitNow by rememberUpdatedState(state::leave)
     LaunchedEffect(requested, analysis, replay, leaving) {
@@ -159,26 +159,23 @@ internal fun PaintingInspection(
         c.selected = selection
         if (selection >= 0) focus.animateTo(1f, tween(460)) { c.focus = value }
     }
+    val exitStudy = { if (state.inside) state.leave() else leaving = true }
     BackHandler(enabled = !leaving) {
-        if (requested != null || active != null) requested = null else leaving = true
+        if (requested != null || active != null) requested = null else exitStudy()
     }
-    // The painting settles from where it hung into the stage as the study fades in, and only then
-    // does the grid spread out behind it.
     val settle = remember { Animatable(0f) }
-    val grid = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
         settle.animateTo(1f, tween(SETTLE_MS))
-        grid.animateTo(1f, tween(GRID_MS, easing = LinearEasing))
     }
     // Where the painting hung, in the stage's own coordinates; read as the stage is drawn.
-    val hungAt: DrawScope.() -> Rect = {
+    val hungAt: () -> Rect = {
         val root = geometry.root
         val stage = geometry.stage
         if (root != null && stage != null && root.isAttached && stage.isAttached) {
             hung().translate(-root.localPositionOf(stage, Offset.Zero))
         } else Rect.Zero
     }
-    val rest: DrawScope.() -> Rect = { restingFrame(size, item.image, hungAt()) }
+    val rest: Size.() -> Rect = { restingFrame(this, item.image, hungAt()) }
     BoxWithConstraints(Modifier.fillMaxSize().background(background).onPlaced { geometry.root = it }) {
         val compact = maxWidth < 620.dp
         val short = maxHeight < 440.dp
@@ -193,10 +190,10 @@ internal fun PaintingInspection(
                         style = TextStyle(color = ink.copy(alpha = 0.70f), fontSize = 12.sp))
                 }
                 if (requested != null || active != null) ToolButton("Reset", ink, background) { requested = null }
-                if (exitLabel != null) ToolButton(exitLabel, ink, background) { leaving = true }
+                if (exitLabel != null) ToolButton(exitLabel, ink, background, action = exitStudy)
             }
             Box(Modifier.fillMaxWidth().weight(1f).clipToBounds().onPlaced { geometry.stage = it }) {
-                LabGrid(ink, { rest().center }, grid::value, Modifier.matchParentSize())
+                LabGrid(ink, background, rest, state::entryWave, Modifier.matchParentSize())
                 Canvas(Modifier.matchParentSize()
                     .semantics { contentDescription = listOfNotNull(item.title, active?.label).joinToString(", ") }
                     .pointerInput(effect, c, canStudy, exitLabel) {
@@ -230,7 +227,7 @@ internal fun PaintingInspection(
                             } while (true)
                             if (!moved && (active == InspectionMode.Objects || active == InspectionMode.Colors))
                                 toggle(effect?.hit(geometry.frame, down.position, c))
-                            if (!moved && !canStudy && exitLabel == null) leaving = true
+                            if (!moved && !canStudy && exitLabel == null) exitStudy()
                             down.consume()
                         }
                     }
@@ -252,7 +249,7 @@ internal fun PaintingInspection(
                 ) {
                     val t = progress.value
                     val from = hungAt()
-                    val home = if (from.isEmpty) rest() else lerp(from, rest(), ease(settle.value))
+                    val home = if (from.isEmpty) size.rest() else lerp(from, size.rest(), ease(settle.value))
                     val fold = state.fold
                     val over = state.over
                     val frame = if (fold > 0f || over) home else lerp(home, toolFrame(home, active), ease(t))
@@ -270,9 +267,9 @@ internal fun PaintingInspection(
             // Keep the action buttons measured while turning so the stage keeps its height.
             InspectionToolbar(requested, active, analysis, c, selection, compact, short, ink, background,
                 toolsEnabled = canStudy, onMode = { if (!leaving) requested = it }, onSelect = toggle, onReplay = { replay++ },
-                flipLabel = flipLabel.takeIf { state.canFlip || reverseOrTurning },
-                stepLabel = stepLabel.takeIf { state.canStepInside || reverseOrTurning },
-                flipEnabled = state.canFlip && requested == null, stepEnabled = state.canStepInside,
+                flipLabel = flipLabel.takeIf { state.canFlip || studyLocked },
+                stepLabel = stepLabel.takeIf { state.canStepInside || studyLocked },
+                flipEnabled = state.canFlip && requested == null, stepEnabled = state.canStepInside && !leaving,
                 onFlip = state::flip, onStep = state::stepInside)
         }
     }

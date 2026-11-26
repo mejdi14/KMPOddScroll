@@ -1,161 +1,73 @@
 package com.example.kmp_odd_scroll.showcase.gallerywall.inspection
 
-import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.PointMode
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 
-/*
- * The bench the painting is studied on: squared paper, as under a
- * conservator's lens. Fine lines a cell apart, a heavier one every few cells
- * and heavier still the two through the painting's middle, with ruler ticks
- * along those two and marked intersections on the major lines. The grid is
- * anchored to the painting's middle and fades out towards the stage edges.
- */
-
-private val CELL = 12.dp
-private const val MAJOR = 5
-
-private const val MINOR_ALPHA = 0.09f
-private const val MAJOR_ALPHA = 0.18f
-private const val AXIS_ALPHA = 0.28f
-private const val POINT_ALPHA = 0.60f
-private val POINT_RADIUS = 2.dp
-
-/** Ruler ticks across the two axes, a minor and a major one. */
-private val TICK = 2.5.dp
-private val TICK_MAJOR = 5.dp
-
-/** How far in from the stage's edges it has faded in. */
-private val FADE = 36.dp
-
-/**
- * How much of the reveal each line takes to draw out. The rest is the front
- * of it travelling from the painting's middle to the far corner of the stage.
- */
-private const val DRAW_OUT = 0.4f
-
-/**
- * Squared paper filling the stage behind the painting, laid out from
- * [centre]. As [reveal] goes from 0 to 1 it spreads out from behind the
- * painting: each line, once the front gets to it, draws out both ways from
- * the middle. Both are read as it is drawn, not in composition.
- */
+/** A still field of dots. Only the band crossing the field on the way into the painting glows. */
 @Composable
-internal fun LabGrid(ink: Color, centre: DrawScope.() -> Offset, reveal: () -> Float, modifier: Modifier = Modifier) {
-    // Offscreen, so the fade at the edges takes the lines out and nothing else.
-    Canvas(modifier.graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)) {
-        val r = reveal()
-        if (r <= 0f || size.width <= 0f || size.height <= 0f) return@Canvas
-        val o = centre()
-        val cell = CELL.toPx()
-        val hair = max(1f, 0.6.dp.toPx())
-        val major = max(1f, 1.dp.toPx())
-        val reachX = max(o.x, size.width - o.x)
-        val reachY = max(o.y, size.height - o.y)
-        val far = hypot(reachX, reachY).coerceAtLeast(1f)
-        val front = r * (1f + DRAW_OUT)
-
-        fun drawn(offset: Float): Float {
-            val t = ((front - abs(offset) / far) / DRAW_OUT).coerceIn(0f, 1f)
-            return 1f - (1f - t) * (1f - t) * (1f - t)
-        }
-
-        fun alpha(i: Int) = when {
-            i == 0 -> AXIS_ALPHA
-            i % MAJOR == 0 -> MAJOR_ALPHA
-            else -> MINOR_ALPHA
-        }
-        fun width(i: Int) = if (i % MAJOR == 0) major else hair
-
-        val columns = ceil(reachX / cell).toInt()
-        for (i in -columns..columns) {
-            val x = o.x + i * cell
-            if (x < -major || x > size.width + major) continue
-            val t = drawn(i * cell)
-            if (t <= 0f) continue
-            val reach = reachY * t
-            drawLine(ink.copy(alpha = alpha(i) * t), Offset(x, o.y - reach), Offset(x, o.y + reach), width(i))
-        }
-        val rows = ceil(reachY / cell).toInt()
-        for (j in -rows..rows) {
-            val y = o.y + j * cell
-            if (y < -major || y > size.height + major) continue
-            val t = drawn(j * cell)
-            if (t <= 0f) continue
-            val reach = reachX * t
-            drawLine(ink.copy(alpha = alpha(j) * t), Offset(o.x - reach, y), Offset(o.x + reach, y), width(j))
-        }
-
-        // A ruler along each axis, graduated in half cells.
-        val tick = TICK.toPx()
-        fun tickLength(k: Int) = when {
-            k % (2 * MAJOR) == 0 -> TICK_MAJOR.toPx()
-            k % 2 == 0 -> tick
-            else -> tick * 0.6f
-        }
-        val half = cell * 0.5f
-        for (k in -2 * columns..2 * columns) {
-            if (k == 0) continue
-            val x = o.x + k * half
-            if (x < 0f || x > size.width) continue
-            val t = drawn(k * half)
-            if (t <= 0f) continue
-            val l = tickLength(k)
-            drawLine(ink.copy(alpha = AXIS_ALPHA * t), Offset(x, o.y - l), Offset(x, o.y + l), hair)
-        }
-        for (k in -2 * rows..2 * rows) {
-            if (k == 0) continue
-            val y = o.y + k * half
-            if (y < 0f || y > size.height) continue
-            val t = drawn(k * half)
-            if (t <= 0f) continue
-            val l = tickLength(k)
-            drawLine(ink.copy(alpha = AXIS_ALPHA * t), Offset(o.x - l, y), Offset(o.x + l, y), hair)
-        }
-
-        // Mark the major intersections as soon as both lines reach them.
-        val spacing = cell * MAJOR
-        val majorColumns = ceil(reachX / spacing).toInt()
-        val majorRows = ceil(reachY / spacing).toInt()
-        val radius = POINT_RADIUS.toPx()
-        for (i in -majorColumns..majorColumns) {
-            val dx = i * spacing
-            val x = o.x + dx
-            if (x < 0f || x > size.width) continue
-            val vertical = reachY * drawn(dx)
-            for (j in -majorRows..majorRows) {
-                val dy = j * spacing
-                val y = o.y + dy
-                if (y < 0f || y > size.height) continue
-                val horizontal = reachX * drawn(dy)
-                val t = (min(vertical - abs(dy), horizontal - abs(dx)) / cell).coerceIn(0f, 1f)
-                if (t > 0f) drawCircle(ink.copy(alpha = POINT_ALPHA * t), radius, Offset(x, y))
+internal fun LabGrid(
+    ink: Color,
+    background: Color,
+    frame: Size.() -> Rect,
+    wave: () -> Float,
+    modifier: Modifier = Modifier,
+) {
+    Spacer(modifier.drawWithCache {
+        if (size.isEmpty()) return@drawWithCache onDrawBehind {}
+        val painting = size.frame()
+        val origin = painting.center
+        val cell = 18.dp.toPx()
+        val dot = 1.dp.toPx()
+        val far = hypot(max(origin.x, size.width - origin.x), max(origin.y, size.height - origin.y))
+        val band = 2.4f * cell
+        // Start just under the nearest edge of the painting so the first glint is visible at once.
+        val start = (min(painting.width, painting.height) * 0.5f - band).coerceAtLeast(0f)
+        val rows = ceil(-origin.y / cell).toInt()..floor((size.height - origin.y) / cell).toInt()
+        val columns = ceil(-origin.x / cell).toInt()..floor((size.width - origin.x) / cell).toInt()
+        val dots = buildList {
+            for (row in rows) {
+                for (column in columns) {
+                    add(Offset(origin.x + column * cell, origin.y + row * cell))
+                }
             }
         }
-
-        val fade = FADE.toPx()
-        val fx = (fade / size.width).coerceAtMost(0.5f)
-        val fy = (fade / size.height).coerceAtMost(0.5f)
-        drawRect(
-            Brush.horizontalGradient(0f to Color.Transparent, fx to Color.Black, 1f - fx to Color.Black, 1f to Color.Transparent),
-            blendMode = BlendMode.DstIn,
+        val distances = FloatArray(dots.size) { (dots[it] - origin).getDistance() }
+        val field = Brush.radialGradient(
+            0f to ink.copy(alpha = 0.29f), 0.68f to ink.copy(alpha = 0.19f), 1f to ink.copy(alpha = 0.07f),
+            center = origin, radius = far,
         )
-        drawRect(
-            Brush.verticalGradient(0f to Color.Transparent, fy to Color.Black, 1f - fy to Color.Black, 1f to Color.Transparent),
-            blendMode = BlendMode.DstIn,
-        )
-    }
+        val light = if (background.luminance() < 0.45f) Color(0xFFBBE5FF) else Color(0xFF306DAD)
+        onDrawBehind {
+            drawPoints(dots, PointMode.Points, field, strokeWidth = 2f * dot, cap = StrokeCap.Round)
+            val t = wave()
+            if (t <= 0f || t >= 1f) return@onDrawBehind
+            val front = mix(start, far + band, t)
+            for (i in dots.indices) {
+                val distance = distances[i]
+                val gap = abs(distance - front)
+                if (gap >= band) continue
+                val strength = ease(1f - gap / band)
+                val point = dots[i] + (dots[i] - origin) * (strength * 1.4f * dot / max(dot, distance))
+                drawCircle(light, dot * (1f + 4f * strength), point, alpha = 0.13f * strength)
+                drawCircle(light, dot * (1f + 1.45f * strength), point, alpha = 0.95f * strength)
+            }
+        }
+    })
 }
