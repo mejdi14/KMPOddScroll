@@ -141,7 +141,7 @@ def tile_coordinates():
                            ties[:,2:], rcond=None)[0]
 
 
-def surfaces(photo, covered, studio):
+def surfaces(photo, covered, studio, sitter_feet):
     # Bake both horizontal surfaces in plan. The floor uses the measured tile
     # lattice even under the furniture, so turning never changes its perspective.
     width, height = 1024, 1536
@@ -152,6 +152,13 @@ def surfaces(photo, covered, studio):
     mapping = tile_coordinates()
     atlas = Image.new("RGB", (width*2, height))
     x = LEFT + (np.arange(width)[None, :] + .5)/width*(RIGHT-LEFT)
+    # Broad window-light shadow under the dress, tight contact at each sole
+    # and chair post. Both follow the same floor intersections as the figure.
+    cx, _, cz = sitter_feet.mean(axis=0)
+    sitter_shadows = [(cx+.23, cz+.08, .81, .30, .35)]
+    for fx, _, fz in sitter_feet:
+        sitter_shadows.append((fx+.07, fz+.02, .16, .06, .19))
+        sitter_shadows.append((fx, fz, .08, .04, .31))
     for row in range(0, height, 64):
         v = (np.arange(row, min(row+64, height))[:, None]+.5)/height
         z = FRONT + v*(REAR-FRONT)
@@ -165,7 +172,7 @@ def surfaces(photo, covered, studio):
             (-1.31,-4.47,.62,.39,.32), (1.50,-6.33,.45,.35,.20),
             (-.41,-3.34,.45,.31,.39),
             (3.19,-7.13,.29,.14,.34),        # Delft vase foot
-            (-.21,1.90,.65,.30,.24),         # skirt and chair at the door
+            *sitter_shadows,
             (3.51,-1.41,.44,1.17,.35),       # artist's desk
         ]:
             light = light - strength*np.exp(-((x-cx)/rx)**2-((z-cz)/rz)**2)
@@ -394,9 +401,10 @@ def build():
     covered = covered.filter(ImageFilter.MaxFilter(11)).filter(ImageFilter.GaussianBlur(2))
     studio = clean_front(photo, covered)
     texture("front", studio)
-    layers = architecture(surfaces(photo, covered, studio))
     view_focal = .66 * 525 * FOCAL / PH
-    fittings, fitting_layers = build_studio(ART, ROUTE[-1], TILT, view_focal, FRONT, REAR, RIGHT, mesh)
+    fittings, fitting_layers, sitter_feet = build_studio(
+        ART, ROUTE[-1], TILT, view_focal, FRONT, REAR, RIGHT, mesh)
+    layers = architecture(surfaces(photo, covered, studio, sitter_feet))
     texture("studio", fittings)
     layers.extend(fitting_layers)
     layers.extend(figures(foreground(photo, mattes)))
