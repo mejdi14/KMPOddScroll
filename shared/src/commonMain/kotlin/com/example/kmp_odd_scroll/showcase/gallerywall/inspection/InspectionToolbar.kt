@@ -21,7 +21,13 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerInputScope
@@ -34,17 +40,16 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 
-internal val ArchivePaper = Color(0xFFF9F8F6)
-internal val ArchiveInk = Color(0xFF242321)
-internal val ArchiveAccent = Color(0xFF791F28)
+internal val InspectionInk = Color(0xFFF2EADD)
 
 @Composable
-internal fun ArchiveModeIndex(
+internal fun InspectionModeIndex(
     modes: List<InspectionMode>,
     selected: InspectionMode?,
     enabled: Boolean,
@@ -57,60 +62,177 @@ internal fun ArchiveModeIndex(
         modifier.fillMaxWidth().verticalScroll(rememberScrollState()).selectableGroup(),
         horizontalAlignment = if (alignEnd) Alignment.End else Alignment.Start,
     ) {
-        modes.forEachIndexed { index, mode ->
-            if (index > 0) ArchiveRule(Modifier.fillMaxWidth())
+        modes.forEach { mode ->
             val chosen = mode == selected
-            val color = if (chosen) ArchiveAccent else ArchiveInk
-            Box(
+            val tone = InspectionInk.copy(alpha = when {
+                !enabled -> 0.46f
+                chosen -> 1f
+                else -> 0.72f
+            })
+            Row(
                 Modifier.fillMaxWidth()
                     .heightIn(min = if (compact) 44.dp else 48.dp)
+                    .inspectionButtonFeedback(enabled = enabled)
                     .selectable(chosen, enabled = enabled, role = Role.Tab) { onMode(mode) },
-                contentAlignment = if (alignEnd) Alignment.CenterEnd else Alignment.CenterStart,
+                horizontalArrangement = Arrangement.spacedBy(7.dp, if (alignEnd) Alignment.End else Alignment.Start),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
+                if (!alignEnd) ModeGlyph(mode, tone)
                 BasicText(
                     mode.label,
+                    modifier = Modifier.weight(1f, fill = false),
                     style = TextStyle(
-                        color = if (enabled) color else color.copy(alpha = 0.55f),
-                        fontFamily = FontFamily.Serif,
-                        fontSize = if (compact) 16.sp else 19.sp,
+                        color = tone,
+                        fontFamily = FontFamily.SansSerif,
+                        fontWeight = if (chosen) FontWeight.SemiBold else FontWeight.Normal,
+                        fontSize = if (compact) 13.sp else 15.sp,
                         textAlign = if (alignEnd) TextAlign.End else TextAlign.Start,
                     ),
                 )
+                if (alignEnd) ModeGlyph(mode, tone)
             }
         }
     }
 }
 
 @Composable
-internal fun ArchiveAction(
+internal fun InspectionAction(
     label: String,
     mark: String,
     alignEnd: Boolean,
     enabled: Boolean = true,
-    color: Color = ArchiveInk,
+    color: Color = InspectionInk,
+    gridFeedback: Boolean = true,
     onClick: () -> Unit,
 ) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 44.dp)
+            .inspectionButtonFeedback(enabled = enabled && gridFeedback)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
-        horizontalArrangement = Arrangement.spacedBy(5.dp, if (alignEnd) Alignment.End else Alignment.Start),
+        horizontalArrangement = Arrangement.spacedBy(7.dp, if (alignEnd) Alignment.End else Alignment.Start),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val tone = if (enabled) color else color.copy(alpha = 0.55f)
+        val tone = if (enabled) color else color.copy(alpha = 0.46f)
+        if (!alignEnd) ActionGlyph(mark, tone)
         BasicText(
             label,
             modifier = Modifier.weight(1f, fill = false),
             style = TextStyle(
                 color = tone,
-                fontFamily = FontFamily.Serif,
-                fontSize = 15.sp,
+                fontFamily = FontFamily.SansSerif,
+                fontSize = 14.sp,
                 textAlign = if (alignEnd) TextAlign.End else TextAlign.Start,
             ),
         )
-        if (mark.isNotEmpty()) {
-            BasicText(mark, Modifier.clearAndSetSemantics {}, style = TextStyle(color = tone, fontSize = 14.sp))
+        if (alignEnd) ActionGlyph(mark, tone)
+    }
+}
+
+@Composable
+private fun ModeGlyph(mode: InspectionMode, color: Color) {
+    Canvas(Modifier.size(15.dp)) {
+        when (mode) {
+            InspectionMode.Explode -> {
+                glyphPath(color, 8, 2, 15, 6, 8, 10, 1, 6, 8, 2)
+                glyphPath(color, 1, 9, 8, 13, 15, 9)
+            }
+            InspectionMode.Lighting -> {
+                glyphCircle(color, 8, 8, 3f)
+                glyphPath(color, 8, 1, 8, 3)
+                glyphPath(color, 8, 13, 8, 15)
+                glyphPath(color, 1, 8, 3, 8)
+                glyphPath(color, 13, 8, 15, 8)
+                glyphPath(color, 3, 3, 4, 4)
+                glyphPath(color, 12, 12, 13, 13)
+                glyphPath(color, 12, 4, 13, 3)
+                glyphPath(color, 3, 13, 4, 12)
+            }
+            InspectionMode.Microscope -> {
+                glyphCircle(color, 7, 7, 4f)
+                glyphPath(color, 10, 10, 14, 14)
+                glyphPath(color, 5, 7, 9, 7)
+                glyphPath(color, 7, 5, 7, 9)
+            }
+            InspectionMode.PointCloud -> {
+                glyphCircle(color, 8, 3, 0.7f)
+                glyphCircle(color, 4, 6, 0.7f)
+                glyphCircle(color, 12, 6, 0.7f)
+                glyphCircle(color, 8, 8, 0.7f)
+                glyphCircle(color, 4, 11, 0.7f)
+                glyphCircle(color, 12, 11, 0.7f)
+                glyphCircle(color, 8, 13, 0.7f)
+            }
+            InspectionMode.Blueprint -> {
+                glyphPath(color, 1, 4, 15, 4)
+                glyphPath(color, 1, 12, 15, 12)
+                glyphPath(color, 4, 1, 4, 15)
+                glyphPath(color, 12, 1, 12, 15)
+            }
+            InspectionMode.Objects -> {
+                glyphPath(color, 8, 1, 14, 5, 14, 12, 8, 15, 2, 12, 2, 5, 8, 1)
+                glyphPath(color, 2, 5, 8, 8, 14, 5)
+                glyphPath(color, 8, 8, 8, 15)
+            }
+            InspectionMode.Colors -> {
+                glyphCircle(color, 6, 6, 3f)
+                glyphCircle(color, 10, 6, 3f)
+                glyphCircle(color, 8, 10, 3f)
+            }
         }
     }
+}
+
+@Composable
+private fun ActionGlyph(mark: String, color: Color) {
+    Canvas(Modifier.size(15.dp)) {
+        when (mark) {
+            "←" -> {
+                glyphPath(color, 14, 8, 2, 8)
+                glyphPath(color, 6, 4, 2, 8, 6, 12)
+            }
+            "↪" -> {
+                glyphPath(color, 3, 3, 3, 8, 5, 10, 13, 10)
+                glyphPath(color, 10, 7, 13, 10, 10, 13)
+            }
+            "→" -> {
+                glyphPath(color, 2, 8, 14, 8)
+                glyphPath(color, 10, 4, 14, 8, 10, 12)
+            }
+            "↺", "↻" -> {
+                val clockwise = mark == "↻"
+                drawArc(
+                    color = color,
+                    startAngle = if (clockwise) 30f else 70f,
+                    sweepAngle = if (clockwise) 305f else -280f,
+                    useCenter = false,
+                    topLeft = glyphPoint(3, 3),
+                    size = Size(size.width * 0.625f, size.height * 0.625f),
+                    style = Stroke(1.dp.toPx(), cap = StrokeCap.Round),
+                )
+                if (clockwise) glyphPath(color, 13, 3, 13, 6, 10, 6)
+                else glyphPath(color, 3, 13, 3, 10, 6, 10)
+            }
+            "›" -> glyphPath(color, 6, 4, 10, 8, 6, 12)
+        }
+    }
+}
+
+private fun DrawScope.glyphPoint(x: Int, y: Int): Offset =
+    Offset(x * size.width / 16f, y * size.height / 16f)
+
+private fun DrawScope.glyphPath(color: Color, vararg coordinates: Int) {
+    val path = Path()
+    val first = glyphPoint(coordinates[0], coordinates[1])
+    path.moveTo(first.x, first.y)
+    for (index in 2 until coordinates.size step 2) {
+        val point = glyphPoint(coordinates[index], coordinates[index + 1])
+        path.lineTo(point.x, point.y)
+    }
+    drawPath(path, color, style = Stroke(1.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+}
+
+private fun DrawScope.glyphCircle(color: Color, x: Int, y: Int, radius: Float) {
+    drawCircle(color, radius * size.minDimension / 16f, glyphPoint(x, y), style = Stroke(1.dp.toPx()))
 }
 
 @Composable
@@ -131,8 +253,8 @@ internal fun InspectionAdjustments(
             if (requested != null && analysis == null && requested != InspectionMode.Microscope) {
                 Caption("Studying the painting…")
             } else if (active != null) {
-                Caption(active.gesture, ArchiveInk.copy(alpha = 0.72f))
-                ArchiveRule(Modifier.width(24.dp))
+                Caption(active.gesture, InspectionInk.copy(alpha = 0.72f))
+                InspectionRule(Modifier.width(24.dp))
                 when (active) {
                     InspectionMode.Explode -> Adjust("Spacing", c.amount) { c.amount = it }
                     InspectionMode.Lighting -> Adjust("Intensity", c.amount) { c.amount = it }
@@ -147,7 +269,7 @@ internal fun InspectionAdjustments(
                     }
                     InspectionMode.Blueprint -> {
                         Adjust("Detail", c.amount) { c.amount = it }
-                        ArchiveAction("Retrace", "↻", alignEnd = false, onClick = onReplay)
+                        InspectionAction("Retrace", "↻", alignEnd = false, onClick = onReplay)
                     }
                     InspectionMode.Objects -> {
                         val count = analysis?.objects?.size ?: 0
@@ -155,7 +277,7 @@ internal fun InspectionAdjustments(
                             Caption("No distinct cutouts found")
                         } else {
                             val label = if (selected < 0) "Choose a cutout" else "Cutout ${selected + 1} of $count"
-                            ArchiveAction(label, "›", alignEnd = false) { onSelect((selected + 1) % count) }
+                            InspectionAction(label, "›", alignEnd = false) { onSelect((selected + 1) % count) }
                             if (selected >= 0) Adjust("Magnify", c.amount) { c.amount = it }
                         }
                     }
@@ -166,6 +288,7 @@ internal fun InspectionAdjustments(
                                 val chosen = index == selected
                                 Row(
                                     Modifier.fillMaxWidth().heightIn(min = 44.dp)
+                                        .inspectionButtonFeedback()
                                         .selectable(chosen, role = Role.Button) { onSelect(index) }
                                         .semantics { contentDescription = "Pigment ${index + 1}, $percent percent" },
                                     verticalAlignment = Alignment.CenterVertically,
@@ -173,12 +296,16 @@ internal fun InspectionAdjustments(
                                 ) {
                                     Spacer(
                                         Modifier.size(17.dp).background(Color(argb), CircleShape)
-                                            .border(1.dp, if (chosen) ArchiveAccent else ArchiveInk.copy(alpha = 0.4f), CircleShape),
+                                            .border(1.dp, if (chosen) InspectionInk else InspectionInk.copy(alpha = 0.4f), CircleShape),
                                     )
                                     BasicText(
                                         "$percent%",
                                         Modifier.clearAndSetSemantics {},
-                                        style = TextStyle(color = if (chosen) ArchiveAccent else ArchiveInk, fontSize = 14.sp),
+                                        style = TextStyle(
+                                            color = InspectionInk.copy(alpha = if (chosen) 1f else 0.72f),
+                                            fontWeight = if (chosen) FontWeight.SemiBold else FontWeight.Normal,
+                                            fontSize = 14.sp,
+                                        ),
                                     )
                                 }
                             }
@@ -191,12 +318,12 @@ internal fun InspectionAdjustments(
 }
 
 @Composable
-private fun ArchiveRule(modifier: Modifier) {
-    Spacer(modifier.height(0.5.dp).background(ArchiveInk.copy(alpha = 0.23f)))
+private fun InspectionRule(modifier: Modifier) {
+    Spacer(modifier.height(0.5.dp).background(InspectionInk.copy(alpha = 0.23f)))
 }
 
 @Composable
-private fun Caption(text: String, color: Color = ArchiveInk) {
+private fun Caption(text: String, color: Color = InspectionInk) {
     BasicText(text, style = TextStyle(color = color, fontSize = 12.sp, lineHeight = 16.sp))
 }
 
@@ -241,16 +368,16 @@ private fun Adjust(
             Modifier.fillMaxWidth().clearAndSetSemantics {},
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            BasicText(label, Modifier.weight(1f), style = TextStyle(color = ArchiveInk, fontSize = 12.sp))
-            Caption(displayValue, ArchiveAccent)
+            BasicText(label, Modifier.weight(1f), style = TextStyle(color = InspectionInk, fontSize = 12.sp))
+            Caption(displayValue, InspectionInk)
         }
         Canvas(Modifier.fillMaxWidth().height(14.dp)) {
             val min = 5.dp.toPx()
             val max = (size.width - min).coerceAtLeast(min)
             val x = mix(min, max, value)
-            drawLine(ArchiveInk.copy(alpha = 0.28f), Offset(min, center.y), Offset(max, center.y), 1.dp.toPx())
-            drawLine(ArchiveAccent, Offset(min, center.y), Offset(x, center.y), 1.dp.toPx())
-            drawCircle(ArchiveAccent, 3.5.dp.toPx(), Offset(x, center.y))
+            drawLine(InspectionInk.copy(alpha = 0.28f), Offset(min, center.y), Offset(max, center.y), 1.dp.toPx())
+            drawLine(InspectionInk, Offset(min, center.y), Offset(x, center.y), 1.dp.toPx())
+            drawCircle(InspectionInk, 3.5.dp.toPx(), Offset(x, center.y))
         }
     }
 }

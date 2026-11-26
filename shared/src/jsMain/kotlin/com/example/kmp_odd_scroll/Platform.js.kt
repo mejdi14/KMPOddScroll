@@ -12,3 +12,5 @@ class JsPlatform: Platform {
 }
 
 actual fun getPlatform(): Platform = JsPlatform()
+
+internal actual val platformFamily = PlatformFamily.Web

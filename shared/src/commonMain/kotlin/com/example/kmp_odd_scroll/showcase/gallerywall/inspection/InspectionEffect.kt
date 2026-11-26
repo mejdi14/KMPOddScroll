@@ -6,12 +6,10 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.withTransform
-import kotlin.math.min
 
 internal enum class InspectionMode(val label: String, val gesture: String) {
     Explode("Explode", "Drag to orbit"),
@@ -63,14 +61,6 @@ internal fun DrawScope.paintImage(
 
 /** The tools that orbit the painting stand it this much further back, to leave room to turn it. */
 private const val ORBIT_BACK = 0.86f
-
-/** Fit the full image in the space between the controls. */
-internal fun restingFrame(size: Size, image: ImageBitmap): Rect {
-    val scale = min(size.width / image.width, size.height / image.height) * 0.93f
-    val width = image.width * scale
-    val height = image.height * scale
-    return Rect(Offset((size.width - width) / 2f, (size.height - height) / 2f), Size(width, height))
-}
 
 /** The painting at [rest] as tool [mode] holds it. */
 internal fun toolFrame(rest: Rect, mode: InspectionMode?): Rect {

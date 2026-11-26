@@ -1,5 +1,6 @@
 package com.example.kmp_odd_scroll.showcase.gallerywall
 
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -140,9 +141,16 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
     var canFlip by mutableStateOf(false)
         private set
 
+    internal val hasFlipAction: Boolean get() = supportsHardwareMeshes && hang?.framed(visited) == true
+
     /** The inspection stage stays open while the bare painting turns over. */
     internal var studyVisible by mutableStateOf(false)
         private set
+
+    /** The controls share the wall while the glass lifts, and give way to the interior camera. */
+    internal val showingInspection by derivedStateOf {
+        arrived && inspected && !stepping && (!inside || entryWave < 1f)
+    }
 
     /** The unframed front is stationary and ready for the inspection tools on every renderer. */
     internal val canStudy: Boolean get() = studyVisible && !inside && !flipping && !over
@@ -184,7 +192,7 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
         private set
 
     /** How far its glass has slid away once the frame is off, 0 to 1, linear in time. */
-    internal var lift = 0f
+    internal var lift by mutableFloatStateOf(0f)
         private set
 
     /** How far the bare painting has turned over, 0 to 1, linear in time; 0 lying still. */
@@ -459,8 +467,8 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
 
         if (moved) tick++
         val hang = hang ?: return
-        studyVisible = arrived && inspected && lift >= 1f && (!inside || entryWave < 1f) && !stepping
-        canFlip = studyVisible && !inside && !flipping && hang.framed(visited) && supportsHardwareMeshes
+        studyVisible = showingInspection && lift >= 1f
+        canFlip = studyVisible && !inside && !flipping && hasFlipAction
         canStepInside = canStudy && supportsHardwareMeshes
         val nearest = hang.nearest(position)
         if (nearest != centred) centred = nearest

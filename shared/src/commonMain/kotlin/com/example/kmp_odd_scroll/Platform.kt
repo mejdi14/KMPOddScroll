@@ -5,3 +5,7 @@ interface Platform {
 }
 
 expect fun getPlatform(): Platform
+
+internal enum class PlatformFamily { Mobile, Desktop, Web }
+
+internal expect val platformFamily: PlatformFamily

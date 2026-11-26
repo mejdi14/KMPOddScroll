@@ -4,7 +4,6 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateCentroid
@@ -21,22 +20,24 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.lerp
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.unit.toSize
 import com.example.kmp_odd_scroll.showcase.gallerywall.GalleryWallItem
 import com.example.kmp_odd_scroll.showcase.gallerywall.GalleryWallScrollState
+import com.example.kmp_odd_scroll.showcase.gallerywall.supportsHardwareMeshes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.ExperimentalResourceApi
@@ -70,29 +71,21 @@ internal class AnalysisCache {
     }
 }
 
-private class StageGeometry {
-    var frame = Rect.Zero
-    var root: LayoutCoordinates? = null
-    var bounds by mutableStateOf(Rect.Zero)
-}
-
-private const val SETTLE_MS = 400
-
 private val SurfaceModes = listOf(InspectionMode.Lighting, InspectionMode.Microscope, InspectionMode.Colors)
 private val StructureModes = listOf(InspectionMode.Explode, InspectionMode.PointCloud, InspectionMode.Blueprint, InspectionMode.Objects)
 
-/** The bare canvas travels between its wall position and the center of the archive. */
+/** The wall owns the resting painting. Gestures and effects use its exact projection. */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 internal fun PaintingInspection(
     item: GalleryWallItem,
     analysis: PaintingAnalysis?,
     hung: () -> Rect,
-    gridReveal: () -> Float,
     exitLabel: String?,
     flipLabel: String?,
     stepLabel: String?,
     state: GalleryWallScrollState,
+    onEffect: (Boolean) -> Unit,
     drawFold: DrawScope.(frame: Rect, progress: Float, over: Boolean) -> Unit,
 ) {
     val canStudy = state.canStudy
@@ -102,10 +95,8 @@ internal fun PaintingInspection(
     var leaving by remember { mutableStateOf(false) }
     var replay by remember { mutableIntStateOf(0) }
     val progress = remember { Animatable(0f) }
-    val settle = remember { Animatable(0f) }
-    LaunchedEffect(Unit) { settle.animateTo(1f, tween(SETTLE_MS)) }
     val c = remember(active, item.image) { InspectionControls(active) }
-    val geometry = remember { StageGeometry() }
+    val drawnFrame = remember { mutableStateOf(Rect.Zero) }
     var selection by remember(c) { mutableIntStateOf(-1) }
     val toggle: (Int?) -> Unit = { selection = if (it == null || it == selection) -1 else it }
     val effect: InspectionEffect? = remember(active, item.image, analysis) {
@@ -124,7 +115,10 @@ internal fun PaintingInspection(
             }
         }
     }
-    DisposableEffect(effect) { onDispose { effect?.close() } }
+    DisposableEffect(effect) {
+        onEffect(effect != null)
+        onDispose { onEffect(false); effect?.close() }
+    }
     LaunchedEffect(studyLocked) {
         if (studyLocked) requested = null
     }
@@ -135,7 +129,6 @@ internal fun PaintingInspection(
             active = null
         }
         if (leaving) {
-            settle.animateTo(0f, tween(SETTLE_MS))
             onExitNow()
             return@LaunchedEffect
         }
@@ -157,163 +150,157 @@ internal fun PaintingInspection(
         if (selection >= 0) focus.animateTo(1f, tween(460)) { c.focus = value }
     }
     val exitStudy = {
-        if (!leaving && state.studyVisible) {
+        if (!leaving && state.showingInspection) {
             if (state.inside) state.leave() else leaving = true
         }
     }
-    BackHandler(enabled = state.studyVisible) {
+    BackHandler(enabled = state.showingInspection) {
         if (!leaving) {
             if (requested != null || active != null) requested = null else exitStudy()
         }
     }
     val tool = requested ?: active
-    Box(Modifier.fillMaxSize().clipToBounds().background(ArchivePaper).onPlaced { geometry.root = it }) {
-        LabGrid(ArchiveInk, ArchivePaper, {
-            restingFrame(geometry.bounds.size, item.image).translate(geometry.bounds.topLeft)
-        }, gridReveal, state::entryWave, Modifier.matchParentSize())
-        ArchiveLayout(
+    val lens = LocalInspectionLens.current
+    Box(Modifier.fillMaxSize().clipToBounds()) {
+        val input = if (state.studyVisible && !leaving) {
+            Modifier
+                .pointerInput(effect, c, canStudy, exitLabel) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown()
+                        val microscope = effect as? MicroscopeInspection
+                        if (active == InspectionMode.Lighting) aimLight(down.position, drawnFrame.value, c)
+                        val navigating = microscope?.navigate(down.position, c) == true
+                        var moved = false
+                        var travel = 0f
+                        do {
+                            val event = awaitPointerEvent()
+                            val pressed = event.changes.filter { it.pressed }
+                            if (pressed.isEmpty()) break
+                            val point = pressed.first().position
+                            val pan = event.calculatePan()
+                            travel += pan.getDistance()
+                            if (travel > viewConfiguration.touchSlop || pressed.size > 1) moved = true
+                            when (active) {
+                                InspectionMode.Explode, InspectionMode.PointCloud -> {
+                                    c.yaw = (c.yaw + pan.x * 3.0f / size.width.coerceAtLeast(1)).coerceIn(-1.3f, 1.3f)
+                                    c.pitch = (c.pitch - pan.y * 2.4f / size.height.coerceAtLeast(1)).coerceIn(-0.85f, 0.85f)
+                                }
+                                InspectionMode.Microscope -> if (navigating) microscope.navigate(point, c)
+                                    else if (pan != Offset.Zero || pressed.size > 1) microscope?.transform(
+                                        drawnFrame.value, event.calculateCentroid(useCurrent = true), pan, event.calculateZoom(), c)
+                                InspectionMode.Lighting -> aimLight(point, drawnFrame.value, c)
+                                else -> Unit
+                            }
+                            if (moved) pressed.forEach { it.consume() }
+                        } while (true)
+                        if (!moved && (active == InspectionMode.Objects || active == InspectionMode.Colors))
+                            toggle(effect?.hit(drawnFrame.value, down.position, c))
+                        if (!moved && active == null && requested == null && exitLabel == null) exitStudy()
+                        down.consume()
+                    }
+                }
+                .pointerInput(effect, c) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull() ?: continue
+                            if (event.type == PointerEventType.Move && active == InspectionMode.Lighting)
+                                aimLight(change.position, drawnFrame.value, c)
+                            if (event.type == PointerEventType.Scroll && effect is MicroscopeInspection) {
+                                effect.transform(drawnFrame.value, change.position, Offset.Zero,
+                                    exp((-change.scrollDelta.y * 0.12f).coerceIn(-1f, 1f)), c)
+                                change.consume()
+                            }
+                        }
+                    }
+                }
+        } else Modifier
+        Canvas(Modifier.fillMaxSize().semantics {
+            contentDescription = listOfNotNull(item.title, active?.label).joinToString(", ")
+        }.then(input)) {
+            val t = progress.value
+            val home = hung()
+            val fold = state.fold
+            val over = state.over
+            val frame = if (fold > 0f || over) home else lerp(home, toolFrame(home, active), ease(t))
+            drawnFrame.value = frame
+            if (!frame.isEmpty) {
+                when {
+                    fold > 0f -> drawFold(frame, fold, over)
+                    over -> paintImage(item.back ?: item.image, frame)
+                    effect != null -> clipRect { effect.draw(this, frame, t, c) }
+                    else -> Unit
+                }
+            }
+        }
+
+        InspectionLayout(
             title = item.title, exitLabel = exitLabel, onExit = exitStudy,
+            hung = hung, state = state,
             index = { end, compact ->
                 val modes = if (end) StructureModes else SurfaceModes
                 if (tool != null && tool !in modes) {
                     InspectionAdjustments(requested, active, analysis, c, selection, toggle) { replay++ }
                 } else {
-                    ArchiveModeIndex(modes, tool, canStudy && !leaving, end, compact,
+                    InspectionModeIndex(modes, tool, canStudy && !leaving, end, compact,
                         onMode = { requested = it })
                 }
             },
             action = { end ->
                 if (tool != null) {
-                    if (end) ArchiveAction("Reset", "↺", true, enabled = !leaving) { requested = null }
-                } else if (end && stepLabel != null && (state.canStepInside || studyLocked)) {
-                    ArchiveAction(stepLabel, "→", true, state.canStepInside && !leaving, ArchiveAccent, state::stepInside)
-                } else if (!end && flipLabel != null && (state.canFlip || studyLocked)) {
-                    ArchiveAction(flipLabel, "↪", false, state.canFlip && !leaving, onClick = state::flip)
+                    if (end) InspectionAction("Reset", "↺", true, enabled = !leaving) { requested = null }
+                } else if (end && stepLabel != null && supportsHardwareMeshes) {
+                    InspectionAction(stepLabel, "→", true, state.canStepInside && !leaving,
+                        gridFeedback = false) {
+                        lens?.clear()
+                        state.stepInside()
+                    }
+                } else if (!end && flipLabel != null && state.hasFlipAction) {
+                    InspectionAction(flipLabel, "↪", false, state.canFlip && !leaving, onClick = state::flip)
                 }
             },
-        ) { stage ->
-            val input = if (state.studyVisible && !leaving) {
-                Modifier
-                    .pointerInput(effect, c, canStudy, exitLabel) {
-                        awaitEachGesture {
-                            val down = awaitFirstDown()
-                            val microscope = effect as? MicroscopeInspection
-                            if (active == InspectionMode.Lighting) aimLight(down.position, geometry.frame, c)
-                            val navigating = microscope?.navigate(down.position, c) == true
-                            var moved = false
-                            var travel = 0f
-                            do {
-                                val event = awaitPointerEvent()
-                                val pressed = event.changes.filter { it.pressed }
-                                if (pressed.isEmpty()) break
-                                val point = pressed.first().position
-                                val pan = event.calculatePan()
-                                travel += pan.getDistance()
-                                if (travel > viewConfiguration.touchSlop || pressed.size > 1) moved = true
-                                when (active) {
-                                    InspectionMode.Explode, InspectionMode.PointCloud -> {
-                                        c.yaw = (c.yaw + pan.x * 3.0f / size.width.coerceAtLeast(1)).coerceIn(-1.3f, 1.3f)
-                                        c.pitch = (c.pitch - pan.y * 2.4f / size.height.coerceAtLeast(1)).coerceIn(-0.85f, 0.85f)
-                                    }
-                                    InspectionMode.Microscope -> if (navigating) microscope.navigate(point, c)
-                                        else if (pan != Offset.Zero || pressed.size > 1) microscope?.transform(
-                                            geometry.frame, event.calculateCentroid(useCurrent = true), pan, event.calculateZoom(), c)
-                                    InspectionMode.Lighting -> aimLight(point, geometry.frame, c)
-                                    else -> Unit
-                                }
-                                if (moved) pressed.forEach { it.consume() }
-                            } while (true)
-                            if (!moved && (active == InspectionMode.Objects || active == InspectionMode.Colors))
-                                toggle(effect?.hit(geometry.frame, down.position, c))
-                            if (!moved && active == null && requested == null && exitLabel == null) exitStudy()
-                            down.consume()
-                        }
-                    }
-                    .pointerInput(effect, c) {
-                        awaitPointerEventScope {
-                            while (true) {
-                                val event = awaitPointerEvent()
-                                val change = event.changes.firstOrNull() ?: continue
-                                if (event.type == PointerEventType.Move && active == InspectionMode.Lighting)
-                                    aimLight(change.position, geometry.frame, c)
-                                if (event.type == PointerEventType.Scroll && effect is MicroscopeInspection) {
-                                    effect.transform(geometry.frame, change.position, Offset.Zero,
-                                        exp((-change.scrollDelta.y * 0.12f).coerceIn(-1f, 1f)), c)
-                                    change.consume()
-                                }
-                            }
-                        }
-                    }
-            } else Modifier
-            Canvas(stage.onPlaced { coordinates ->
-                geometry.root?.let { root ->
-                    geometry.bounds = Rect(root.localPositionOf(coordinates, Offset.Zero), coordinates.size.toSize())
-                }
-            }.semantics {
-                contentDescription = listOfNotNull(item.title, active?.label).joinToString(", ")
-            }.then(input)) {
-                val t = progress.value
-                val from = hung().translate(-geometry.bounds.topLeft)
-                val rest = restingFrame(size, item.image)
-                // Step inside picks up the painting at the wall after its grid pulse ends.
-                val position = settle.value * (1f - ease(state.entryWave))
-                val home = if (from.isEmpty) rest else lerp(from, rest, position)
-                val fold = state.fold
-                val over = state.over
-                val frame = if (fold > 0f || over) home else lerp(home, toolFrame(home, active), ease(t))
-                geometry.frame = frame
-                if (!frame.isEmpty) {
-                    when {
-                        fold > 0f -> drawFold(frame, fold, over)
-                        over -> paintImage(item.back ?: item.image, frame)
-                        effect != null -> clipRect { effect.draw(this, frame, t, c) }
-                        else -> paintImage(item.image, frame)
-                    }
-                }
-            }
-        }
+        )
     }
 }
 
 @Composable
-private fun ArchiveLayout(
+private fun InspectionLayout(
     title: String,
     exitLabel: String?,
     onExit: () -> Unit,
+    hung: () -> Rect,
+    state: GalleryWallScrollState,
     index: @Composable (end: Boolean, compact: Boolean) -> Unit,
     action: @Composable (end: Boolean) -> Unit,
-    painting: @Composable (Modifier) -> Unit,
 ) {
-    BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+    BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).graphicsLayer {
+        alpha = ease((state.lift - 0.4f) / 0.6f) * (1f - ease(state.entryWave))
+    }) {
         val portrait = maxHeight > maxWidth
         val compact = maxHeight < 460.dp || maxWidth < 600.dp
         val inset = (maxWidth * 0.025f).coerceIn(12.dp, 36.dp)
         val verticalInset = (maxHeight * 0.025f).coerceIn(4.dp, 24.dp)
-        val rail = (maxWidth * 0.12f).coerceIn(88.dp, 150.dp).coerceAtMost(maxWidth * 0.35f)
-        val titleWidth = minOf(rail * 1.25f, maxWidth * 0.44f)
+        val rail = (maxWidth * 0.14f).coerceIn(102.dp, 156.dp).coerceAtMost(maxWidth * 0.35f)
+        val titleWidth = minOf(280.dp, maxWidth * 0.48f)
         val titleHeight = minOf(if (compact) 62.dp else 86.dp, maxHeight * 0.23f)
         val foot = minOf(48.dp, maxHeight * 0.18f)
-        // In tall windows the two indexes sit below the canvas, still at opposite edges.
-        val indexTop = if (portrait) maxOf(titleHeight, maxHeight * 0.59f) else titleHeight
-        val stage = if (portrait) {
-            Modifier.align(Alignment.TopCenter).padding(top = titleHeight + verticalInset)
-                .fillMaxWidth(0.85f).height((indexTop - titleHeight).coerceAtLeast(0.dp))
-        } else {
-            Modifier.align(Alignment.Center).padding(horizontal = inset * 2 + rail)
-                .fillMaxWidth().fillMaxHeight(0.74f)
-        }
-        painting(stage)
-
+        // On narrow screens the two lists start below the canvas where it actually hangs.
+        val indexTop = if (portrait) {
+            val density = LocalDensity.current
+            val safeTop = WindowInsets.safeDrawing.getTop(density)
+            val belowArt = with(density) { (hung().bottom - safeTop).toDp() } + 6.dp
+            belowArt.coerceIn(titleHeight, maxOf(titleHeight, maxHeight - foot - verticalInset * 2 - 48.dp))
+        } else titleHeight
         Box(Modifier.fillMaxSize().padding(horizontal = inset, vertical = verticalInset)) {
             BasicText(
-                title, Modifier.align(Alignment.TopStart).widthIn(max = titleWidth).padding(top = 5.dp),
+                title, Modifier.align(Alignment.TopEnd).widthIn(max = titleWidth).padding(top = 8.dp),
                 maxLines = 2, overflow = TextOverflow.Ellipsis,
-                style = TextStyle(color = ArchiveInk, fontFamily = FontFamily.Serif,
-                    fontSize = if (compact) 21.sp else 28.sp, lineHeight = if (compact) 23.sp else 31.sp),
+                style = TextStyle(color = InspectionInk, fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic,
+                    textAlign = TextAlign.End, fontSize = if (compact) 16.sp else 22.sp),
             )
             if (exitLabel != null) {
-                Box(Modifier.align(Alignment.TopEnd).width(rail)) {
-                    ArchiveAction(exitLabel, "×", true, onClick = onExit)
+                Box(Modifier.align(Alignment.TopStart).width(rail)) {
+                    InspectionAction(exitLabel, "←", false, onClick = onExit)
                 }
             }
             Row(

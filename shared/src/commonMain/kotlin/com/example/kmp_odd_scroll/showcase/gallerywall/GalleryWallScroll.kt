@@ -1,9 +1,5 @@
 package com.example.kmp_odd_scroll.showcase.gallerywall
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -19,6 +15,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -27,7 +25,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,6 +52,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
@@ -69,10 +67,13 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.kmp_odd_scroll.showcase.gallerywall.inspection.AnalysisCache
+import com.example.kmp_odd_scroll.showcase.gallerywall.inspection.LabGrid
+import com.example.kmp_odd_scroll.showcase.gallerywall.inspection.LocalInspectionLens
 import com.example.kmp_odd_scroll.showcase.gallerywall.inspection.PaintingAnalysis
 import com.example.kmp_odd_scroll.showcase.gallerywall.inspection.PaintingInspection
+import com.example.kmp_odd_scroll.showcase.gallerywall.inspection.inspectionHover
+import com.example.kmp_odd_scroll.showcase.gallerywall.inspection.rememberInspectionLens
 import com.example.kmp_odd_scroll.showcase.internal.clamped
-import kotlinx.coroutines.flow.first
 import org.jetbrains.compose.resources.DrawableResource
 import kotlin.math.PI
 import kotlin.math.abs
@@ -421,15 +422,9 @@ fun GalleryWallScroll(
     SideEffect { state.hang = hang }
     val inspectionCache = remember { AnalysisCache() }
     val painting = items[hang.wrap(state.subject)]
-    // The grid belongs to the whole inspection, including a trip inside and back.
-    val gridReveal = remember(state) { Animatable(0f) }
-    LaunchedEffect(state, state.inspected) {
-        if (state.inspected) {
-            gridReveal.snapTo(0f)
-            snapshotFlow { state.studyVisible }.first { it }
-            gridReveal.animateTo(1f, tween(640))
-        }
-    }
+    val lens = rememberInspectionLens()
+    val gridVisible by remember(state) { derivedStateOf { state.inspected || state.lift > 0f } }
+    val hasInspectionEffect = remember(painting.image) { mutableStateOf(false) }
     // Start measuring during the walk up so the first tool can use the masks immediately.
     val analysis = if (state.looking) key(
         painting.image, painting.depth, painting.inspectionMask, painting.inspectionMaskResource,
@@ -448,7 +443,11 @@ fun GalleryWallScroll(
         }
     }
 
-    Box(modifier.background(background).fillMaxSize()) {
+    Box(modifier.background(background).fillMaxSize().onPlaced { lens.viewport = it }
+        .inspectionHover(lens, state.showingInspection && !state.inside)) {
+        if (gridVisible) {
+            LabGrid(hung::value, state::lift, state::entryWave, lens, Modifier.matchParentSize())
+        }
         Canvas(
             Modifier
                 .fillMaxSize()
@@ -530,7 +529,10 @@ fun GalleryWallScroll(
             val veil = veil(state.stepIn)
             rotate(room.roll, Offset(room.cx, room.cy)) {
                 if (veil < 1f) {
-                    drawWall(art, hang, room, state.position, close.takeIf { room.zoom > BITMAP_SCALE }, subject, background)
+                    // Only a tool or a flip takes over drawing the canvas from the wall.
+                    val replaced = state.studyVisible && (hasInspectionEffect.value || state.fold > 0f || state.over)
+                    drawWall(art, hang, room, state.position, close.takeIf { room.zoom > BITMAP_SCALE },
+                        subject, background, replaced)
                 }
                 if (state.stepIn > 0f) {
                     drawRect(INSIDE_DARK, alpha = veil)
@@ -556,7 +558,7 @@ fun GalleryWallScroll(
             }
         }
         if (exitLabel != null) {
-            HudButton(exitLabel, state.arrived && state.inspected && !state.studyVisible, background, contentColor, Modifier.align(Alignment.BottomStart).padding(start = HUD_SIDE, bottom = HUD_BOTTOM)) {
+            HudButton(exitLabel, state.arrived && state.inspected && !state.showingInspection, background, contentColor, Modifier.align(Alignment.BottomStart).padding(start = HUD_SIDE, bottom = HUD_BOTTOM)) {
                 state.leave()
             }
         }
@@ -564,10 +566,10 @@ fun GalleryWallScroll(
             HudButton(inspectLabel, state.canInspect, background, contentColor,
                 Modifier.align(Alignment.BottomEnd).padding(end = HUD_SIDE, bottom = HUD_BOTTOM), state::inspect)
         }
-        AnimatedVisibility(visible = state.studyVisible, enter = fadeIn(tween(400)), exit = fadeOut(tween(240))) {
+        if (state.showingInspection) CompositionLocalProvider(LocalInspectionLens provides lens) {
             key(painting.image) {
-                PaintingInspection(painting, analysis, hung::value, gridReveal::value, exitLabel,
-                    flipLabel, stepInsideLabel, state) { bounds, progress, over ->
+                PaintingInspection(painting, analysis, hung::value, exitLabel,
+                    flipLabel, stepInsideLabel, state, onEffect = { hasInspectionEffect.value = it }) { bounds, progress, over ->
                     val card = art.close(hang.wrap(state.subject), room.closePx)
                     drawFold(card, bounds, progress, over)
                 }
@@ -928,6 +930,7 @@ private fun DrawScope.drawWall(
     close: CardArt?,
     closeIndex: Int,
     wall: Color,
+    subjectReplaced: Boolean,
 ) {
     if (size.width <= 0f || size.height <= 0f) return
     val reach = room.reach
@@ -941,7 +944,7 @@ private fun DrawScope.drawWall(
         val subject = i == closeIndex
         if (i < closeIndex) left -= room.part else if (i > closeIndex) left += room.part
         val card = if (close != null && subject) close else art.cards[hang.wrap(i)]
-        if (left <= reach && left + card.wallWidth >= -reach) {
+        if (!(subject && subjectReplaced) && left <= reach && left + card.wallWidth >= -reach) {
             if (subject) {
                 flat = room.flat
                 // Only the painting walked up to is taken apart.
@@ -995,7 +998,8 @@ private fun DrawScope.drawApart(card: CardArt, left: Float, room: Room, wall: Co
     val w = card.face.width / px
     val h = card.face.height / px
     val border = card.opening / px
-    if (room.label > 0f) card.wall?.let { drawSheet(it, px, card.top, left, 0f, room, room.label) }
+    // Unframed cards carry the label on the face itself.
+    if (room.label > 0f) drawSheet(card.wall ?: card.face, px, card.top, left, 0f, room, room.label)
 
     // Straight up, until its bottom edge is over the top of the screen.
     val glass = if (card.glass) {
@@ -1655,7 +1659,8 @@ private class WallArt(
             drawText(layout, topLeft = Offset(0f, labelTop + n * LABEL_LINE * unit))
         }
 
-        if (frame == null) return CardArt(paint(bw, bh) { canvas(); label() }, pxPerUnit, top)
+        if (frame == null) return CardArt(paint(bw, bh) { canvas(); label() }, pxPerUnit, top,
+            unframe = { paint(paintW, paintH) { canvas() } })
         val recess = (frame.recess.coerceIn(0f, frame.depth) * unit).roundToInt().coerceAtMost(depth)
         val face = paint(outerW, outerH) {
             drawFrame(frame, outerW.toFloat(), outerH.toFloat(), border.toFloat(), unit, seed)
