@@ -378,7 +378,7 @@ fun rememberGalleryWallScrollState(walkIn: Boolean = true): GalleryWallScrollSta
  *   null to hang those bare.
  * @param lookLabel the button that walks up to a painting, or null for none —
  *   a host can show its own off [GalleryWallScrollState.canLook].
- * @param exitLabel the button that steps back once inspection starts. Before
+ * @param exitLabel the button opposite Inspect that steps back from the painting. Before
  *   inspection, or when the label is null, tapping the painting steps back.
  * @param inspectLabel the button, bottom right up close, that takes the frame
  *   and the glass off, or null for none — a host can show its own off
@@ -560,8 +560,10 @@ fun GalleryWallScroll(
             }
         }
         if (exitLabel != null) {
-            HudButton(exitLabel, state.arrived && state.inspected && !state.showingInspection, background, contentColor, Modifier.align(Alignment.BottomStart).padding(start = HUD_SIDE, bottom = HUD_BOTTOM)) {
-                if (state.inside) state.leave() else state.uninspect()
+            val showExit = state.canInspect || (state.arrived && state.inspected && !state.showingInspection)
+            HudButton(exitLabel, showExit, background, contentColor,
+                Modifier.align(Alignment.BottomStart).padding(start = HUD_SIDE, bottom = HUD_BOTTOM)) {
+                if (state.inspected && !state.inside) state.uninspect() else state.leave()
             }
         }
         if (inspectLabel != null) {
