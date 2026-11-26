@@ -17,7 +17,6 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.unit.dp
-import com.example.kmp_odd_scroll.showcase.gallerywall.ENTRY_WAVE_SPACING
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -42,7 +41,8 @@ internal fun LabGrid(
         val dot = 0.72.dp.toPx()
         val field = InspectionInk.copy(alpha = 0.23f)
         val openingLight = Color(0xFFFFE4C6)
-        val entryLights = listOf(Color(0xFF99D2FF), Color(0xFFFF99D2), Color(0xFF99FFD2))
+        val blueLight = Color(0xFF99D2FF)
+        val purpleLight = Color(0xFFC299FF)
         val lensRadius = 120.dp.toPx()
         val band = 3f * cell
         val start = (min(painting.width, painting.height) * 0.5f - band).coerceAtLeast(0f)
@@ -105,16 +105,16 @@ internal fun LabGrid(
             }
 
             val waveProgress = wave()
-            entryLights.forEachIndexed { index, entryLight ->
-                val entry = waveProgress - index * ENTRY_WAVE_SPACING
-                if (entry <= 0f || entry >= 1f) return@forEachIndexed
+            val purple = waveProgress >= 1f
+            val entry = if (purple) waveProgress - 1f else waveProgress
+            val entryLight = if (purple) purpleLight else blueLight
+            if (entry > 0f && entry < 1f) {
                 val front = mix(start, far + 9f * cell, entry)
-                val fadeIn = ease(entry * 14f)
                 for (i in dots.indices) {
                     val gap = distances[i] - front
                     val crest = ease(1f - abs(gap) / (5f * cell))
                     val echo = ease(1f - abs(gap + 6f * cell) / band)
-                    val glow = max(crest, 0.34f * echo) * fadeIn
+                    val glow = max(crest, 0.34f * echo) * ease(entry * 14f)
                     if (glow <= 0f) continue
                     val point = dots[i]
                     val shifted = point + (point - origin) * (2f * dot * glow / max(dot, distances[i]))

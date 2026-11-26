@@ -76,8 +76,7 @@ internal const val FLIP_MS = 1800f
 
 /** Stepping into the painting, and back out of it. */
 private const val ENTRY_WAVE_MS = 640f
-internal const val ENTRY_WAVE_SPACING = 0.34f
-private const val ENTRY_WAVE_END = 1f + 2f * ENTRY_WAVE_SPACING
+private const val ENTRY_WAVES = 2f
 private const val STEP_IN_MS = 2600f
 private const val STEP_OUT_MS = 1600f
 
@@ -153,7 +152,7 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
 
     /** The controls share the wall while the glass lifts, and give way to the interior camera. */
     internal val showingInspection by derivedStateOf {
-        arrived && inspected && !stepping && (!inside || entryWave < ENTRY_WAVE_END)
+        arrived && inspected && !stepping && (!inside || entryWave < ENTRY_WAVES)
     }
 
     /** The unframed front is stationary and ready for the inspection tools on every renderer. */
@@ -209,7 +208,7 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
     internal var over by mutableStateOf(false)
         private set
 
-    /** Time in pulse durations for the staggered blue, pink and green waves before the camera moves. */
+    /** Consecutive blue (0 to 1) and purple (1 to 2) pulses before the camera moves. */
     internal var entryWave by mutableFloatStateOf(0f)
         private set
 
@@ -454,8 +453,8 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
 
         // Into the painting and back out, the head easing after the drags.
         val deep = when {
-            inside && entryWave < ENTRY_WAVE_END -> {
-                entryWave = min(ENTRY_WAVE_END, entryWave + deltaMs / ENTRY_WAVE_MS)
+            inside && entryWave < ENTRY_WAVES -> {
+                entryWave = min(ENTRY_WAVES, entryWave + deltaMs / ENTRY_WAVE_MS)
                 0f
             }
             inside -> min(1f, stepIn + deltaMs / STEP_IN_MS)
