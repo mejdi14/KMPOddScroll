@@ -22,6 +22,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -29,6 +30,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Canvas as BitmapCanvas
@@ -411,6 +413,8 @@ fun GalleryWallScroll(
     val inside = remember { StepInside() }
     val enter = remember { EnterPainting() }
     val canvas = remember { FloatArray(4) }
+    // Where the bare canvas of the painting walked up to lies on screen, so its study opens on it there.
+    val hung = remember { mutableStateOf(Rect.Zero) }
     SideEffect { state.hang = hang }
     val inspectionCache = remember { AnalysisCache() }
     val painting = items[hang.wrap(state.subject)]
@@ -498,6 +502,13 @@ fun GalleryWallScroll(
                 null
             }
             val item = items[hang.wrap(subject)]
+            if (state.arrived) {
+                val card = close ?: art.cards[hang.wrap(subject)]
+                if (canvasOnScreen(card, hang.start(subject) - state.position, room, item, canvas)) {
+                    val at = Rect(canvas[0], canvas[1], canvas[2], canvas[3])
+                    if (at != hung.value) hung.value = at
+                }
+            }
             // Its depth is worked out as soon as it can be stepped into, so the step does not start on a dropped frame.
             val scene = item.scene
             state.scene = scene
@@ -551,7 +562,7 @@ fun GalleryWallScroll(
         }
         AnimatedVisibility(visible = state.canStudy, enter = fadeIn(tween(400)), exit = fadeOut(tween(240))) {
             key(painting.image) {
-                PaintingInspection(painting, analysis, background, contentColor, exitLabel,
+                PaintingInspection(painting, analysis, hung::value, background, contentColor, exitLabel,
                     flipLabel.takeIf { state.canFlip }, stepInsideLabel.takeIf { state.canStepInside },
                     onExit = state::leave, onFlip = state::flip, onStep = state::stepInside)
             }

@@ -22,8 +22,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.lerp
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -33,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.kmp_odd_scroll.showcase.gallerywall.GalleryWallItem
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.decodeToImageBitmap
@@ -65,13 +69,27 @@ internal class AnalysisCache {
     }
 }
 
-private class StageGeometry { var frame = Rect.Zero }
+private class StageGeometry {
+    var frame = Rect.Zero
+    var root: LayoutCoordinates? = null
+    var stage: LayoutCoordinates? = null
+}
 
+/** Once the study has faded in over the bare painting, the grid spreads out behind it over this long. */
+private const val GRID_AFTER_MS = 400L
+private const val GRID_MS = 1300
+
+/**
+ * The study of [item], with its frame and glass off. It fills the same box as
+ * the wall, where the bare canvas lies at [hung], so the painting stays as it
+ * is and the bench comes up round it.
+ */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 internal fun PaintingInspection(
     item: GalleryWallItem,
     analysis: PaintingAnalysis?,
+    hung: () -> Rect,
     background: Color,
     ink: Color,
     exitLabel: String?,
@@ -137,7 +155,21 @@ internal fun PaintingInspection(
     BackHandler(enabled = !leaving) {
         if (requested != null || active != null) requested = null else leaving = true
     }
-    BoxWithConstraints(Modifier.fillMaxSize().background(background)) {
+    val grid = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        delay(GRID_AFTER_MS)
+        grid.animateTo(1f, tween(GRID_MS, easing = LinearEasing))
+    }
+    // Where the painting hung, in the stage's own coordinates; read as the stage is drawn.
+    val rest: DrawScope.() -> Rect = {
+        val root = geometry.root
+        val stage = geometry.stage
+        val at = if (root != null && stage != null && root.isAttached && stage.isAttached) {
+            hung().translate(-root.localPositionOf(stage, Offset.Zero))
+        } else Rect.Zero
+        restingFrame(size, item.image, at)
+    }
+    BoxWithConstraints(Modifier.fillMaxSize().background(background).onPlaced { geometry.root = it }) {
         val compact = maxWidth < 620.dp
         val short = maxHeight < 440.dp
         val side = if (compact || short) 14.dp else 30.dp
@@ -153,63 +185,67 @@ internal fun PaintingInspection(
                 if (requested != null || active != null) ToolButton("Reset", ink, background) { requested = null }
                 if (exitLabel != null) ToolButton(exitLabel, ink, background) { leaving = true }
             }
-            Canvas(Modifier.fillMaxWidth().weight(1f).clipToBounds()
-                .semantics { contentDescription = listOfNotNull(item.title, active?.label).joinToString(", ") }
-                .pointerInput(effect, c) {
-                    awaitEachGesture {
-                        val down = awaitFirstDown()
-                        val microscope = effect as? MicroscopeInspection
-                        if (active == InspectionMode.Lighting) aimLight(down.position, geometry.frame, c)
-                        val navigating = microscope?.navigate(down.position, c) == true
-                        var moved = false
-                        var travel = 0f
-                        do {
-                            val event = awaitPointerEvent()
-                            val pressed = event.changes.filter { it.pressed }
-                            if (pressed.isEmpty()) break
-                            val point = pressed.first().position
-                            val pan = event.calculatePan()
-                            travel += pan.getDistance()
-                            if (travel > viewConfiguration.touchSlop || pressed.size > 1) moved = true
-                            when (active) {
-                                InspectionMode.Explode, InspectionMode.PointCloud -> {
-                                    c.yaw = (c.yaw + pan.x * 3.0f / size.width.coerceAtLeast(1)).coerceIn(-1.3f, 1.3f)
-                                    c.pitch = (c.pitch - pan.y * 2.4f / size.height.coerceAtLeast(1)).coerceIn(-0.85f, 0.85f)
+            Box(Modifier.fillMaxWidth().weight(1f).clipToBounds().onPlaced { geometry.stage = it }) {
+                LabGrid(ink, { rest().center }, grid::value, Modifier.matchParentSize())
+                Canvas(Modifier.matchParentSize()
+                    .semantics { contentDescription = listOfNotNull(item.title, active?.label).joinToString(", ") }
+                    .pointerInput(effect, c) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown()
+                            val microscope = effect as? MicroscopeInspection
+                            if (active == InspectionMode.Lighting) aimLight(down.position, geometry.frame, c)
+                            val navigating = microscope?.navigate(down.position, c) == true
+                            var moved = false
+                            var travel = 0f
+                            do {
+                                val event = awaitPointerEvent()
+                                val pressed = event.changes.filter { it.pressed }
+                                if (pressed.isEmpty()) break
+                                val point = pressed.first().position
+                                val pan = event.calculatePan()
+                                travel += pan.getDistance()
+                                if (travel > viewConfiguration.touchSlop || pressed.size > 1) moved = true
+                                when (active) {
+                                    InspectionMode.Explode, InspectionMode.PointCloud -> {
+                                        c.yaw = (c.yaw + pan.x * 3.0f / size.width.coerceAtLeast(1)).coerceIn(-1.3f, 1.3f)
+                                        c.pitch = (c.pitch - pan.y * 2.4f / size.height.coerceAtLeast(1)).coerceIn(-0.85f, 0.85f)
+                                    }
+                                    InspectionMode.Microscope -> if (navigating) microscope.navigate(point, c)
+                                        else if (pan != Offset.Zero || pressed.size > 1) microscope?.transform(
+                                            geometry.frame, event.calculateCentroid(useCurrent = true), pan, event.calculateZoom(), c)
+                                    InspectionMode.Lighting -> aimLight(point, geometry.frame, c)
+                                    else -> Unit
                                 }
-                                InspectionMode.Microscope -> if (navigating) microscope.navigate(point, c)
-                                    else if (pan != Offset.Zero || pressed.size > 1) microscope?.transform(
-                                        geometry.frame, event.calculateCentroid(useCurrent = true), pan, event.calculateZoom(), c)
-                                InspectionMode.Lighting -> aimLight(point, geometry.frame, c)
-                                else -> Unit
-                            }
-                            if (moved) pressed.forEach { it.consume() }
-                        } while (true)
-                        if (!moved && (active == InspectionMode.Objects || active == InspectionMode.Colors))
-                            toggle(effect?.hit(geometry.frame, down.position, c))
-                        down.consume()
+                                if (moved) pressed.forEach { it.consume() }
+                            } while (true)
+                            if (!moved && (active == InspectionMode.Objects || active == InspectionMode.Colors))
+                                toggle(effect?.hit(geometry.frame, down.position, c))
+                            down.consume()
+                        }
                     }
-                }
-                .pointerInput(effect, c) {
-                    awaitPointerEventScope {
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            val change = event.changes.firstOrNull() ?: continue
-                            if (event.type == PointerEventType.Move && active == InspectionMode.Lighting)
-                                aimLight(change.position, geometry.frame, c)
-                            if (event.type == PointerEventType.Scroll && effect is MicroscopeInspection) {
-                                effect.transform(geometry.frame, change.position, Offset.Zero,
-                                    exp((-change.scrollDelta.y * 0.12f).coerceIn(-1f, 1f)), c)
-                                change.consume()
+                    .pointerInput(effect, c) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull() ?: continue
+                                if (event.type == PointerEventType.Move && active == InspectionMode.Lighting)
+                                    aimLight(change.position, geometry.frame, c)
+                                if (event.type == PointerEventType.Scroll && effect is MicroscopeInspection) {
+                                    effect.transform(geometry.frame, change.position, Offset.Zero,
+                                        exp((-change.scrollDelta.y * 0.12f).coerceIn(-1f, 1f)), c)
+                                    change.consume()
+                                }
                             }
                         }
                     }
-                }
-            ) {
-                val t = progress.value
-                val frame = lerp(artFrame(size, item.image, null), artFrame(size, item.image, active), ease(t))
-                geometry.frame = frame
-                if (!frame.isEmpty) {
-                    if (effect == null) paintImage(item.image, frame) else effect.draw(this, frame, t, c)
+                ) {
+                    val t = progress.value
+                    val home = rest()
+                    val frame = lerp(home, toolFrame(home, active), ease(t))
+                    geometry.frame = frame
+                    if (!frame.isEmpty) {
+                        if (effect == null) paintImage(item.image, frame) else effect.draw(this, frame, t, c)
+                    }
                 }
             }
             InspectionToolbar(requested, active, analysis, c, selection, compact, short, ink, background,

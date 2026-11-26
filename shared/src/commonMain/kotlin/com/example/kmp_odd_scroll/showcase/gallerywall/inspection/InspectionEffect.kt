@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.withTransform
+import kotlin.math.max
 import kotlin.math.min
 
 internal enum class InspectionMode(val label: String, val gesture: String) {
@@ -61,15 +62,40 @@ internal fun DrawScope.paintImage(
     }
 }
 
-internal fun artFrame(size: Size, image: ImageBitmap, mode: InspectionMode?): Rect {
-    val margin = when (mode) {
-        InspectionMode.Explode, InspectionMode.PointCloud -> 0.80f
-        else -> 0.93f
+/** The most of a stage of [size] the painting may cover. */
+private const val FIT = 0.93f
+
+/** The tools that orbit the painting stand it this much further back, to leave room to turn it. */
+private const val ORBIT_BACK = 0.80f / FIT
+
+/**
+ * Where the painting lies in a stage of [size]: where it [hung] on the wall,
+ * in the stage's coordinates, so the study opens on it as it is, without a
+ * zoom. Only if that is more than the stage can hold is it brought down to
+ * fit, and then moved in from the edges.
+ */
+internal fun restingFrame(size: Size, image: ImageBitmap, hung: Rect): Rect {
+    val fit = min(size.width / image.width, size.height / image.height) * FIT
+    val w0 = if (hung.isEmpty) image.width * fit else hung.width
+    val h0 = if (hung.isEmpty) image.height * fit else hung.height
+    val k = min(1f, min(image.width * fit / w0, image.height * fit / h0))
+    val halfW = w0 * k * 0.5f
+    val halfH = h0 * k * 0.5f
+    val centre = if (hung.isEmpty) Offset(size.width * 0.5f, size.height * 0.5f) else hung.center
+    val x = centre.x.coerceIn(halfW, max(halfW, size.width - halfW))
+    val y = centre.y.coerceIn(halfH, max(halfH, size.height - halfH))
+    return Rect(x - halfW, y - halfH, x + halfW, y + halfH)
+}
+
+/** The painting at [rest] as tool [mode] holds it. */
+internal fun toolFrame(rest: Rect, mode: InspectionMode?): Rect {
+    val k = when (mode) {
+        InspectionMode.Explode, InspectionMode.PointCloud -> ORBIT_BACK
+        else -> return rest
     }
-    val scale = min(size.width / image.width, size.height / image.height) * margin
-    val halfW = image.width * scale * 0.5f
-    val halfH = image.height * scale * 0.5f
-    return Rect(size.width * 0.5f - halfW, size.height * 0.5f - halfH, size.width * 0.5f + halfW, size.height * 0.5f + halfH)
+    val halfW = rest.width * k * 0.5f
+    val halfH = rest.height * k * 0.5f
+    return Rect(rest.center.x - halfW, rest.center.y - halfH, rest.center.x + halfW, rest.center.y + halfH)
 }
 
 internal fun mix(from: Float, to: Float, t: Float) = from + (to - from) * t
