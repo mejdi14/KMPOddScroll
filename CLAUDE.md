@@ -8,9 +8,9 @@ conveyors — plus a demo app that showcases them. Targets Android, iOS, Desktop
   Each style is a single composable that takes a list of items and owns its own
   layout, projection and gesture handling. Package root is
   `io.github.mejdi14.oddscroll`.
-- `shared/` — the demo app UI. `ScrollCatalog.kt` is the single source of truth:
-  one `ScrollDemo` entry drives both the home gallery and the navigation state.
-- `shared/.../home/ScrollArtwork.kt` — procedural cover art for each demo tile.
+- `shared/` — the demo app UI. Each `ScrollDemo` entry in `ScrollCatalog.kt`
+  drives the text-only demo menu and navigation. Set `ready = true` when a demo
+  is ready to appear in the menu.
 - `shared/src/commonMain/composeResources/drawable/` — demo art bundled as
   Compose resources, so no demo needs a network call or an image-loading
   dependency. `wide_*` are 1200x600 Unsplash photographs, `grid_*` the same six
@@ -20,9 +20,11 @@ conveyors — plus a demo app that showcases them. Targets Android, iOS, Desktop
 - `androidApp/`, `desktopApp/`, `webApp/`, `iosApp/` — thin entry points; they
   all call `App()` from `shared`.
 
-A demo fills the frame and nothing is drawn over it. The way back to the gallery
-is `BackHandler` in `App.kt` — the system's own back — so don't add chrome on
-top of a style that is the thing being looked at.
+`App.kt` owns demo navigation, the curtain transition and the adaptive layout.
+Below 840 dp, the menu and demo take turns filling the window. The back chip or
+system back returns to the menu through the curtain. From 840 dp on every
+target, the menu occupies the left 20% and the curtain covers only the demo pane.
+Build each demo to fill its available viewport in either layout.
 
 ## Committing
 
@@ -49,10 +51,10 @@ Rules:
 1. Add the composable in `oddScroll/src/commonMain/.../<name>/<Name>Scroll.kt`,
    with its parameters and state class beside it.
 2. Add a demo screen in `shared/.../demos/<Name>DemoScreen.kt`.
-3. Add a `ScrollDemo` entry in `ScrollCatalog.kt` (route, category, title,
-   subtitle).
-4. Add a cover-art motif branch in `ScrollArtwork.kt`.
-5. Document it in `README.md` (feature bullet, usage snippet, API table).
+3. Add a `ScrollDemo` entry in `ScrollCatalog.kt` with its route, title,
+   description and menu tags. Set `ready = true` when the demo is ready to
+   appear in the menu.
+4. Document it in `README.md` (feature bullet, usage snippet, API table).
 
 ## Rendering constraints
 

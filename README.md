@@ -143,6 +143,11 @@ Depends on `compose.foundation` only, no Material. Android needs API 24+.
 
 ## Run the demo
 
+Choose a scroll style from the text menu. The curtain shows the demo's name
+while it loads. Below 840 dp, use the back chip or system back to return to the
+menu. From 840 dp, the menu stays on the left and the curtain covers only the
+demo pane on the right.
+
 ```bash
 ./gradlew :desktopApp:run                         # desktop
 ./gradlew :androidApp:assembleDebug               # android

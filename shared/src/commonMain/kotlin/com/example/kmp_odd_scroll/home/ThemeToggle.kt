@@ -1,7 +1,6 @@
 package com.example.kmp_odd_scroll.home
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
@@ -34,23 +33,22 @@ private const val RAYS = 8
 @Composable
 fun ThemeToggle(
     dark: Boolean,
-    surface: Color,
+    enabled: Boolean,
     ink: Color,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(
         modifier = modifier
-            .size(44.dp)
+            .size(32.dp)
             .clip(CircleShape)
-            .background(surface)
-            .clickable(role = Role.Button, onClick = onClick)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .semantics {
                 contentDescription = if (dark) "Switch to light theme" else "Switch to dark theme"
             },
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(Modifier.size(22.dp)) {
+        Canvas(Modifier.size(16.dp)) {
             val c = center
             val u = size.minDimension
             if (dark) {

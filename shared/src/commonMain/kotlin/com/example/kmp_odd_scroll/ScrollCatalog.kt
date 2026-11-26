@@ -14,13 +14,12 @@ import com.example.kmp_odd_scroll.demos.RunwayDemoScreen
 import com.example.kmp_odd_scroll.demos.TerraceDemoScreen
 
 /**
- * One entry per scroll style. Drives both the home gallery and the navigation
+ * One entry per scroll style. Drives both the home menu and the navigation
  * state, so adding a style is a single addition here plus its screen.
  *
- * [category] is the family the style belongs to; the gallery shows it beside
- * the title as "Category · Title".
+ * The menu shows the style's [category] and its rendering [tech] under the subtitle.
  *
- * Only [ready] styles reach the gallery; the rest stay listed here but can't
+ * Only [ready] styles appear in the menu; the rest stay listed here but can't
  * be opened until they're finished.
  */
 data class ScrollDemo(
@@ -28,6 +27,7 @@ data class ScrollDemo(
     val category: String,
     val title: String,
     val subtitle: String,
+    val tech: String,
     val ready: Boolean = false,
     val screen: @Composable () -> Unit,
 )
@@ -38,6 +38,7 @@ private val allScrollDemos: List<ScrollDemo> = listOf(
         category = "Spatial",
         title = "Infinite Spiral",
         subtitle = "A column of cards wound onto a spiral, turning endlessly",
+        tech = "Canvas transforms",
         screen = { InfiniteSpiralDemoScreen() },
     ),
     ScrollDemo(
@@ -45,6 +46,7 @@ private val allScrollDemos: List<ScrollDemo> = listOf(
         category = "Infinite",
         title = "Edge Distortion",
         subtitle = "An endless card lattice that bends away at the borders",
+        tech = "Border warp",
         screen = { EdgeDistortionDemoScreen() },
     ),
     ScrollDemo(
@@ -52,6 +54,7 @@ private val allScrollDemos: List<ScrollDemo> = listOf(
         category = "Optical",
         title = "Flex Carousel",
         subtitle = "An infinite picture row flowing through invisible liquid glass",
+        tech = "Runtime shader",
         ready = true,
         screen = { FlexCarouselDemoScreen() },
     ),
@@ -60,6 +63,7 @@ private val allScrollDemos: List<ScrollDemo> = listOf(
         category = "Spherical",
         title = "Infinite Menu",
         subtitle = "A sphere of tiles, dragged any way, that faces up the nearest",
+        tech = "Sphere projection",
         screen = { InfiniteMenuDemoScreen() },
     ),
     ScrollDemo(
@@ -67,6 +71,7 @@ private val allScrollDemos: List<ScrollDemo> = listOf(
         category = "Mechanical",
         title = "Cartwheel",
         subtitle = "A column of cards riding the rim of a wheel that rolls past the frame",
+        tech = "Canvas transforms",
         screen = { CartwheelDemoScreen() },
     ),
     ScrollDemo(
@@ -74,6 +79,7 @@ private val allScrollDemos: List<ScrollDemo> = listOf(
         category = "Graphic",
         title = "Card Sphere",
         subtitle = "A field of drawn cards that coasts and settles one at the front",
+        tech = "Sphere projection",
         screen = { CardSphereDemoScreen() },
     ),
     ScrollDemo(
@@ -81,6 +87,7 @@ private val allScrollDemos: List<ScrollDemo> = listOf(
         category = "Isometric",
         title = "Lift Stack",
         subtitle = "A deck of pictures that runs up through itself and stands up the one it stops past",
+        tech = "Projective transforms",
         screen = { LiftStackDemoScreen() },
     ),
     ScrollDemo(
@@ -88,6 +95,7 @@ private val allScrollDemos: List<ScrollDemo> = listOf(
         category = "Oblique",
         title = "CD Rack",
         subtitle = "A row of clear CD cases on edge; tap one to take it out, turn it and open it",
+        tech = "Projective transforms",
         ready = true,
         screen = { CdRackDemoScreen() },
     ),
@@ -96,6 +104,7 @@ private val allScrollDemos: List<ScrollDemo> = listOf(
         category = "Architectural",
         title = "Gallery Wall",
         subtitle = "Paintings hung round the inside of a room, sliding along its walls past you",
+        tech = "Projective transforms",
         ready = true,
         screen = { GalleryWallDemoScreen() },
     ),
@@ -104,6 +113,7 @@ private val allScrollDemos: List<ScrollDemo> = listOf(
         category = "Stepped",
         title = "Terrace",
         subtitle = "A deck stacked back both ways from the front card, its neighbours stepping out as narrowing bands",
+        tech = "Canvas transforms",
         screen = { TerraceDemoScreen() },
     ),
     ScrollDemo(
@@ -111,6 +121,7 @@ private val allScrollDemos: List<ScrollDemo> = listOf(
         category = "Pop-up",
         title = "Runway",
         subtitle = "A perspective runway of papercraft dioramas whose cutouts flip upright as you scroll past",
+        tech = "Projective transforms",
         ready = true,
         screen = { RunwayDemoScreen() },
     ),
