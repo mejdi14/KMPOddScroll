@@ -4,7 +4,7 @@ The gallery print uses the supplied photograph of Johannes Vermeer’s *The Art 
 
 The studio uses the original photograph in `art/the-art-of-painting.jpg` for the figures, chandelier, curtain, map and visible furnishings. The floor’s vanishing points set the entry camera, and the intersections of the black and ivory tiles determine the pattern underfoot. The route moves just over a metre from the original viewpoint.
 
-The supplied chess painting hangs in a shallow black-and-gold frame between the two windows. ImageGen studies supplied the flower vase, the sloped artist’s desk with its unfinished river study, the girl peeking through the door and the elderly woman seated beside it. The woman turns toward the girl in her blue brocade dress, holding a folding fan to her cheek. Earlier studies supplied the studio walls and the paint hidden behind the original figures.
+The supplied chess painting hangs in a shallow black-and-gold frame between the two windows. ImageGen studies supplied the flower vase, the sloped artist’s desk with its unfinished river study, the girl peeking through the door and the elderly woman seated beside it. The woman sits squarely facing the painter, holding a folding fan beside her cheek. Her chair back runs parallel to the wall. Earlier studies supplied the studio walls and the paint hidden behind the original figures.
 
 `studio.py` projects the approved artwork back into the room from the viewpoint where each edit was reviewed. The woman’s slippers, the chair feet and the base of the vase meet the marble floor. The door has a recessed opening and a projecting leaf. The desk has cabinet sides, a sloping board and a recessed rear stretcher. Their shadows follow the walls and floor as the viewer turns.
 
@@ -95,10 +95,21 @@ Reference 1 = original Vermeer The Art of Painting, painterly style and light. R
 #### Woman beside the door
 
 ```text
-Precise object edit for a Vermeer studio scene. Image 1 is the edit target, the elderly woman with her fan on a Dutch oak chair. Image 2 is a four-panel reference for the oil handling, daylight and camera, specifically the bottom-left doorway scene.
-Produce ONLY one complete, untrimmed, isolated woman and her occupied chair together, with genuine transparent alpha behind and through the chair. Preserve this same woman's face and age, linen cap, ivory lace, midnight blue and muted gold floral silk dress with ivory underskirt, folding fan at her cheek, and dark slippers.
-Turn chair and sitter together toward the LEFT of the picture into a natural three-quarter side view (about 40 degrees, chair back on the RIGHT). She is quietly looking a little left toward someone in the doorway. Seat her pelvis back on the broad wooden seat, one forearm resting comfortably across her lap, the other holding the fan. Knees project left, with the cloth falling naturally under gravity, one slipper a little farther forward. Draw a structurally convincing seventeenth century wooden chair in perspective, rear and near legs at distinctly different depths on a common level floor, turned posts, simple stretchers. Eye level of an adult at 1.37 m, almost level with the seated woman's crown; see just a little of her lap from above.
-Soft window daylight entering from picture RIGHT across the cap and cheek, soft brown shade under the skirt, quiet warm-grey shadow colors, match the brush edges, values and painted detail of the room in image 2. Every visible foot, hem, shoe and chair finial complete, compositing-ready clean transparent silhouette, generous transparent gutter. No room, tiles, background, ground plane, painted cast shadow, vignette, text, frame or added objects.
+Edit this elderly Dutch woman and her oak chair into a strictly frontal, straight-on sitting portrait, as seen by the painter directly in front of her.
+Rotate and reconstruct BOTH the chair and her entire body, including her head.
+The chair back is against a wall parallel to the image plane.
+She sits squarely in the center of the seat against the backrest.
+Both finials visible behind her, equally spaced on either side, at equal height.
+The level front seat rail runs horizontally; the front legs are equally near.
+Center the face, sternum, lap and chair on the same vertical line.
+Her eyes look directly forward at the painter, both eyes equally visible, nose in the middle, shoulders square, knees and the toes of both slippers pointing forward.
+Natural relaxed upright pose.
+Retain the identity and age of this woman, white lace cap, blue-and-gold brocade, pale silk skirt panel, brown slippers, pale fan lightly raised beside one cheek, face fully visible, other hand resting on her lap.
+Quiet Vermeer oil painting and soft window light from the viewer's right.
+Deliver the complete woman AND occupied chair as one full-length cutout, with true transparent alpha around all edges and in all open spaces.
+Include the soles and chair feet, viewed slightly from above the seat at adult eye level.
+No floor, wall, cast shadow or other objects.
+The exact frontal alignment is essential.
 ```
 
 #### Foreground chair legs

@@ -121,12 +121,15 @@ def _shadow(sprite, origin, offset, radius, strength):
 
 
 def build_studio(art, eye, tilt, focal, front, rear, right, mesh):
-    origins = {"open-door": (617, 45), "door-leaf": (703, 113), "seated-woman": (919, 244),
+    origins = {"open-door": (617, 45), "door-leaf": (703, 113), "seated-woman": (629, 252),
                "artist-desk": (284, 290), "flower-vase": (1180, 250)}
     sprites = {name: Image.open(art / f"{name}.webp").convert("RGBA") for name in origins}
     rects = {name: (*origins[name], *im.size) for name, im in sprites.items()}
 
     door = _View(eye, tilt, focal, 1586, 169, -3)
+    # Register the frontal portrait from directly across the chair. Its back
+    # runs along the rear wall even when the doorway is viewed obliquely.
+    chair = _View((-.65, eye[1], eye[2]), tilt, focal, 1586, 180, -3)
     desk = _View(eye, tilt, focal, 1585, 94, -4)
     vase = _View(eye, tilt, focal, 1586, -1, -.6)
     z = np.array([0, 0, 1])
@@ -134,7 +137,7 @@ def build_studio(art, eye, tilt, focal, front, rear, right, mesh):
     sprites["desk-back"] = Image.open(art / "artist-desk-back.webp").convert("RGBA")
     rects["desk-back"] = (381, 659, *sprites["desk-back"].size)
     casters = [
-        ("seated-woman", door, z, rear-eye[2], (-55, 26), 35, .27),
+        ("seated-woman", chair, z, rear-eye[2], (-38, 22), 30, .27),
         ("artist-desk", desk, x, right-eye[0], (27, 66), 28, .67),
         ("flower-vase", vase, z, front-eye[2], (17, 12), 14, .38),
     ]
@@ -154,20 +157,24 @@ def build_studio(art, eye, tilt, focal, front, rear, right, mesh):
     def leaf_plane(px, py):
         return rear-eye[2] - .01 - .17*np.clip((958-px)/(958-712), 0, 1)
 
-    # The two slipper soles and the front and rear chair posts in the cutout.
+    # Both front posts meet the floor at the same depth, with the two
+    # slipper soles just ahead of them.
     sx, sy = origins["seated-woman"]
-    foot_x = sx + np.array([32, 108, 325, 446])
-    foot_y = sy + np.array([692, 712, 699, 660])
-    sitter_feet = door.floor_points(foot_x, foot_y)
-    foot_depth = sitter_feet[:, 2] - eye[2]
+    foot_x = sx + np.array([20, 307, 126, 189])
+    foot_y = sy + np.array([661, 661, 675, 675])
+    sitter_feet = chair.floor_points(foot_x, foot_y)
+    back = rear - chair.eye[2] - .06
+    post, sole = sitter_feet[[0, 2], 2] - chair.eye[2]
 
     def sitter_plane(px, py):
-        # Keep the posts upright. The skirt comes forward over the knees
-        # from the seat to the two slippers at their own depths.
-        seat = np.interp(px, foot_x[2:], foot_depth[2:])
-        hem = np.interp(px, foot_x, foot_depth)
-        drape = np.clip((py-sy-365)/160, 0, 1)
-        return seat + drape*(hem-seat)
+        # The rails stay parallel to the wall. The woman sits against the
+        # backrest and her lap projects forward between the two finials.
+        row = py - sy
+        frame = np.interp(row, [310, 419], [back, post])
+        body = np.interp(row, [250, 405, 560], [back-.16, post, sole])
+        center = sx + sprites["seated-woman"].width/2
+        across_lap = np.clip((110 - np.abs(px-center))/32, 0, 1)
+        return frame + across_lap*(body-frame)
 
     def desk_front(px):
         feet = desk.floor_distance(np.array([336, 949]), np.array([860, 857]), desk.ahead)
@@ -191,7 +198,7 @@ def build_studio(art, eye, tilt, focal, front, rear, right, mesh):
         _panel(door, rects["open-door"], textures["open-door"], z, door_plane, mesh,
                xs=(677, 685, 708, 958), ys=(140, 502, 524, 545, 835)),
         _panel(door, rects["door-leaf"], textures["door-leaf"], z, leaf_plane, mesh),
-        _panel(door, rects["seated-woman"], textures["seated-woman"], z, sitter_plane, mesh,
+        _panel(chair, rects["seated-woman"], textures["seated-woman"], z, sitter_plane, mesh,
                xs=foot_x, ys=foot_y),
         _panel(desk, rects["desk-back"], textures["desk-back"], desk.ahead, back_plane, mesh),
         *_stretchers(desk, textures["artist-desk"], desk_front, desk_back, mesh),
