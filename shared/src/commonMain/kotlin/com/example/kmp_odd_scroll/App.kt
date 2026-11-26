@@ -106,7 +106,7 @@ private fun CatalogLayout(split: Boolean, dark: Boolean, onToggleTheme: () -> Un
                     screens.SaveableStateProvider(demo.route) { demo.screen() }
                     if (split) {
                         PageCurtain(curtain)
-                    } else {
+                    } else if (platformFamily != PlatformFamily.Mobile) {
                         BackChip(onClick = ::goHome)
                     }
                 }
