@@ -104,8 +104,9 @@ The level front seat rail runs horizontally; the front legs are equally near.
 Center the face, sternum, lap and chair on the same vertical line.
 Her eyes look directly forward at the painter, both eyes equally visible, nose in the middle, shoulders square, knees and the toes of both slippers pointing forward.
 Natural relaxed upright pose.
-Retain the identity and age of this woman, white lace cap, blue-and-gold brocade, pale silk skirt panel, brown slippers, pale fan lightly raised beside one cheek, face fully visible, other hand resting on her lap.
-Quiet Vermeer oil painting and soft window light from the viewer's right.
+Retain her age, likeness, brown slippers and the gesture of the open fan beside her cheek. Her other hand rests on her lap.
+Paint her gown in muted slate-blue wool with a few broad folds. Give her a plain linen cap, collar and cuffs, and a simple ochre fan.
+Use the girl peeking through the door as the reference for window light, soft edges and the broad tones of the face and hands.
 Deliver the complete woman AND occupied chair as one full-length cutout, with true transparent alpha around all edges and in all open spaces.
 Include the soles and chair feet, viewed slightly from above the seat at adult eye level.
 No floor, wall, cast shadow or other objects.
