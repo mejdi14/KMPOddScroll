@@ -1,34 +1,19 @@
 package com.example.kmp_odd_scroll.demos
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.kmp_odd_scroll.showcase.cdrack.CdManual
 import com.example.kmp_odd_scroll.showcase.cdrack.CdRackItem
 import com.example.kmp_odd_scroll.showcase.cdrack.CdRackScroll
@@ -119,36 +104,13 @@ fun CdRackDemoScreen() {
                 state = state,
             )
         }
-        // Up until the rack has drawn every case once, then faded away.
-        var done by remember { mutableStateOf(false) }
-        if (items != null && state.loaded >= 1f) done = true
-        val veil = animateFloatAsState(if (done) 0f else 1f, tween(450), label = "veil")
-        val progress = animateFloatAsState(
-            if (done) 1f else READ_SHARE * read / (games.size * 2f) + (1f - READ_SHARE) * state.loaded,
-            tween(250),
-            label = "progress",
+        // Up until the rack has drawn every case once.
+        DemoLoader(
+            done = items != null && state.loaded >= 1f,
+            progress = READ_SHARE * read / (games.size * 2f) + (1f - READ_SHARE) * state.loaded,
+            paper = PAPER,
+            ink = INK,
         )
-        if (!done || veil.value > 0f) {
-            Loader(progress = { progress.value }, Modifier.fillMaxSize().graphicsLayer { alpha = veil.value })
-        }
-    }
-}
-
-/** A hairline that fills as the rack gets ready, on the paper, over the rack. */
-@Composable
-private fun Loader(progress: () -> Float, modifier: Modifier) {
-    Box(modifier.background(PAPER).pointerInput(Unit) {}, contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            BasicText(
-                "LOADING",
-                style = TextStyle(color = INK.copy(alpha = 0.55f), fontSize = 11.sp, letterSpacing = 2.4.sp),
-            )
-            Spacer(Modifier.height(14.dp))
-            Canvas(Modifier.width(168.dp).height(2.dp)) {
-                drawRect(INK.copy(alpha = 0.1f))
-                drawRect(INK.copy(alpha = 0.8f), size = size.copy(width = size.width * progress().coerceIn(0f, 1f)))
-            }
-        }
     }
 }
 

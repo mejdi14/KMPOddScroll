@@ -411,8 +411,12 @@ fun GalleryWallScroll(
     }
 
     val measurer = rememberTextMeasurer()
-    val hang = remember(items, frame) { Hang(items, frame) }
-    val art = remember(items, contentColor, frame, measurer) { WallArt(items, contentColor, frame, measurer) }
+    // Kept for as long as what the wall draws is the same: a painting's depth
+    // or its scene arriving later leaves its frame as it was, and baking every
+    // frame again is the slowest thing the wall does — seconds, in a browser.
+    val look = items.map { WallLook(it.image, it.back, it.frame, it.scale, it.title, it.artist, it.date, it.medium) }
+    val hang = remember(look, frame) { Hang(items, frame) }
+    val art = remember(look, contentColor, frame, measurer) { WallArt(items, contentColor, frame, measurer) }
     val room = remember { Room() }
     val inside = remember { StepInside() }
     val enter = remember { EnterPainting() }
@@ -1577,6 +1581,18 @@ private class CardArt(
 private class Stick(val image: ImageBitmap, val x: Int, val y: Int)
 
 /** Every painting drawn once, rebuilt only when they change size on screen. */
+/** All of a painting that [WallArt] and [Hang] draw from: they are kept while it is unchanged. */
+private data class WallLook(
+    val image: ImageBitmap,
+    val back: ImageBitmap?,
+    val frame: GalleryWallFrame?,
+    val scale: Float,
+    val title: String,
+    val artist: String,
+    val date: String,
+    val medium: String,
+)
+
 private class WallArt(
     private val items: List<GalleryWallItem>,
     private val ink: Color,

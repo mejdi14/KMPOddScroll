@@ -1,14 +1,22 @@
 package com.example.kmp_odd_scroll.demos
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import com.example.kmp_odd_scroll.LocalPalette
 import com.example.kmp_odd_scroll.showcase.gallerywall.GalleryWallFrame
 import com.example.kmp_odd_scroll.showcase.gallerywall.GalleryWallItem
@@ -21,95 +29,32 @@ import com.example.kmp_odd_scroll.showcase.gallerywall.GalleryWallScene
 import com.example.kmp_odd_scroll.showcase.gallerywall.GalleryWallScroll
 import com.example.kmp_odd_scroll.showcase.gallerywall.rememberGalleryWallScrollState
 import kmpoddscroll.shared.generated.resources.Res
-import kmpoddscroll.shared.generated.resources.museum_almond
-import kmpoddscroll.shared.generated.resources.museum_armchair
-import kmpoddscroll.shared.generated.resources.museum_automat
-import kmpoddscroll.shared.generated.resources.museum_automat_front
-import kmpoddscroll.shared.generated.resources.museum_automat_left
-import kmpoddscroll.shared.generated.resources.museum_automat_rear
-import kmpoddscroll.shared.generated.resources.museum_automat_right
-import kmpoddscroll.shared.generated.resources.museum_automat_surfaces
-import kmpoddscroll.shared.generated.resources.museum_automat_table
-import kmpoddscroll.shared.generated.resources.museum_boating
-import kmpoddscroll.shared.generated.resources.museum_boating_party
-import kmpoddscroll.shared.generated.resources.museum_bridge
-import kmpoddscroll.shared.generated.resources.museum_cliff_walk
-import kmpoddscroll.shared.generated.resources.museum_cliff_walk_back
-import kmpoddscroll.shared.generated.resources.museum_cliff_walk_cards
-import kmpoddscroll.shared.generated.resources.museum_cliff_walk_cliff
-import kmpoddscroll.shared.generated.resources.museum_cliff_walk_far
-import kmpoddscroll.shared.generated.resources.museum_cliff_walk_ground
-import kmpoddscroll.shared.generated.resources.museum_cliff_walk_strokes
-import kmpoddscroll.shared.generated.resources.museum_fan
-import kmpoddscroll.shared.generated.resources.museum_june
-import kmpoddscroll.shared.generated.resources.museum_kiss
-import kmpoddscroll.shared.generated.resources.museum_pasture
-import kmpoddscroll.shared.generated.resources.museum_pasture_band
-import kmpoddscroll.shared.generated.resources.museum_pasture_cards
-import kmpoddscroll.shared.generated.resources.museum_pasture_far
-import kmpoddscroll.shared.generated.resources.museum_pasture_ground
-import kmpoddscroll.shared.generated.resources.museum_pasture_paint
-import kmpoddscroll.shared.generated.resources.museum_poppies
-import kmpoddscroll.shared.generated.resources.museum_poppies_back
-import kmpoddscroll.shared.generated.resources.museum_poppies_band
-import kmpoddscroll.shared.generated.resources.museum_poppies_cards
-import kmpoddscroll.shared.generated.resources.museum_poppies_far
-import kmpoddscroll.shared.generated.resources.museum_poppies_ground
-import kmpoddscroll.shared.generated.resources.museum_poppies_paint
-import kmpoddscroll.shared.generated.resources.museum_roses
-import kmpoddscroll.shared.generated.resources.museum_seashore
-import kmpoddscroll.shared.generated.resources.museum_sunflowers
-import kmpoddscroll.shared.generated.resources.museum_venus
-import kmpoddscroll.shared.generated.resources.museum_vermeer
-import kmpoddscroll.shared.generated.resources.museum_vermeer_back
-import kmpoddscroll.shared.generated.resources.museum_vermeer_figures
-import kmpoddscroll.shared.generated.resources.museum_vermeer_front
-import kmpoddscroll.shared.generated.resources.museum_vermeer_studio
-import kmpoddscroll.shared.generated.resources.museum_vermeer_surfaces
-import kmpoddscroll.shared.generated.resources.museum_vermeer_walls
-import kmpoddscroll.shared.generated.resources.museum_whip
-import kmpoddscroll.shared.generated.resources.museum_whip_band
-import kmpoddscroll.shared.generated.resources.museum_whip_cards
-import kmpoddscroll.shared.generated.resources.museum_whip_far
-import kmpoddscroll.shared.generated.resources.museum_whip_ground
-import kmpoddscroll.shared.generated.resources.museum_whip_paint
-import kmpoddscroll.shared.generated.resources.museum_almond_depth
-import kmpoddscroll.shared.generated.resources.museum_armchair_depth
-import kmpoddscroll.shared.generated.resources.museum_boating_depth
-import kmpoddscroll.shared.generated.resources.museum_boating_party_depth
-import kmpoddscroll.shared.generated.resources.museum_bridge_depth
-import kmpoddscroll.shared.generated.resources.museum_cliff_walk_depth
-import kmpoddscroll.shared.generated.resources.museum_fan_depth
-import kmpoddscroll.shared.generated.resources.museum_june_depth
-import kmpoddscroll.shared.generated.resources.museum_kiss_depth
-import kmpoddscroll.shared.generated.resources.museum_poppies_depth
-import kmpoddscroll.shared.generated.resources.museum_roses_depth
-import kmpoddscroll.shared.generated.resources.museum_seashore_depth
-import kmpoddscroll.shared.generated.resources.museum_sunflowers_depth
-import kmpoddscroll.shared.generated.resources.museum_venus_depth
-import kmpoddscroll.shared.generated.resources.museum_sunflowers_subjects
-import kmpoddscroll.shared.generated.resources.museum_boating_subjects
-import kmpoddscroll.shared.generated.resources.museum_june_subjects
-import kmpoddscroll.shared.generated.resources.museum_bridge_subjects
-import kmpoddscroll.shared.generated.resources.museum_roses_subjects
-import kmpoddscroll.shared.generated.resources.museum_pasture_subjects
-import kmpoddscroll.shared.generated.resources.museum_armchair_subjects
-import kmpoddscroll.shared.generated.resources.museum_kiss_subjects
-import kmpoddscroll.shared.generated.resources.museum_whip_subjects
+import kmpoddscroll.shared.generated.resources.allDrawableResources
 import kmpoddscroll.shared.generated.resources.museum_almond_subjects
-import kmpoddscroll.shared.generated.resources.museum_boating_party_subjects
-import kmpoddscroll.shared.generated.resources.museum_cliff_walk_subjects
-import kmpoddscroll.shared.generated.resources.museum_venus_subjects
-import kmpoddscroll.shared.generated.resources.museum_poppies_subjects
-import kmpoddscroll.shared.generated.resources.museum_fan_subjects
-import kmpoddscroll.shared.generated.resources.museum_seashore_subjects
-import kmpoddscroll.shared.generated.resources.museum_vermeer_subjects
+import kmpoddscroll.shared.generated.resources.museum_armchair_subjects
 import kmpoddscroll.shared.generated.resources.museum_automat_subjects
-import kmpoddscroll.shared.generated.resources.museum_pasture_depth
-import kmpoddscroll.shared.generated.resources.museum_whip_depth
-import kmpoddscroll.shared.generated.resources.museum_vermeer_depth
-import kmpoddscroll.shared.generated.resources.museum_automat_depth
-import org.jetbrains.compose.resources.imageResource
+import kmpoddscroll.shared.generated.resources.museum_boating_party_subjects
+import kmpoddscroll.shared.generated.resources.museum_boating_subjects
+import kmpoddscroll.shared.generated.resources.museum_bridge_subjects
+import kmpoddscroll.shared.generated.resources.museum_cliff_walk_subjects
+import kmpoddscroll.shared.generated.resources.museum_fan_subjects
+import kmpoddscroll.shared.generated.resources.museum_june_subjects
+import kmpoddscroll.shared.generated.resources.museum_kiss_subjects
+import kmpoddscroll.shared.generated.resources.museum_pasture_subjects
+import kmpoddscroll.shared.generated.resources.museum_poppies_subjects
+import kmpoddscroll.shared.generated.resources.museum_roses_subjects
+import kmpoddscroll.shared.generated.resources.museum_seashore_subjects
+import kmpoddscroll.shared.generated.resources.museum_sunflowers_subjects
+import kmpoddscroll.shared.generated.resources.museum_venus_subjects
+import kmpoddscroll.shared.generated.resources.museum_vermeer_subjects
+import kmpoddscroll.shared.generated.resources.museum_whip_subjects
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import org.jetbrains.compose.resources.ExperimentalResourceApi
+import org.jetbrains.compose.resources.decodeToImageBitmap
+import org.jetbrains.compose.resources.getDrawableResourceBytes
+import org.jetbrains.compose.resources.getSystemResourceEnvironment
 
 /**
  * Museum paintings hung whole at their own aspect, ordered so that no painting sits
@@ -150,201 +95,275 @@ fun GalleryWallDemoScreen() {
         if (state.inspected && !state.inside) state.uninspect() else state.leave()
     }
 
-    val sunflowers = imageResource(Res.drawable.museum_sunflowers)
-    val boating = imageResource(Res.drawable.museum_boating)
-    val june = imageResource(Res.drawable.museum_june)
-    val bridge = imageResource(Res.drawable.museum_bridge)
-    val roses = imageResource(Res.drawable.museum_roses)
-    val armchair = imageResource(Res.drawable.museum_armchair)
-    val kiss = imageResource(Res.drawable.museum_kiss)
-    val almond = imageResource(Res.drawable.museum_almond)
-    val boatingparty = imageResource(Res.drawable.museum_boating_party)
-    val cliffwalk = imageResource(Res.drawable.museum_cliff_walk)
-    val cliffwalkBack = imageResource(Res.drawable.museum_cliff_walk_back)
-    val venus = imageResource(Res.drawable.museum_venus)
-    val poppies = imageResource(Res.drawable.museum_poppies)
-    val poppiesBack = imageResource(Res.drawable.museum_poppies_back)
-    val fan = imageResource(Res.drawable.museum_fan)
-    val seashore = imageResource(Res.drawable.museum_seashore)
-    val vermeer = imageResource(Res.drawable.museum_vermeer)
-    val vermeerBack = imageResource(Res.drawable.museum_vermeer_back)
+    // Read in by hand rather than through imageResource, which on the web
+    // hands back a blank picture first and swaps each real one in as it
+    // arrives — every swap a new hang, and the frames baked again. The
+    // paintings come first, behind the loader; their depth maps and the
+    // scenes walked into follow once the wall is up, a picture a frame.
+    val wall = rememberPictures(WALL_PICTURES)
+    val deep = rememberPictures(DEEP_PICTURES, start = wall.images != null, spread = true)
+    val layouts by produceState<Map<String, ByteArray>?>(null, deep.images) {
+        if (deep.images != null) value = SCENES.associateWith { Res.readBytes("files/museum_${it}_scene.bin") }
+    }
+    val items = remember(wall.images, deep.images, layouts) {
+        wall.images?.let { museum(it, deep.images?.let { d -> layouts?.let { l -> d to l } }) }
+    }
 
-    // Depth Anything V2 Small, white near and black far, for stepping inside.
-    val sunflowersDepth = imageResource(Res.drawable.museum_sunflowers_depth)
-    val boatingDepth = imageResource(Res.drawable.museum_boating_depth)
-    val juneDepth = imageResource(Res.drawable.museum_june_depth)
-    val bridgeDepth = imageResource(Res.drawable.museum_bridge_depth)
-    val rosesDepth = imageResource(Res.drawable.museum_roses_depth)
-    val armchairDepth = imageResource(Res.drawable.museum_armchair_depth)
-    val kissDepth = imageResource(Res.drawable.museum_kiss_depth)
-    val almondDepth = imageResource(Res.drawable.museum_almond_depth)
-    val boatingpartyDepth = imageResource(Res.drawable.museum_boating_party_depth)
-    val cliffwalkDepth = imageResource(Res.drawable.museum_cliff_walk_depth)
-    val venusDepth = imageResource(Res.drawable.museum_venus_depth)
-    val poppiesDepth = imageResource(Res.drawable.museum_poppies_depth)
-    val fanDepth = imageResource(Res.drawable.museum_fan_depth)
-    val seashoreDepth = imageResource(Res.drawable.museum_seashore_depth)
-
-    // The Cliff Walk as a place: sky and sea, meadow, cliffs, figures and sails, the sea's brushwork, and how they lie.
-    val cliffwalkFar = imageResource(Res.drawable.museum_cliff_walk_far)
-    val cliffwalkGround = imageResource(Res.drawable.museum_cliff_walk_ground)
-    val cliffwalkCliff = imageResource(Res.drawable.museum_cliff_walk_cliff)
-    val cliffwalkCards = imageResource(Res.drawable.museum_cliff_walk_cards)
-    val cliffwalkStrokes = imageResource(Res.drawable.museum_cliff_walk_strokes)
-    val cliffwalkLayout by produceState<ByteArray?>(null) { value = Res.readBytes("files/museum_cliff_walk_scene.bin") }
-    val cliffwalkScene = remember(cliffwalkLayout, cliffwalkFar, cliffwalkGround, cliffwalkCliff, cliffwalkCards, cliffwalkStrokes) {
-        cliffwalkLayout?.let {
-            GalleryWallScene(it, listOf(cliffwalkFar, cliffwalkGround, cliffwalkCliff, cliffwalkCards, cliffwalkStrokes))
+    Box(Modifier.fillMaxSize().background(palette.page)) {
+        if (items != null) {
+            GalleryWallScroll(
+                items = items,
+                modifier = Modifier.fillMaxSize(),
+                background = palette.page,
+                contentColor = palette.ink,
+                frame = gilt(YELLOW_GOLD, Shell),
+                state = state,
+            )
         }
-    }
-
-    // Poppy Field as a place all the way round: the sky, the field, the painting itself laid back over both,
-    // the far tree line, the hill's trees and the figures, and how they lie.
-    val poppiesFar = imageResource(Res.drawable.museum_poppies_far)
-    val poppiesGround = imageResource(Res.drawable.museum_poppies_ground)
-    val poppiesPaint = imageResource(Res.drawable.museum_poppies_paint)
-    val poppiesBand = imageResource(Res.drawable.museum_poppies_band)
-    val poppiesCards = imageResource(Res.drawable.museum_poppies_cards)
-    val poppiesLayout by produceState<ByteArray?>(null) { value = Res.readBytes("files/museum_poppies_scene.bin") }
-    val poppiesScene = remember(poppiesLayout, poppiesFar, poppiesGround, poppiesPaint, poppiesBand, poppiesCards) {
-        poppiesLayout?.let { GalleryWallScene(it, listOf(poppiesFar, poppiesGround, poppiesPaint, poppiesBand, poppiesCards)) }
-    }
-
-    // Boys in a Pasture the same way, all the way round: the sky, the pasture, the painting laid back over both,
-    // the fence and tree line, the two boys and the shade trees, and how they lie.
-    val pasture = imageResource(Res.drawable.museum_pasture)
-    val pastureFar = imageResource(Res.drawable.museum_pasture_far)
-    val pastureGround = imageResource(Res.drawable.museum_pasture_ground)
-    val pasturePaint = imageResource(Res.drawable.museum_pasture_paint)
-    val pastureBand = imageResource(Res.drawable.museum_pasture_band)
-    val pastureCards = imageResource(Res.drawable.museum_pasture_cards)
-    val pastureLayout by produceState<ByteArray?>(null) { value = Res.readBytes("files/museum_pasture_scene.bin") }
-    val pastureScene = remember(pastureLayout, pastureFar, pastureGround, pasturePaint, pastureBand, pastureCards) {
-        pastureLayout?.let { GalleryWallScene(it, listOf(pastureFar, pastureGround, pasturePaint, pastureBand, pastureCards)) }
-    }
-
-    // Snap the Whip the same way: the sky, the meadow and the schoolyard, the painting laid back over both, the
-    // schoolhouse, woods and far fields, the chain of boys and the fallen one, and how they lie.
-    val whip = imageResource(Res.drawable.museum_whip)
-    val whipFar = imageResource(Res.drawable.museum_whip_far)
-    val whipGround = imageResource(Res.drawable.museum_whip_ground)
-    val whipPaint = imageResource(Res.drawable.museum_whip_paint)
-    val whipBand = imageResource(Res.drawable.museum_whip_band)
-    val whipCards = imageResource(Res.drawable.museum_whip_cards)
-    val whipLayout by produceState<ByteArray?>(null) { value = Res.readBytes("files/museum_whip_scene.bin") }
-    val whipScene = remember(whipLayout, whipFar, whipGround, whipPaint, whipBand, whipCards) {
-        whipLayout?.let { GalleryWallScene(it, listOf(whipFar, whipGround, whipPaint, whipBand, whipCards)) }
-    }
-
-    val automat = imageResource(Res.drawable.museum_automat)
-    val automatFront = imageResource(Res.drawable.museum_automat_front)
-    val automatLeft = imageResource(Res.drawable.museum_automat_left)
-    val automatRear = imageResource(Res.drawable.museum_automat_rear)
-    val automatRight = imageResource(Res.drawable.museum_automat_right)
-    val automatSurfaces = imageResource(Res.drawable.museum_automat_surfaces)
-    val automatTable = imageResource(Res.drawable.museum_automat_table)
-    val automatLayout by produceState<ByteArray?>(null) { value = Res.readBytes("files/museum_automat_scene.bin") }
-    val automatScene = remember(
-        automatLayout, automatFront, automatLeft, automatRear, automatRight, automatSurfaces, automatTable,
-    ) {
-        automatLayout?.let {
-            GalleryWallScene(it, listOf(automatFront, automatLeft, automatRear, automatRight, automatSurfaces, automatTable))
+        // Held over the first frame of the wall too, which bakes every frame
+        // and label once and is the one long frame it has.
+        var drawn by remember { mutableStateOf(false) }
+        LaunchedEffect(items != null) {
+            if (items == null) return@LaunchedEffect
+            repeat(2) { withFrameNanos { } }
+            drawn = true
         }
-    }
-
-    val vermeerFront = imageResource(Res.drawable.museum_vermeer_front)
-    val vermeerWalls = imageResource(Res.drawable.museum_vermeer_walls)
-    val vermeerSurfaces = imageResource(Res.drawable.museum_vermeer_surfaces)
-    val vermeerFigures = imageResource(Res.drawable.museum_vermeer_figures)
-    val vermeerStudio = imageResource(Res.drawable.museum_vermeer_studio)
-    val vermeerLayout by produceState<ByteArray?>(null) { value = Res.readBytes("files/museum_vermeer_scene.bin") }
-    val vermeerScene = remember(
-        vermeerLayout, vermeerFront, vermeerWalls, vermeerSurfaces, vermeerFigures, vermeerStudio,
-    ) {
-        vermeerLayout?.let {
-            GalleryWallScene(it, listOf(vermeerFront, vermeerWalls, vermeerSurfaces, vermeerFigures, vermeerStudio))
-        }
-    }
-
-    val pastureDepth = imageResource(Res.drawable.museum_pasture_depth)
-    val whipDepth = imageResource(Res.drawable.museum_whip_depth)
-    val vermeerDepth = imageResource(Res.drawable.museum_vermeer_depth)
-    val automatDepth = imageResource(Res.drawable.museum_automat_depth)
-
-    val items = remember(
-        pastureDepth, whipDepth, vermeerDepth, automatDepth,
-        sunflowers, boating, june, bridge, roses, armchair, kiss,
-        almond, boatingparty, cliffwalk, cliffwalkBack, venus, poppies, poppiesBack, fan, seashore, vermeer, vermeerBack,
-        sunflowersDepth, boatingDepth, juneDepth, bridgeDepth, rosesDepth, armchairDepth, kissDepth,
-        almondDepth, boatingpartyDepth, cliffwalkDepth, venusDepth, poppiesDepth, fanDepth, seashoreDepth,
-        pasture, whip, automat, cliffwalkScene, poppiesScene, pastureScene, whipScene, automatScene, vermeerScene,
-    ) {
-        listOf(
-            GalleryWallItem(sunflowers, "Sunflowers", "Vincent van Gogh", "1888–1889", "Oil on canvas", frame = gilt(YELLOW_GOLD, Shell), depth = sunflowersDepth,
-                inspectionMaskResource = Res.drawable.museum_sunflowers_subjects,
-            ),
-            GalleryWallItem(boating, "Boating", "Édouard Manet", "1874", "Oil on canvas", frame = wood(WALNUT, Acanthus, width = 0.095f), depth = boatingDepth,
-                inspectionMaskResource = Res.drawable.museum_boating_subjects,
-            ),
-            GalleryWallItem(june, "Flaming June", "Frederic Leighton", "1895", "Oil on canvas", frame = gilt(RED_GOLD, Gadroon, width = 0.105f), depth = juneDepth,
-                inspectionMaskResource = Res.drawable.museum_june_subjects,
-            ),
-            GalleryWallItem(bridge, "Water Lilies and Japanese Bridge", "Claude Monet", "1899", "Oil on canvas", frame = gilt(PALE_GOLD, Acanthus, width = 0.09f), depth = bridgeDepth,
-                inspectionMaskResource = Res.drawable.museum_bridge_subjects,
-            ),
-            GalleryWallItem(roses, "The Roses of Heliogabalus", "Lawrence Alma-Tadema", "1888", "Oil on canvas", frame = wood(MAHOGANY, Shell, width = 0.11f), depth = rosesDepth,
-                inspectionMaskResource = Res.drawable.museum_roses_subjects,
-            ),
-            GalleryWallItem(pasture, "Boys in a Pasture", "Winslow Homer", "1874", "Oil on canvas", frame = gilt(ANTIQUE_GOLD, Acanthus, width = 0.09f), depth = pastureDepth, scene = pastureScene,
-                inspectionMaskResource = Res.drawable.museum_pasture_subjects,
-            ),
-            GalleryWallItem(armchair, "Little Girl in a Blue Armchair", "Mary Cassatt", "1878", "Oil on canvas", frame = gilt(GREEN_GOLD, Gadroon, width = 0.095f), depth = armchairDepth,
-                inspectionMaskResource = Res.drawable.museum_armchair_subjects,
-            ),
-            GalleryWallItem(kiss, "The Kiss", "Gustav Klimt", "1907–1908", "Oil and gold leaf on canvas", frame = wood(EBONISED, Acanthus), depth = kissDepth,
-                inspectionMaskResource = Res.drawable.museum_kiss_subjects,
-            ),
-            GalleryWallItem(whip, "Snap the Whip", "Winslow Homer", "1872", "Oil on canvas", frame = gilt(PALE_GOLD, Gadroon, width = 0.085f), depth = whipDepth, scene = whipScene,
-                inspectionMaskResource = Res.drawable.museum_whip_subjects,
-            ),
-            GalleryWallItem(almond, "Almond Blossoms", "Vincent van Gogh", "1890", "Oil on canvas", frame = gilt(ANTIQUE_GOLD, Shell), depth = almondDepth,
-                inspectionMaskResource = Res.drawable.museum_almond_subjects,
-            ),
-            GalleryWallItem(boatingparty, "Luncheon of the Boating Party", "Pierre-Auguste Renoir", "1881", "Oil on canvas", frame = wood(WALNUT, Gadroon), depth = boatingpartyDepth,
-                inspectionMaskResource = Res.drawable.museum_boating_party_subjects,
-            ),
-            GalleryWallItem(cliffwalk, "The Cliff Walk at Pourville", "Claude Monet", "1882", "Oil on canvas", frame = wood(OAK, Classical, width = 0.07f), back = cliffwalkBack, depth = cliffwalkDepth, scene = cliffwalkScene,
-                inspectionMaskResource = Res.drawable.museum_cliff_walk_subjects,
-            ),
-            GalleryWallItem(venus, "The Birth of Venus", "Sandro Botticelli", "c. 1485", "Tempera on canvas", frame = gilt(PALE_GOLD, Shell, width = 0.115f), depth = venusDepth,
-                inspectionMaskResource = Res.drawable.museum_venus_subjects,
-            ),
-            GalleryWallItem(poppies, "Poppy Field", "Claude Monet", "1873", "Oil on canvas", frame = gilt(RED_GOLD, Acanthus, width = 0.095f), back = poppiesBack, depth = poppiesDepth, scene = poppiesScene,
-                inspectionMaskResource = Res.drawable.museum_poppies_subjects,
-            ),
-            GalleryWallItem(fan, "Lady with a Fan", "Gustav Klimt", "1917–1918", "Oil on canvas", frame = wood(ROSEWOOD, Gadroon), depth = fanDepth,
-                inspectionMaskResource = Res.drawable.museum_fan_subjects,
-            ),
-            GalleryWallItem(seashore, "Strolling along the Seashore", "Joaquín Sorolla", "1909", "Oil on canvas", frame = gilt(YELLOW_GOLD, Classical, width = 0.075f), depth = seashoreDepth,
-                inspectionMaskResource = Res.drawable.museum_seashore_subjects,
-            ),
-            GalleryWallItem(vermeer, "The Art of Painting", "Johannes Vermeer", "c. 1666–1668", "Oil on canvas", frame = gilt(ANTIQUE_GOLD, Shell), back = vermeerBack, depth = vermeerDepth, scene = vermeerScene,
-                inspectionMaskResource = Res.drawable.museum_vermeer_subjects,
-            ),
-            GalleryWallItem(automat, "Automat", "Edward Hopper", "1927", "Oil on canvas", frame = GalleryWallFrame(color = EBONISED), depth = automatDepth, scene = automatScene,
-                inspectionMaskResource = Res.drawable.museum_automat_subjects,
-            ),
+        DemoLoader(
+            done = drawn,
+            progress = 0.9f * wall.read / WALL_PICTURES.size,
+            paper = palette.page,
+            ink = palette.ink,
         )
     }
+}
 
-    GalleryWallScroll(
-        items = items,
-        modifier = Modifier.fillMaxSize(),
-        background = palette.page,
-        contentColor = palette.ink,
-        frame = gilt(YELLOW_GOLD, Shell),
-        state = state,
+/** The paintings as they hang on the wall, fronts and backs. */
+private val WALL_PICTURES = listOf(
+    "museum_sunflowers",
+    "museum_boating",
+    "museum_june",
+    "museum_bridge",
+    "museum_roses",
+    "museum_armchair",
+    "museum_kiss",
+    "museum_almond",
+    "museum_boating_party",
+    "museum_cliff_walk",
+    "museum_cliff_walk_back",
+    "museum_venus",
+    "museum_poppies",
+    "museum_poppies_back",
+    "museum_fan",
+    "museum_seashore",
+    "museum_vermeer",
+    "museum_vermeer_back",
+    "museum_pasture",
+    "museum_whip",
+    "museum_automat",
+)
+
+/** Everything for stepping inside: each painting's depth map and the layers of the scenes walked into. */
+private val DEEP_PICTURES = listOf(
+    "museum_sunflowers_depth",
+    "museum_boating_depth",
+    "museum_june_depth",
+    "museum_bridge_depth",
+    "museum_roses_depth",
+    "museum_armchair_depth",
+    "museum_kiss_depth",
+    "museum_almond_depth",
+    "museum_boating_party_depth",
+    "museum_cliff_walk_depth",
+    "museum_venus_depth",
+    "museum_poppies_depth",
+    "museum_fan_depth",
+    "museum_seashore_depth",
+    "museum_pasture_depth",
+    "museum_whip_depth",
+    "museum_vermeer_depth",
+    "museum_automat_depth",
+    "museum_cliff_walk_far",
+    "museum_cliff_walk_ground",
+    "museum_cliff_walk_cliff",
+    "museum_cliff_walk_cards",
+    "museum_cliff_walk_strokes",
+    "museum_poppies_far",
+    "museum_poppies_ground",
+    "museum_poppies_paint",
+    "museum_poppies_band",
+    "museum_poppies_cards",
+    "museum_pasture_far",
+    "museum_pasture_ground",
+    "museum_pasture_paint",
+    "museum_pasture_band",
+    "museum_pasture_cards",
+    "museum_whip_far",
+    "museum_whip_ground",
+    "museum_whip_paint",
+    "museum_whip_band",
+    "museum_whip_cards",
+    "museum_automat_front",
+    "museum_automat_left",
+    "museum_automat_rear",
+    "museum_automat_right",
+    "museum_automat_surfaces",
+    "museum_automat_table",
+    "museum_vermeer_front",
+    "museum_vermeer_walls",
+    "museum_vermeer_surfaces",
+    "museum_vermeer_figures",
+    "museum_vermeer_studio",
+)
+
+/** The paintings rebuilt as places, each laid out by `files/museum_<name>_scene.bin`. */
+private val SCENES = listOf("cliff_walk", "poppies", "pasture", "whip", "automat", "vermeer")
+
+/**
+ * The hang, out of the [wall] pictures; with [deep] — its pictures and the
+ * scenes' layouts — each painting can be stepped inside as well.
+ */
+private fun museum(
+    wall: Map<String, ImageBitmap>,
+    deep: Pair<Map<String, ImageBitmap>, Map<String, ByteArray>>?,
+): List<GalleryWallItem> {
+    fun scene(name: String, vararg layers: String): GalleryWallScene? = deep?.let { (pictures, layouts) ->
+        GalleryWallScene(layouts.getValue(name), layers.map { pictures.getValue(it) })
+    }
+    val depth = deep?.first
+    val sunflowers = wall.getValue("museum_sunflowers")
+    val boating = wall.getValue("museum_boating")
+    val june = wall.getValue("museum_june")
+    val bridge = wall.getValue("museum_bridge")
+    val roses = wall.getValue("museum_roses")
+    val armchair = wall.getValue("museum_armchair")
+    val kiss = wall.getValue("museum_kiss")
+    val almond = wall.getValue("museum_almond")
+    val boatingparty = wall.getValue("museum_boating_party")
+    val cliffwalk = wall.getValue("museum_cliff_walk")
+    val cliffwalkBack = wall.getValue("museum_cliff_walk_back")
+    val venus = wall.getValue("museum_venus")
+    val poppies = wall.getValue("museum_poppies")
+    val poppiesBack = wall.getValue("museum_poppies_back")
+    val fan = wall.getValue("museum_fan")
+    val seashore = wall.getValue("museum_seashore")
+    val vermeer = wall.getValue("museum_vermeer")
+    val vermeerBack = wall.getValue("museum_vermeer_back")
+    val pasture = wall.getValue("museum_pasture")
+    val whip = wall.getValue("museum_whip")
+    val automat = wall.getValue("museum_automat")
+    val sunflowersDepth = depth?.get("museum_sunflowers_depth")
+    val boatingDepth = depth?.get("museum_boating_depth")
+    val juneDepth = depth?.get("museum_june_depth")
+    val bridgeDepth = depth?.get("museum_bridge_depth")
+    val rosesDepth = depth?.get("museum_roses_depth")
+    val armchairDepth = depth?.get("museum_armchair_depth")
+    val kissDepth = depth?.get("museum_kiss_depth")
+    val almondDepth = depth?.get("museum_almond_depth")
+    val boatingpartyDepth = depth?.get("museum_boating_party_depth")
+    val cliffwalkDepth = depth?.get("museum_cliff_walk_depth")
+    val venusDepth = depth?.get("museum_venus_depth")
+    val poppiesDepth = depth?.get("museum_poppies_depth")
+    val fanDepth = depth?.get("museum_fan_depth")
+    val seashoreDepth = depth?.get("museum_seashore_depth")
+    val pastureDepth = depth?.get("museum_pasture_depth")
+    val whipDepth = depth?.get("museum_whip_depth")
+    val vermeerDepth = depth?.get("museum_vermeer_depth")
+    val automatDepth = depth?.get("museum_automat_depth")
+    val cliffwalkScene = scene("cliff_walk", "museum_cliff_walk_far", "museum_cliff_walk_ground", "museum_cliff_walk_cliff", "museum_cliff_walk_cards", "museum_cliff_walk_strokes")
+    val poppiesScene = scene("poppies", "museum_poppies_far", "museum_poppies_ground", "museum_poppies_paint", "museum_poppies_band", "museum_poppies_cards")
+    val pastureScene = scene("pasture", "museum_pasture_far", "museum_pasture_ground", "museum_pasture_paint", "museum_pasture_band", "museum_pasture_cards")
+    val whipScene = scene("whip", "museum_whip_far", "museum_whip_ground", "museum_whip_paint", "museum_whip_band", "museum_whip_cards")
+    val automatScene = scene("automat", "museum_automat_front", "museum_automat_left", "museum_automat_rear", "museum_automat_right", "museum_automat_surfaces", "museum_automat_table")
+    val vermeerScene = scene("vermeer", "museum_vermeer_front", "museum_vermeer_walls", "museum_vermeer_surfaces", "museum_vermeer_figures", "museum_vermeer_studio")
+
+    return listOf(
+        GalleryWallItem(sunflowers, "Sunflowers", "Vincent van Gogh", "1888–1889", "Oil on canvas", frame = gilt(YELLOW_GOLD, Shell), depth = sunflowersDepth,
+            inspectionMaskResource = Res.drawable.museum_sunflowers_subjects,
+        ),
+        GalleryWallItem(boating, "Boating", "Édouard Manet", "1874", "Oil on canvas", frame = wood(WALNUT, Acanthus, width = 0.095f), depth = boatingDepth,
+            inspectionMaskResource = Res.drawable.museum_boating_subjects,
+        ),
+        GalleryWallItem(june, "Flaming June", "Frederic Leighton", "1895", "Oil on canvas", frame = gilt(RED_GOLD, Gadroon, width = 0.105f), depth = juneDepth,
+            inspectionMaskResource = Res.drawable.museum_june_subjects,
+        ),
+        GalleryWallItem(bridge, "Water Lilies and Japanese Bridge", "Claude Monet", "1899", "Oil on canvas", frame = gilt(PALE_GOLD, Acanthus, width = 0.09f), depth = bridgeDepth,
+            inspectionMaskResource = Res.drawable.museum_bridge_subjects,
+        ),
+        GalleryWallItem(roses, "The Roses of Heliogabalus", "Lawrence Alma-Tadema", "1888", "Oil on canvas", frame = wood(MAHOGANY, Shell, width = 0.11f), depth = rosesDepth,
+            inspectionMaskResource = Res.drawable.museum_roses_subjects,
+        ),
+        GalleryWallItem(pasture, "Boys in a Pasture", "Winslow Homer", "1874", "Oil on canvas", frame = gilt(ANTIQUE_GOLD, Acanthus, width = 0.09f), depth = pastureDepth, scene = pastureScene,
+            inspectionMaskResource = Res.drawable.museum_pasture_subjects,
+        ),
+        GalleryWallItem(armchair, "Little Girl in a Blue Armchair", "Mary Cassatt", "1878", "Oil on canvas", frame = gilt(GREEN_GOLD, Gadroon, width = 0.095f), depth = armchairDepth,
+            inspectionMaskResource = Res.drawable.museum_armchair_subjects,
+        ),
+        GalleryWallItem(kiss, "The Kiss", "Gustav Klimt", "1907–1908", "Oil and gold leaf on canvas", frame = wood(EBONISED, Acanthus), depth = kissDepth,
+            inspectionMaskResource = Res.drawable.museum_kiss_subjects,
+        ),
+        GalleryWallItem(whip, "Snap the Whip", "Winslow Homer", "1872", "Oil on canvas", frame = gilt(PALE_GOLD, Gadroon, width = 0.085f), depth = whipDepth, scene = whipScene,
+            inspectionMaskResource = Res.drawable.museum_whip_subjects,
+        ),
+        GalleryWallItem(almond, "Almond Blossoms", "Vincent van Gogh", "1890", "Oil on canvas", frame = gilt(ANTIQUE_GOLD, Shell), depth = almondDepth,
+            inspectionMaskResource = Res.drawable.museum_almond_subjects,
+        ),
+        GalleryWallItem(boatingparty, "Luncheon of the Boating Party", "Pierre-Auguste Renoir", "1881", "Oil on canvas", frame = wood(WALNUT, Gadroon), depth = boatingpartyDepth,
+            inspectionMaskResource = Res.drawable.museum_boating_party_subjects,
+        ),
+        GalleryWallItem(cliffwalk, "The Cliff Walk at Pourville", "Claude Monet", "1882", "Oil on canvas", frame = wood(OAK, Classical, width = 0.07f), back = cliffwalkBack, depth = cliffwalkDepth, scene = cliffwalkScene,
+            inspectionMaskResource = Res.drawable.museum_cliff_walk_subjects,
+        ),
+        GalleryWallItem(venus, "The Birth of Venus", "Sandro Botticelli", "c. 1485", "Tempera on canvas", frame = gilt(PALE_GOLD, Shell, width = 0.115f), depth = venusDepth,
+            inspectionMaskResource = Res.drawable.museum_venus_subjects,
+        ),
+        GalleryWallItem(poppies, "Poppy Field", "Claude Monet", "1873", "Oil on canvas", frame = gilt(RED_GOLD, Acanthus, width = 0.095f), back = poppiesBack, depth = poppiesDepth, scene = poppiesScene,
+            inspectionMaskResource = Res.drawable.museum_poppies_subjects,
+        ),
+        GalleryWallItem(fan, "Lady with a Fan", "Gustav Klimt", "1917–1918", "Oil on canvas", frame = wood(ROSEWOOD, Gadroon), depth = fanDepth,
+            inspectionMaskResource = Res.drawable.museum_fan_subjects,
+        ),
+        GalleryWallItem(seashore, "Strolling along the Seashore", "Joaquín Sorolla", "1909", "Oil on canvas", frame = gilt(YELLOW_GOLD, Classical, width = 0.075f), depth = seashoreDepth,
+            inspectionMaskResource = Res.drawable.museum_seashore_subjects,
+        ),
+        GalleryWallItem(vermeer, "The Art of Painting", "Johannes Vermeer", "c. 1666–1668", "Oil on canvas", frame = gilt(ANTIQUE_GOLD, Shell), back = vermeerBack, depth = vermeerDepth, scene = vermeerScene,
+            inspectionMaskResource = Res.drawable.museum_vermeer_subjects,
+        ),
+        GalleryWallItem(automat, "Automat", "Edward Hopper", "1927", "Oil on canvas", frame = GalleryWallFrame(color = EBONISED), depth = automatDepth, scene = automatScene,
+            inspectionMaskResource = Res.drawable.museum_automat_subjects,
+        ),
     )
+}
+
+/** Pictures read in by name, all of them or none: [images] is null until the last is in. */
+private class Pictures {
+    var read by mutableIntStateOf(0)
+    var images by mutableStateOf<Map<String, ImageBitmap>?>(null)
+}
+
+/**
+ * The drawables [names] read in once [start] is true, fetched together and
+ * decoded in turn; [spread] decodes one a frame, for reading in while the
+ * demo is already running.
+ */
+@OptIn(ExperimentalResourceApi::class)
+@Composable
+private fun rememberPictures(names: List<String>, start: Boolean = true, spread: Boolean = false): Pictures {
+    val pictures = remember { Pictures() }
+    LaunchedEffect(start) {
+        if (!start || pictures.images != null) return@LaunchedEffect
+        val environment = getSystemResourceEnvironment()
+        val bytes = coroutineScope {
+            names.map { name -> async { getDrawableResourceBytes(environment, Res.allDrawableResources.getValue(name)) } }.awaitAll()
+        }
+        val images = HashMap<String, ImageBitmap>(names.size)
+        for ((n, name) in names.withIndex()) {
+            if (spread) withFrameNanos { }
+            images[name] = bytes[n].decodeToImageBitmap()
+            pictures.read = n + 1
+        }
+        pictures.images = images
+    }
+    return pictures
 }
 
 private val YELLOW_GOLD = Color(0xFFD0A13A)
