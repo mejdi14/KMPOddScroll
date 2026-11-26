@@ -75,8 +75,7 @@ private const val BACK_ON = 2f
 internal const val FLIP_MS = 1800f
 
 /** Stepping into the painting, and back out of it. */
-private const val ENTRY_WAVE_MS = 640f
-private const val ENTRY_WAVES = 2f
+private const val ENTRY_SPREAD_MS = 1280f
 private const val STEP_IN_MS = 2600f
 private const val STEP_OUT_MS = 1600f
 
@@ -156,7 +155,7 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
 
     /** The controls share the wall while the glass lifts, and give way to the interior camera. */
     internal val showingInspection by derivedStateOf {
-        arrived && inspected && !stepping && (!inside || entryWave < ENTRY_WAVES)
+        arrived && inspected && !stepping && (!inside || entrySpread < 1f)
     }
 
     /** The unframed front is stationary and ready for the inspection tools on every renderer. */
@@ -212,8 +211,8 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
     internal var over by mutableStateOf(false)
         private set
 
-    /** Consecutive blue (0 to 1) and purple (1 to 2) pulses before the camera moves. */
-    internal var entryWave by mutableFloatStateOf(0f)
+    /** Progress of the blue spread behind the painting before the camera moves. */
+    internal var entrySpread by mutableFloatStateOf(0f)
         private set
 
     /** How far into the painting, 0 in front of it and 1 inside, linear in time. */
@@ -312,7 +311,7 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
     fun leave() {
         if (inside) {
             inside = false
-            entryWave = 0f
+            entrySpread = 0f
             look[0] = 0f
             look[1] = 0f
             wanderTo = 0f
@@ -457,8 +456,8 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
 
         // Into the painting and back out, the head easing after the drags.
         val deep = when {
-            inside && entryWave < ENTRY_WAVES -> {
-                entryWave = min(ENTRY_WAVES, entryWave + deltaMs / ENTRY_WAVE_MS)
+            inside && entrySpread < 1f -> {
+                entrySpread = min(1f, entrySpread + deltaMs / ENTRY_SPREAD_MS)
                 0f
             }
             inside -> min(1f, stepIn + deltaMs / STEP_IN_MS)

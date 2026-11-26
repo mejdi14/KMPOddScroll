@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -29,7 +30,7 @@ import kotlin.math.min
 internal fun LabGrid(
     frame: () -> Rect,
     reveal: () -> Float,
-    wave: () -> Float,
+    entrySpread: () -> Float,
     lens: InspectionLens,
     modifier: Modifier = Modifier,
 ) {
@@ -41,8 +42,11 @@ internal fun LabGrid(
         val dot = 0.72.dp.toPx()
         val field = InspectionInk.copy(alpha = 0.23f)
         val openingLight = Color(0xFFFFE4C6)
-        val blueLight = Color(0xFF99D2FF)
-        val purpleLight = Color(0xFFC299FF)
+        val entryBlue = Color(0xFF245DBB)
+        val spreadReach = hypot(
+            max(painting.left, size.width - painting.right).coerceAtLeast(0f),
+            max(painting.top, size.height - painting.bottom).coerceAtLeast(0f),
+        )
         val lensRadius = 120.dp.toPx()
         val band = 3f * cell
         val start = (min(painting.width, painting.height) * 0.5f - band).coerceAtLeast(0f)
@@ -104,23 +108,12 @@ internal fun LabGrid(
                 ), blendMode = BlendMode.DstIn)
             }
 
-            val waveProgress = wave()
-            val purple = waveProgress >= 1f
-            val entry = if (purple) waveProgress - 1f else waveProgress
-            val entryLight = if (purple) purpleLight else blueLight
-            if (entry > 0f && entry < 1f) {
-                val front = mix(start, far + 9f * cell, entry)
-                for (i in dots.indices) {
-                    val gap = distances[i] - front
-                    val crest = ease(1f - abs(gap) / (5f * cell))
-                    val echo = ease(1f - abs(gap + 6f * cell) / band)
-                    val glow = max(crest, 0.34f * echo) * ease(entry * 14f)
-                    if (glow <= 0f) continue
-                    val point = dots[i]
-                    val shifted = point + (point - origin) * (2f * dot * glow / max(dot, distances[i]))
-                    drawCircle(entryLight, dot * (1f + 5f * glow), shifted, alpha = 0.16f * glow)
-                    drawCircle(entryLight, dot * (1f + 2.4f * glow), shifted, alpha = 0.95f * glow)
-                }
+            val entry = entrySpread()
+            if (entry > 0f && !painting.isEmpty) {
+                // The painted canvas covers the middle, leaving a continuous blue margin around it.
+                val outset = spreadReach * ease(entry)
+                val bounds = painting.inflate(outset)
+                drawRoundRect(entryBlue, bounds.topLeft, bounds.size, CornerRadius(outset), alpha = 0.88f)
             }
         }
     })

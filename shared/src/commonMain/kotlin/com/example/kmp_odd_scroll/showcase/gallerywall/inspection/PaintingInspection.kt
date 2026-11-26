@@ -287,7 +287,7 @@ private fun InspectionLayout(
     BoxWithConstraints(
         Modifier.fillMaxSize()
             .windowInsetsPadding(safeDrawing.only(WindowInsetsSides.Vertical))
-            .graphicsLayer { alpha = 1f - ease(state.entryWave) },
+            .graphicsLayer { alpha = 1f - ease(state.entrySpread) },
     ) {
         val safeWidth = (maxWidth - safeStart - safeEnd).coerceAtLeast(0.dp)
         val portrait = maxHeight > safeWidth

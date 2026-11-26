@@ -487,7 +487,7 @@ fun GalleryWallScroll(
         .onSizeChanged { viewport = it }
         .inspectionHover(lens, state.showingInspection && !state.inside)) {
         if (gridVisible) {
-            LabGrid(hung::value, state::lift, state::entryWave, lens, Modifier.matchParentSize())
+            LabGrid(hung::value, state::lift, state::entrySpread, lens, Modifier.matchParentSize())
         }
         Canvas(
             Modifier
