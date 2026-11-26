@@ -11,14 +11,14 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.withTransform
 
-internal enum class InspectionMode(val label: String, val gesture: String) {
-    Explode("Explode", "Drag to orbit"),
+internal enum class InspectionMode(val label: String, val gesture: String, val durationMillis: Int = 850) {
+    Explode("Explode", "Drag to orbit", 1150),
     Lighting("Lighting", "Move the light across the painting"),
     Microscope("Microscope", "Drag to pan · pinch or scroll to zoom"),
     PointCloud("Point Cloud", "Drag to orbit"),
-    Blueprint("Blueprint", "Retrace to follow the contours"),
-    Objects("Objects", "Select a cutout to examine it"),
-    Colors("Colors", "Select a pigment to locate it"),
+    Blueprint("Blueprint", "Retrace to follow the contours", 2800),
+    Objects("Objects", "Select a cutout to examine it", 1150),
+    Colors("Colors", "Select a pigment to locate it", 1450),
 }
 
 internal class InspectionControls(mode: InspectionMode?) {

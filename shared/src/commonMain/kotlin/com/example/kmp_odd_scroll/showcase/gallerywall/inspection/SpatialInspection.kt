@@ -21,7 +21,6 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
-import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
@@ -43,6 +42,11 @@ internal class SpatialInspection(
         DepthPiece(slice.depth, croppedTexture(slice.bounds, slice.outline, slice.underpaint), slice.bounds)
     }
     private val specimens = if (objectsMode) a.objects.map { Specimen(it) } else emptyList()
+    private val bySourceX = specimens.indices.sortedBy { specimens[it].region.anchor.x }
+    private val leftCount = (bySourceX.size + 1) / 2 -
+        if (bySourceX.size % 2 == 1 && specimens[bySourceX[bySourceX.size / 2]].region.anchor.x >= grid.center.x) 1 else 0
+    private val leftSpecimens = bySourceX.take(leftCount)
+    private val rightSpecimens = bySourceX.drop(leftSpecimens.size)
     private var sourcePose = Pose(Offset.Zero, 1f)
     private var lastFrame = Rect.Zero
     private var lastSelected = -1
@@ -56,7 +60,7 @@ internal class SpatialInspection(
     override fun hit(frame: Rect, point: Offset, controls: InspectionControls): Int? {
         if (!objectsMode || frame != lastFrame || controls.selected != lastSelected) return null
         fun contains(index: Int, pose: Pose): Boolean {
-            val local = (point - pose.origin) / pose.scale
+            val local = pose.unmap(point)
             return specimens[index].region.contains(local)
         }
         if (lastSelected in specimens.indices && contains(lastSelected, specimens[lastSelected].pose)) return lastSelected
@@ -152,9 +156,14 @@ internal class SpatialInspection(
         return out
     }
 
-    private data class Pose(val origin: Offset, val scale: Float) {
-        fun map(p: Offset) = origin + p * scale
-        fun toward(other: Pose, t: Float) = Pose(origin + (other.origin - origin) * t, scale + (other.scale - scale) * t)
+    private data class Pose(val origin: Offset, val scaleX: Float, val scaleY: Float = scaleX) {
+        fun map(p: Offset) = origin + Offset(p.x * scaleX, p.y * scaleY)
+        fun unmap(p: Offset) = Offset((p.x - origin.x) / scaleX, (p.y - origin.y) / scaleY)
+        fun toward(other: Pose, t: Float) = Pose(
+            origin + (other.origin - origin) * t,
+            mix(scaleX, other.scaleX, t),
+            mix(scaleY, other.scaleY, t),
+        )
     }
 
     private class Specimen(val region: InspectionRegion) {
@@ -170,69 +179,42 @@ internal class SpatialInspection(
         }
         val p = progress.coerceIn(0f, 1f)
         val separate = ease((p - 0.17f) / 0.83f)
-        val start = fitted(grid, frame)
-        // Use the breadth of the available stage for a portrait hung in a landscape window.
-        val margin = min(scope.size.width, scope.size.height) * 0.035f
-        val stage = Rect(min(margin, frame.left), frame.top, max(scope.size.width - margin, frame.right), frame.bottom)
-        val beside = stage.width > stage.height * 1.15f
-        val gap = min(stage.width, stage.height) * 0.048f
-        val selected = controls.selected.takeIf { it in specimens.indices }
-        val focus = if (selected == null) 0f else ease(controls.focus)
-        val sourceArea: Rect
-        val collection: Rect
-        if (beside) {
-            val split = stage.left + stage.width * mix(0.55f, 0.30f, focus)
-            sourceArea = Rect(stage.left, stage.top, split - gap / 2f, stage.bottom)
-            collection = Rect(split + gap / 2f, stage.top, stage.right, stage.bottom)
-        } else {
-            val split = stage.top + stage.height * mix(0.53f, 0.27f, focus)
-            sourceArea = Rect(stage.left, stage.top, stage.right, split - gap / 2f)
-            collection = Rect(stage.left, split + gap / 2f, stage.right, stage.bottom)
-        }
-        sourcePose = start.toward(fitted(grid, sourceArea), separate)
+        sourcePose = Pose(frame.topLeft, frame.width / grid.width, frame.height / grid.height)
         lastFrame = frame
         lastSelected = controls.selected
+        val selected = controls.selected.takeIf { it in specimens.indices }
+        val focus = if (selected == null) 0f else ease(controls.focus)
         val trace = ease(p / 0.48f)
+        scope.paintImage(image, frame)
         scope.at(sourcePose) {
-            drawSource(1f - focus * 0.20f)
             for ((i, s) in specimens.withIndex()) {
                 val ink = if (i == selected) Color(0xffffe6b0) else Color(0xfff4e7ce)
-                drawPath(s.region.outline, Color(0xff292925), alpha = separate * 0.61f)
-                drawTrace(s, trace, ink, sourcePose.scale)
+                drawTrace(s, trace, ink, sourcePose.scaleX)
             }
         }
 
-        val focusTray = if (specimens.size == 1) collection else Rect(
-            collection.left, collection.top, collection.right, collection.top + collection.height * 0.76f
-        )
-        val otherTray = Rect(collection.left, focusTray.bottom, collection.right, collection.bottom)
-        val normalColumns = if (beside) ceil(kotlin.math.sqrt(specimens.size * collection.width / collection.height)).toInt()
-            .coerceIn(1, min(3, specimens.size)) else min(3, specimens.size)
-        val normalRows = (specimens.size + normalColumns - 1) / normalColumns
+        // Keep the outer controls clear when the side space can accommodate both.
+        val viewportWidth = scope.size.width
+        val desiredInset = (viewportWidth * 0.025f).coerceIn(12f * scope.density, 36f * scope.density)
+        val rail = (viewportWidth * 0.14f).coerceIn(102f * scope.density, 156f * scope.density)
+        val sideSpace = min(frame.left, viewportWidth - frame.right).coerceAtLeast(0f)
+        val inset = min(desiredInset + rail, sideSpace * 0.58f)
+        val gap = min(sideSpace * 0.12f, min(frame.width, frame.height) * 0.048f)
+        val left = Rect(inset, frame.top, frame.left - gap, frame.bottom)
+        val right = Rect(frame.right + gap, frame.top, viewportWidth - inset, frame.bottom)
+        layoutSpecimens(leftSpecimens, left, selected, focus, controls.amount, separate)
+        layoutSpecimens(rightSpecimens, right, selected, focus, controls.amount, separate)
+
+        if (separate <= 0f) return
         for ((i, s) in specimens.withIndex()) {
-            val cell = cellBounds(collection, i, normalColumns, normalRows)
-            val normal = fitted(s.region.bounds, cell.inset(0.12f))
-            val focused = when {
-                selected == null -> normal
-                i == selected -> fitted(s.region.bounds, focusTray.inset(0.22f - controls.amount * 0.18f))
-                else -> {
-                    val k = if (i > selected) i - 1 else i
-                    val thumb = cellBounds(otherTray, k, max(1, specimens.size - 1), 1)
-                    fitted(s.region.bounds, thumb.inset(0.13f))
-                }
-            }
-            val to = normal.toward(focused, focus)
-            s.pose = sourcePose.toward(to, separate)
-            if (separate <= 0f) continue
             val from = sourcePose.map(s.region.anchor)
             val target = s.pose.map(s.region.anchor)
             val lineAlpha = (if (selected == null || i == selected) 0.59f else 0.16f) * separate
-            val lead = if (beside) Offset((from.x + target.x) / 2f, from.y) else Offset(from.x, (from.y + target.y) / 2f)
-            val tail = if (beside) Offset(lead.x, target.y) else Offset(target.x, lead.y)
+            val bend = (from.x + target.x) / 2f
             val path = s.segment.apply {
                 reset()
                 moveTo(from.x, from.y)
-                cubicTo(lead.x, lead.y, tail.x, tail.y, target.x, target.y)
+                cubicTo(bend, from.y, bend, target.y, target.x, target.y)
             }
             scope.drawPath(path, Color(0xffb5a07b), alpha = lineAlpha, style = Stroke(scope.density * 0.9f))
             scope.drawCircle(Color(0xfff5e5c7), radius = scope.density * 2.2f, center = from, alpha = lineAlpha)
@@ -243,12 +225,39 @@ internal class SpatialInspection(
         if (selected != null) drawSpecimen(scope, specimens[selected], separate, 1f)
     }
 
+    private fun layoutSpecimens(
+        indices: List<Int>,
+        tray: Rect,
+        selected: Int?,
+        focus: Float,
+        magnification: Float,
+        separate: Float,
+    ) {
+        if (indices.isEmpty()) return
+        val focusedRow = if (selected == null) -1 else indices.indexOf(selected)
+        val focusBottom = if (indices.size == 1) tray.bottom else tray.top + tray.height * 0.72f
+        val focusArea = Rect(tray.left, tray.top, tray.right, focusBottom)
+        val thumbArea = Rect(tray.left, focusBottom, tray.right, tray.bottom)
+        for ((row, index) in indices.withIndex()) {
+            val specimen = specimens[index]
+            val normal = fitted(specimen.region.bounds, rowBounds(tray, row, indices.size).inset(0.15f))
+            val destination = when {
+                focusedRow < 0 -> normal
+                row == focusedRow -> fitted(specimen.region.bounds, focusArea.inset(0.12f - magnification * 0.08f))
+                else -> {
+                    val thumbRow = if (row > focusedRow) row - 1 else row
+                    fitted(specimen.region.bounds, rowBounds(thumbArea, thumbRow, indices.size - 1).inset(0.15f))
+                }
+            }
+            specimen.pose = sourcePose.toward(normal.toward(destination, focus), separate)
+        }
+    }
+
     private fun drawSpecimen(scope: DrawScope, s: Specimen, separate: Float, alpha: Float) {
-        if (separate <= 0f) return
         scope.at(s.pose) {
             clipPath(s.region.outline) { drawSource(alpha) }
             drawPath(s.region.outline, Color(0xffe4d3af), alpha * separate * 0.72f,
-                style = Stroke(scope.density * 0.8f / s.pose.scale))
+                style = Stroke(scope.density * 0.8f / s.pose.scaleX))
         }
     }
 
@@ -272,7 +281,7 @@ internal class SpatialInspection(
 
     private inline fun DrawScope.at(pose: Pose, block: DrawScope.() -> Unit) = withTransform({
         translate(pose.origin.x, pose.origin.y)
-        scale(pose.scale, pose.scale, Offset.Zero)
+        scale(pose.scaleX, pose.scaleY, Offset.Zero)
     }, block)
 
     private fun fitted(from: Rect, into: Rect): Pose {
@@ -280,12 +289,10 @@ internal class SpatialInspection(
         return Pose(into.center - from.center * scale, scale)
     }
 
-    private fun cellBounds(area: Rect, i: Int, columns: Int, rows: Int): Rect {
-        val w = area.width / columns
-        val h = area.height / rows
-        val x = area.left + (i % columns) * w
-        val y = area.top + (i / columns) * h
-        return Rect(x, y, x + w, y + h)
+    private fun rowBounds(area: Rect, row: Int, rows: Int): Rect {
+        val height = area.height / rows
+        val top = area.top + row * height
+        return Rect(area.left, top, area.right, top + height)
     }
 
     private fun Rect.inset(fraction: Float): Rect {

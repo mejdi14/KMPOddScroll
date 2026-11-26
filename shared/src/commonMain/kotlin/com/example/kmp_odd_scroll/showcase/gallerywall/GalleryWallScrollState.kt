@@ -76,6 +76,7 @@ internal const val FLIP_MS = 1800f
 
 /** Stepping into the painting, and back out of it. */
 private const val ENTRY_WAVE_MS = 640f
+private const val ENTRY_WAVES = 2f
 private const val STEP_IN_MS = 2600f
 private const val STEP_OUT_MS = 1600f
 
@@ -130,12 +131,14 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
     var arrived by mutableStateOf(false)
         private set
 
-    /** Its frame and glass taken off by [inspect]; they go back on when stepped away from. */
+    /** Its frame and glass taken off by [inspect]; they go back on with [uninspect] or [leave]. */
     var inspected by mutableStateOf(false)
         private set
 
     /** Up close with the frame still on, so [inspect] will take it and the glass off. */
-    val canInspect: Boolean get() = looking && arrived && !inspected && !stepping
+    val canInspect by derivedStateOf {
+        looking && arrived && !inspected && !stepping && apart == 0f
+    }
 
     /** The frame and glass are off and out of sight, so [flip] will turn the painting over, or back. */
     var canFlip by mutableStateOf(false)
@@ -149,7 +152,7 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
 
     /** The controls share the wall while the glass lifts, and give way to the interior camera. */
     internal val showingInspection by derivedStateOf {
-        arrived && inspected && !stepping && (!inside || entryWave < 1f)
+        arrived && inspected && !stepping && (!inside || entryWave < ENTRY_WAVES)
     }
 
     /** The unframed front is stationary and ready for the inspection tools on every renderer. */
@@ -188,7 +191,7 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
         private set
 
     /** How far the frame has come off the painting walked up to, 0 to 1, linear in time. */
-    internal var apart = 0f
+    internal var apart by mutableFloatStateOf(0f)
         private set
 
     /** How far its glass has slid away once the frame is off, 0 to 1, linear in time. */
@@ -205,7 +208,7 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
     internal var over by mutableStateOf(false)
         private set
 
-    /** Single outward pulse on the inspection grid before the camera starts moving. */
+    /** Consecutive blue (0 to 1) and pink (1 to 2) pulses before the camera moves. */
     internal var entryWave by mutableFloatStateOf(0f)
         private set
 
@@ -271,6 +274,12 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
         inspected = true
     }
 
+    /** Restores the glass and frame while staying in front of the painting. */
+    fun uninspect() {
+        if (!inspected || inside || stepping) return
+        endInspection()
+    }
+
     /** Turns the bare painting over like a sheet of paper to its back, or back again, once [canFlip]. */
     fun flip() {
         if (!canFlip) return
@@ -308,6 +317,10 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
             return
         }
         looking = false
+        endInspection()
+    }
+
+    private fun endInspection() {
         inspected = false
         canFlip = false
         studyVisible = false
@@ -440,8 +453,8 @@ class GalleryWallScrollState internal constructor(walkIn: Boolean = true) {
 
         // Into the painting and back out, the head easing after the drags.
         val deep = when {
-            inside && entryWave < 1f -> {
-                entryWave = min(1f, entryWave + deltaMs / ENTRY_WAVE_MS)
+            inside && entryWave < ENTRY_WAVES -> {
+                entryWave = min(ENTRY_WAVES, entryWave + deltaMs / ENTRY_WAVE_MS)
                 0f
             }
             inside -> min(1f, stepIn + deltaMs / STEP_IN_MS)

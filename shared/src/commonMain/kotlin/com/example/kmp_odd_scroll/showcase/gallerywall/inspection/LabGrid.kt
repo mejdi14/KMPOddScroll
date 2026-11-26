@@ -41,7 +41,8 @@ internal fun LabGrid(
         val dot = 0.72.dp.toPx()
         val field = InspectionInk.copy(alpha = 0.23f)
         val openingLight = Color(0xFFFFE4C6)
-        val entryLight = Color(0xFF99D2FF)
+        val blueLight = Color(0xFF99D2FF)
+        val pinkLight = Color(0xFFFF99D2)
         val lensRadius = 120.dp.toPx()
         val band = 3f * cell
         val start = (min(painting.width, painting.height) * 0.5f - band).coerceAtLeast(0f)
@@ -103,7 +104,10 @@ internal fun LabGrid(
                 ), blendMode = BlendMode.DstIn)
             }
 
-            val entry = wave()
+            val waveProgress = wave()
+            val pink = waveProgress >= 1f
+            val entry = if (pink) waveProgress - 1f else waveProgress
+            val entryLight = if (pink) pinkLight else blueLight
             if (entry > 0f && entry < 1f) {
                 val front = mix(start, far + 9f * cell, entry)
                 for (i in dots.indices) {

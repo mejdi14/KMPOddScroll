@@ -478,7 +478,9 @@ fun GalleryWallScroll(
                         }
                         state.release(dragging)
                         if (state.looking) {
-                            if (!dragging && (exitLabel == null || state.canInspect)) state.leave()
+                            if (!dragging && (exitLabel == null || state.canInspect)) {
+                                if (state.inspected && !state.inside) state.uninspect() else state.leave()
+                            }
                         } else if (!dragging) {
                             val hit = room.hit(down.position.x, down.position.y, state.position, hang)
                             if (hit != null) state.scrollTo(hit)
@@ -559,7 +561,7 @@ fun GalleryWallScroll(
         }
         if (exitLabel != null) {
             HudButton(exitLabel, state.arrived && state.inspected && !state.showingInspection, background, contentColor, Modifier.align(Alignment.BottomStart).padding(start = HUD_SIDE, bottom = HUD_BOTTOM)) {
-                state.leave()
+                if (state.inside) state.leave() else state.uninspect()
             }
         }
         if (inspectLabel != null) {

@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -33,6 +34,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.kmp_odd_scroll.showcase.gallerywall.GalleryWallItem
@@ -44,6 +46,7 @@ import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.decodeToImageBitmap
 import org.jetbrains.compose.resources.getDrawableResourceBytes
 import org.jetbrains.compose.resources.getSystemResourceEnvironment
+import kotlin.math.roundToInt
 import kotlin.math.exp
 
 /** Keep the expensive image measurements when revisiting a painting. The gallery owns this cache. */
@@ -122,10 +125,11 @@ internal fun PaintingInspection(
     LaunchedEffect(studyLocked) {
         if (studyLocked) requested = null
     }
-    val onExitNow by rememberUpdatedState(state::leave)
+    val onExitNow by rememberUpdatedState(state::uninspect)
     LaunchedEffect(requested, analysis, replay, leaving) {
         if (active != requested || leaving || (active == InspectionMode.Blueprint && replay > 0)) {
-            if (progress.value > 0f) progress.animateTo(0f, tween(350))
+            val duration = ((active?.durationMillis ?: 0) * progress.value).roundToInt()
+            progress.animateTo(0f, tween(duration, easing = LinearEasing))
             active = null
         }
         if (leaving) {
@@ -135,13 +139,8 @@ internal fun PaintingInspection(
         val next = requested ?: return@LaunchedEffect
         if (analysis == null && next != InspectionMode.Microscope) return@LaunchedEffect
         active = next
-        val duration = when (next) {
-            InspectionMode.Blueprint -> 2800
-            InspectionMode.Colors -> 1450
-            InspectionMode.Objects, InspectionMode.Explode -> 1150
-            else -> 850
-        }
-        progress.animateTo(1f, tween(duration, easing = LinearEasing))
+        val remaining = ((1f - progress.value) * next.durationMillis).roundToInt()
+        progress.animateTo(1f, tween(remaining, easing = LinearEasing))
     }
     LaunchedEffect(selection, c) {
         val focus = Animatable(c.focus)
@@ -273,33 +272,58 @@ private fun InspectionLayout(
     index: @Composable (end: Boolean, compact: Boolean) -> Unit,
     action: @Composable (end: Boolean) -> Unit,
 ) {
-    BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).graphicsLayer {
-        alpha = ease((state.lift - 0.4f) / 0.6f) * (1f - ease(state.entryWave))
-    }) {
-        val portrait = maxHeight > maxWidth
-        val compact = maxHeight < 460.dp || maxWidth < 600.dp
-        val inset = (maxWidth * 0.025f).coerceIn(12.dp, 36.dp)
+    if (!state.studyVisible) return
+
+    val entrance = remember { Animatable(0f) }
+    LaunchedEffect(entrance) { entrance.animateTo(1f, tween(440)) }
+
+    val safeDrawing = WindowInsets.safeDrawing
+    val density = LocalDensity.current
+    val direction = LocalLayoutDirection.current
+    val safePadding = safeDrawing.asPaddingValues(density)
+    val safeStart = safePadding.calculateStartPadding(direction)
+    val safeEnd = safePadding.calculateEndPadding(direction)
+    BoxWithConstraints(
+        Modifier.fillMaxSize()
+            .windowInsetsPadding(safeDrawing.only(WindowInsetsSides.Vertical))
+            .graphicsLayer { alpha = 1f - ease(state.entryWave) },
+    ) {
+        val safeWidth = (maxWidth - safeStart - safeEnd).coerceAtLeast(0.dp)
+        val portrait = maxHeight > safeWidth
+        val compact = maxHeight < 460.dp || safeWidth < 600.dp
+        val inset = (safeWidth * 0.025f).coerceIn(12.dp, 36.dp)
+        val endInset = safeEnd + inset
+        val startInset = maxOf(safeStart, endInset)
         val verticalInset = (maxHeight * 0.025f).coerceIn(4.dp, 24.dp)
-        val rail = (maxWidth * 0.14f).coerceIn(102.dp, 156.dp).coerceAtMost(maxWidth * 0.35f)
-        val titleWidth = minOf(280.dp, maxWidth * 0.48f)
+        val availableWidth = (maxWidth - startInset - endInset).coerceAtLeast(0.dp)
+        val rail = (safeWidth * 0.14f).coerceIn(102.dp, 156.dp)
+            .coerceAtMost(minOf(safeWidth * 0.35f, availableWidth * 0.5f))
+        val titleWidth = minOf(280.dp, safeWidth * 0.48f, availableWidth)
         val titleHeight = minOf(if (compact) 62.dp else 86.dp, maxHeight * 0.23f)
         val foot = minOf(48.dp, maxHeight * 0.18f)
+        val startTravel = with(density) { (startInset + rail + 8.dp).toPx() }
+        val endTravel = with(density) { (endInset + maxOf(rail, titleWidth) + 8.dp).toPx() }
+        val start = Modifier.graphicsLayer {
+            translationX = (if (direction == LayoutDirection.Ltr) -startTravel else startTravel) * (1f - entrance.value)
+        }
+        val end = Modifier.graphicsLayer {
+            translationX = (if (direction == LayoutDirection.Ltr) endTravel else -endTravel) * (1f - entrance.value)
+        }
         // On narrow screens the two lists start below the canvas where it actually hangs.
         val indexTop = if (portrait) {
-            val density = LocalDensity.current
-            val safeTop = WindowInsets.safeDrawing.getTop(density)
+            val safeTop = safeDrawing.getTop(density)
             val belowArt = with(density) { (hung().bottom - safeTop).toDp() } + 6.dp
             belowArt.coerceIn(titleHeight, maxOf(titleHeight, maxHeight - foot - verticalInset * 2 - 48.dp))
         } else titleHeight
-        Box(Modifier.fillMaxSize().padding(horizontal = inset, vertical = verticalInset)) {
+        Box(Modifier.fillMaxSize().padding(start = startInset, end = endInset, top = verticalInset, bottom = verticalInset)) {
             BasicText(
-                title, Modifier.align(Alignment.TopEnd).widthIn(max = titleWidth).padding(top = 8.dp),
+                title, Modifier.align(Alignment.TopEnd).then(end).widthIn(max = titleWidth).padding(top = 8.dp),
                 maxLines = 2, overflow = TextOverflow.Ellipsis,
                 style = TextStyle(color = InspectionInk, fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic,
                     textAlign = TextAlign.End, fontSize = if (compact) 16.sp else 22.sp),
             )
             if (exitLabel != null) {
-                Box(Modifier.align(Alignment.TopStart).width(rail)) {
+                Box(Modifier.align(Alignment.TopStart).then(start).width(rail)) {
                     InspectionAction(exitLabel, "←", false, onClick = onExit)
                 }
             }
@@ -308,11 +332,11 @@ private fun InspectionLayout(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(Modifier.width(rail)) { index(false, compact) }
-                Box(Modifier.width(rail)) { index(true, compact) }
+                Box(start.width(rail)) { index(false, compact) }
+                Box(end.width(rail)) { index(true, compact) }
             }
-            Box(Modifier.align(Alignment.BottomStart).width(rail)) { action(false) }
-            Box(Modifier.align(Alignment.BottomEnd).width(rail)) { action(true) }
+            Box(Modifier.align(Alignment.BottomStart).then(start).width(rail)) { action(false) }
+            Box(Modifier.align(Alignment.BottomEnd).then(end).width(rail)) { action(true) }
         }
     }
 }
