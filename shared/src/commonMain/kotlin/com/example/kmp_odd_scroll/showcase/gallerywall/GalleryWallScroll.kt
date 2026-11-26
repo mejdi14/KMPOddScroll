@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.LaunchedEffect
@@ -487,7 +488,7 @@ fun GalleryWallScroll(
         .onSizeChanged { viewport = it }
         .inspectionHover(lens, state.showingInspection && !state.inside)) {
         if (gridVisible) {
-            LabGrid(hung::value, state::lift, state::entryWave, lens, Modifier.matchParentSize())
+            LabGrid(hung::value, state::lift, state::entryWave, lens, background, contentColor, Modifier.matchParentSize())
         }
         Canvas(
             Modifier
@@ -606,7 +607,10 @@ fun GalleryWallScroll(
             HudButton(inspectLabel, state.canInspect && detailsReady, background, contentColor,
                 Modifier.align(Alignment.BottomEnd).padding(end = HUD_SIDE, bottom = HUD_BOTTOM), state::inspect)
         }
-        if (state.showingInspection) CompositionLocalProvider(LocalInspectionLens provides lens) {
+        if (state.showingInspection) CompositionLocalProvider(
+            LocalInspectionLens provides lens,
+            LocalContentColor provides contentColor,
+        ) {
             key(painting.image) {
                 PaintingInspection(painting, analysis, hung::value, exitLabel,
                     flipLabel, stepInsideLabel, state, onEffect = { hasInspectionEffect.value = it }) { bounds, progress, over ->

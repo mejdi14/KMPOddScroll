@@ -11,6 +11,7 @@ import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -320,7 +321,7 @@ private fun InspectionLayout(
             BasicText(
                 title, Modifier.align(Alignment.TopEnd).then(end).widthIn(max = titleWidth).padding(top = 8.dp),
                 maxLines = 2, overflow = TextOverflow.Ellipsis,
-                style = TextStyle(color = InspectionInk, fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic,
+                style = TextStyle(color = LocalContentColor.current, fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic,
                     textAlign = TextAlign.End, fontSize = if (compact) 16.sp else 22.sp),
             )
             if (exitLabel != null) {

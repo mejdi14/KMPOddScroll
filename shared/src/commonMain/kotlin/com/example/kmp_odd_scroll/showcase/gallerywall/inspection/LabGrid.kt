@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.PointMode
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 import kotlin.math.ceil
@@ -31,6 +32,8 @@ internal fun LabGrid(
     reveal: () -> Float,
     wave: () -> Float,
     lens: InspectionLens,
+    background: Color,
+    ink: Color,
     modifier: Modifier = Modifier,
 ) {
     Spacer(modifier.graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }.drawWithCache {
@@ -39,8 +42,11 @@ internal fun LabGrid(
         val origin = if (painting.isEmpty) size.center else painting.center
         val cell = 14.dp.toPx()
         val dot = 0.72.dp.toPx()
-        val field = InspectionInk.copy(alpha = 0.23f)
-        val openingLight = Color(0xFFFFE4C6)
+        val field = ink.copy(alpha = 0.23f)
+        val lightWall = background.luminance() > ink.luminance()
+        val openingLight = if (lightWall) ink else Color(0xFFFFE4C6)
+        val waveHalo = if (lightWall) ink else Color.White
+        val haloAlpha = if (lightWall) 0.42f else 0.16f
         val lensRadius = 120.dp.toPx()
         val band = 3f * cell
         val start = (min(painting.width, painting.height) * 0.5f - band).coerceAtLeast(0f)
@@ -53,7 +59,7 @@ internal fun LabGrid(
         val distances = FloatArray(dots.size) { i -> (dots[i] - origin).getDistance() }
         val stillWall = obtainGraphicsLayer().apply {
             record {
-                drawRect(Color.Black)
+                drawRect(background)
                 drawPoints(dots, PointMode.Points, field, strokeWidth = dot * 2f, cap = StrokeCap.Round)
             }
         }
@@ -72,7 +78,7 @@ internal fun LabGrid(
                 val top = ceil((pointer.y - lensRadius - firstY) / cell).toInt().coerceAtLeast(0)
                 val bottom = floor((pointer.y + lensRadius - firstY) / cell).toInt().coerceAtMost(rows - 1)
                 if (left <= right && top <= bottom) {
-                    drawRect(Color.Black, Offset(firstX + (left - 0.5f) * cell, firstY + (top - 0.5f) * cell),
+                    drawRect(background, Offset(firstX + (left - 0.5f) * cell, firstY + (top - 0.5f) * cell),
                         Size((right - left + 1) * cell, (bottom - top + 1) * cell))
                     for (row in top..bottom) for (column in left..right) {
                         val point = dots[row * columns + column]
@@ -80,7 +86,7 @@ internal fun LabGrid(
                         val distance = delta.getDistance()
                         val bend = ease(1f - distance / lensRadius) * intensity
                         val spread = delta * (1.2f * cell * bend / max(cell, distance))
-                        drawCircle(InspectionInk, dot * (1f + 0.5f * bend), point + spread,
+                        drawCircle(ink, dot * (1f + 0.5f * bend), point + spread,
                             alpha = field.alpha + 0.5f * bend)
                     }
                 }
@@ -93,7 +99,7 @@ internal fun LabGrid(
                     if (glow <= 0f) continue
                     drawCircle(openingLight, dot * (1f + 2f * glow), dots[i], alpha = 0.55f * glow)
                 }
-                // Mask the black and the dots together. The unreached part still shows the original room.
+                // Mask the wall and the dots together. The unreached part still shows the original room.
                 val radius = front + band
                 drawRect(Brush.radialGradient(
                     (1f - 2f * band / radius).coerceAtLeast(0f) to Color.White.copy(alpha = ease(progress * 14f)),
@@ -114,7 +120,7 @@ internal fun LabGrid(
                     if (glow <= 0f) continue
                     val point = dots[i]
                     val shifted = point + (point - origin) * (2f * dot * glow / max(dot, distances[i]))
-                    drawCircle(Color.White, dot * (1f + 5f * glow), shifted, alpha = 0.16f * glow)
+                    drawCircle(waveHalo, dot * (1f + 5f * glow), shifted, alpha = haloAlpha * glow)
                     drawCircle(Color.White, dot * (1f + 2.4f * glow), shifted, alpha = 0.95f * glow)
                 }
             }

@@ -14,6 +14,7 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -46,8 +47,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 
-internal val InspectionInk = Color(0xFFF2EADD)
-
 @Composable
 internal fun InspectionModeIndex(
     modes: List<InspectionMode>,
@@ -64,7 +63,7 @@ internal fun InspectionModeIndex(
     ) {
         modes.forEach { mode ->
             val chosen = mode == selected
-            val tone = InspectionInk.copy(alpha = when {
+            val tone = LocalContentColor.current.copy(alpha = when {
                 !enabled -> 0.46f
                 chosen -> 1f
                 else -> 0.72f
@@ -101,7 +100,7 @@ internal fun InspectionAction(
     mark: String,
     alignEnd: Boolean,
     enabled: Boolean = true,
-    color: Color = InspectionInk,
+    color: Color = LocalContentColor.current,
     gridFeedback: Boolean = true,
     onClick: () -> Unit,
 ) {
@@ -245,6 +244,7 @@ internal fun InspectionAdjustments(
     onSelect: (Int?) -> Unit,
     onReplay: () -> Unit,
 ) {
+    val ink = LocalContentColor.current
     key(requested) {
         Column(
             Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
@@ -253,7 +253,7 @@ internal fun InspectionAdjustments(
             if (requested != null && analysis == null && requested != InspectionMode.Microscope) {
                 Caption("Studying the painting…")
             } else if (active != null) {
-                Caption(active.gesture, InspectionInk.copy(alpha = 0.72f))
+                Caption(active.gesture, ink.copy(alpha = 0.72f))
                 InspectionRule(Modifier.width(24.dp))
                 when (active) {
                     InspectionMode.Explode -> Adjust("Spacing", c.amount) { c.amount = it }
@@ -296,13 +296,13 @@ internal fun InspectionAdjustments(
                                 ) {
                                     Spacer(
                                         Modifier.size(17.dp).background(Color(argb), CircleShape)
-                                            .border(1.dp, if (chosen) InspectionInk else InspectionInk.copy(alpha = 0.4f), CircleShape),
+                                            .border(1.dp, if (chosen) ink else ink.copy(alpha = 0.4f), CircleShape),
                                     )
                                     BasicText(
                                         "$percent%",
                                         Modifier.clearAndSetSemantics {},
                                         style = TextStyle(
-                                            color = InspectionInk.copy(alpha = if (chosen) 1f else 0.72f),
+                                            color = ink.copy(alpha = if (chosen) 1f else 0.72f),
                                             fontWeight = if (chosen) FontWeight.SemiBold else FontWeight.Normal,
                                             fontSize = 14.sp,
                                         ),
@@ -319,11 +319,11 @@ internal fun InspectionAdjustments(
 
 @Composable
 private fun InspectionRule(modifier: Modifier) {
-    Spacer(modifier.height(0.5.dp).background(InspectionInk.copy(alpha = 0.23f)))
+    Spacer(modifier.height(0.5.dp).background(LocalContentColor.current.copy(alpha = 0.23f)))
 }
 
 @Composable
-private fun Caption(text: String, color: Color = InspectionInk) {
+private fun Caption(text: String, color: Color = LocalContentColor.current) {
     BasicText(text, style = TextStyle(color = color, fontSize = 12.sp, lineHeight = 16.sp))
 }
 
@@ -334,6 +334,7 @@ private fun Adjust(
     displayValue: String = "${(value * 100).roundToInt()}%",
     change: (Float) -> Unit,
 ) {
+    val ink = LocalContentColor.current
     val update by rememberUpdatedState(change)
     val current by rememberUpdatedState(value)
     Column(
@@ -368,16 +369,16 @@ private fun Adjust(
             Modifier.fillMaxWidth().clearAndSetSemantics {},
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            BasicText(label, Modifier.weight(1f), style = TextStyle(color = InspectionInk, fontSize = 12.sp))
-            Caption(displayValue, InspectionInk)
+            BasicText(label, Modifier.weight(1f), style = TextStyle(color = ink, fontSize = 12.sp))
+            Caption(displayValue, ink)
         }
         Canvas(Modifier.fillMaxWidth().height(14.dp)) {
             val min = 5.dp.toPx()
             val max = (size.width - min).coerceAtLeast(min)
             val x = mix(min, max, value)
-            drawLine(InspectionInk.copy(alpha = 0.28f), Offset(min, center.y), Offset(max, center.y), 1.dp.toPx())
-            drawLine(InspectionInk, Offset(min, center.y), Offset(x, center.y), 1.dp.toPx())
-            drawCircle(InspectionInk, 3.5.dp.toPx(), Offset(x, center.y))
+            drawLine(ink.copy(alpha = 0.28f), Offset(min, center.y), Offset(max, center.y), 1.dp.toPx())
+            drawLine(ink, Offset(min, center.y), Offset(x, center.y), 1.dp.toPx())
+            drawCircle(ink, 3.5.dp.toPx(), Offset(x, center.y))
         }
     }
 }
