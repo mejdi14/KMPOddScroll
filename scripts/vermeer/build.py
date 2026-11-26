@@ -174,7 +174,6 @@ def surfaces(photo, covered, studio, sitter_feet):
             (3.19,-7.13,.29,.14,.34),        # Delft vase foot
             (3.73,-5.35,.22,.29,.25),        # standing girl's hem and shoes
             (3.52,-3.43,.32,.40,.24),        # silver ewer's table
-            (LEFT+.29,(FRONT+REAR)/2,.29,.88,.22),  # window bench
             *sitter_shadows,
             (3.51,-1.41,.44,1.17,.35),       # artist's desk
         ]:
@@ -406,7 +405,7 @@ def build():
     texture("front", studio)
     view_focal = .66 * 525 * FOCAL / PH
     fittings, fitting_layers, sitter_feet = build_studio(
-        ART, ROUTE[-1], TILT, view_focal, FRONT, REAR, LEFT, RIGHT, mesh)
+        ART, ROUTE[-1], TILT, view_focal, FRONT, REAR, RIGHT, mesh)
     layers = architecture(surfaces(photo, covered, studio, sitter_feet))
     texture("studio", fittings)
     layers.extend(fitting_layers)

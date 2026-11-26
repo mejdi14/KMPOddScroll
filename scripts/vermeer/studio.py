@@ -143,7 +143,7 @@ def _furnishing(rect, texture, size, base, height, yaw, relief, mesh, wall=None)
     return mesh(4, points, uv)
 
 
-def build_studio(art, eye, tilt, focal, front, rear, left, right, mesh):
+def build_studio(art, eye, tilt, focal, front, rear, right, mesh):
     origins = {"open-door": (617, 45), "door-leaf": (703, 113), "seated-woman": (629, 252),
                "artist-desk": (284, 290), "flower-vase": (1180, 250)}
     sprites = {name: Image.open(art / f"{name}.webp").convert("RGBA") for name in origins}
@@ -188,10 +188,9 @@ def build_studio(art, eye, tilt, focal, front, rear, left, right, mesh):
         sprites[key], rects[key] = _shadow(sprites[name], origins[name], offset, blur, strength)
 
     # Heights and supports are in room metres. The chest top follows the
-    # door elevation in walls.py. The bench is centred below the chess frame.
+    # door elevation in walls.py.
     furnishings = [
         ("celestial-globe", (2.30, .87, rear-.24), .52, 149, .11, (2, rear)),
-        ("window-bench", (left+.29, 0, (front+rear)/2), .482, -90, .08, (0, left)),
         # Match the blue model's scale in the reconstructed painting before
         # applying the approved reduction, keeping the girl's soles in place.
         ("standing-girl", (right-.19, 0, -5.36), 1.90*.90, 54, .10, (0, right)),
