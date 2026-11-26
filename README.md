@@ -197,8 +197,8 @@ Painting* as a worn paper print. Turn it over to see an imagined chalk study of
 the model holding her book, created for the demo with ImageGen.
 Step inside to see a girl leaning against the wall beside a Delft vase, watching
 the model pose. An unfinished painting of two girls playing chess rests on the
-artist’s desk, with a silver ewer on a side table nearby. A lute lies beneath the
-framed chess picture between the windows. On the door wall, a celestial globe
+artist’s desk, with a silver ewer on a side table nearby. An empty oak bench
+sits beneath the framed chess picture between the windows. On the door wall, a celestial globe
 stands on the linen chest and an elderly woman sits beside the peeking child.
 ImageGen supplied the imagined studio furnishings and the views beyond the
 original frame.

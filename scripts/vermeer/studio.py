@@ -191,7 +191,7 @@ def build_studio(art, eye, tilt, focal, front, rear, left, right, mesh):
     # door elevation in walls.py. The bench is centred below the chess frame.
     furnishings = [
         ("celestial-globe", (2.30, .87, rear-.24), .52, 149, .11, (2, rear)),
-        ("lute-bench", (left+.29, 0, (front+rear)/2), .73, -90, .08, (0, left)),
+        ("window-bench", (left+.29, 0, (front+rear)/2), .482, -90, .08, (0, left)),
         # Match the blue model's scale in the reconstructed painting before
         # applying the approved reduction, keeping the girl's soles in place.
         ("standing-girl", (right-.19, 0, -5.36), 1.90*.90, 54, .10, (0, right)),
