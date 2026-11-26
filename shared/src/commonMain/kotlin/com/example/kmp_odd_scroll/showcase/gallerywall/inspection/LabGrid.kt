@@ -23,14 +23,13 @@ import kotlin.math.floor
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.round
 
 /** A wave of dots spreads across the wall while the glass lifts off the canvas. */
 @Composable
 internal fun LabGrid(
     frame: () -> Rect,
     reveal: () -> Float,
-    entrySpread: () -> Float,
+    wave: () -> Float,
     lens: InspectionLens,
     modifier: Modifier = Modifier,
 ) {
@@ -42,7 +41,6 @@ internal fun LabGrid(
         val dot = 0.72.dp.toPx()
         val field = InspectionInk.copy(alpha = 0.23f)
         val openingLight = Color(0xFFFFE4C6)
-        val entryBlue = Color(0xFF79BFFF)
         val lensRadius = 120.dp.toPx()
         val band = 3f * cell
         val start = (min(painting.width, painting.height) * 0.5f - band).coerceAtLeast(0f)
@@ -51,12 +49,6 @@ internal fun LabGrid(
         val firstY = size.center.y % cell
         val columns = floor((size.width - firstX) / cell).toInt() + 1
         val rows = floor((size.height - firstY) / cell).toInt() + 1
-        // Start at the grid crossing behind the centre of the painting.
-        val sourceX = firstX + round((origin.x - firstX) / cell) * cell
-        val sourceY = firstY + round((origin.y - firstY) / cell) * cell
-        val hiddenReach = minOf(sourceX - painting.left, painting.right - sourceX,
-            sourceY - painting.top, painting.bottom - sourceY).coerceAtLeast(0f)
-        val fullReach = max(sourceX, size.width - sourceX) + max(sourceY, size.height - sourceY)
         val dots = List(rows * columns) { i -> Offset(firstX + i % columns * cell, firstY + i / columns * cell) }
         val distances = FloatArray(dots.size) { i -> (dots[i] - origin).getDistance() }
         val stillWall = obtainGraphicsLayer().apply {
@@ -110,19 +102,20 @@ internal fun LabGrid(
                 ), blendMode = BlendMode.DstIn)
             }
 
-            val entry = entrySpread()
-            if (entry > 0f && !painting.isEmpty) {
-                // Distance is measured along the grid. Each line keeps its lit length as the tips advance.
-                val reach = mix(hiddenReach, fullReach, ease(entry))
-                for (row in 0 until rows) {
-                    val y = firstY + row * cell
-                    val length = reach - abs(y - sourceY)
-                    if (length > 0f) drawLine(entryBlue, Offset(sourceX - length, y), Offset(sourceX + length, y), dot)
-                }
-                for (column in 0 until columns) {
-                    val x = firstX + column * cell
-                    val length = reach - abs(x - sourceX)
-                    if (length > 0f) drawLine(entryBlue, Offset(x, sourceY - length), Offset(x, sourceY + length), dot)
+            val waveProgress = wave()
+            val entry = if (waveProgress >= 1f) waveProgress - 1f else waveProgress
+            if (entry > 0f && entry < 1f) {
+                val front = mix(start, far + 9f * cell, entry)
+                for (i in dots.indices) {
+                    val gap = distances[i] - front
+                    val crest = ease(1f - abs(gap) / (5f * cell))
+                    val echo = ease(1f - abs(gap + 6f * cell) / band)
+                    val glow = max(crest, 0.34f * echo) * ease(entry * 14f)
+                    if (glow <= 0f) continue
+                    val point = dots[i]
+                    val shifted = point + (point - origin) * (2f * dot * glow / max(dot, distances[i]))
+                    drawCircle(Color.White, dot * (1f + 5f * glow), shifted, alpha = 0.16f * glow)
+                    drawCircle(Color.White, dot * (1f + 2.4f * glow), shifted, alpha = 0.95f * glow)
                 }
             }
         }
