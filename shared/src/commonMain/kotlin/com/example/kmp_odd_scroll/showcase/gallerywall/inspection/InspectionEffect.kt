@@ -72,10 +72,11 @@ private const val ORBIT_BACK = 0.80f / FIT
  * Where the painting lies in a stage of [size]: where it [hung] on the wall,
  * in the stage's coordinates, so the study opens on it as it is, without a
  * zoom. Only if that is more than the stage can hold is it brought down to
- * fit, and then moved in from the edges.
+ * fit, and then moved in from the edges. Without [hung], it is fitted to the
+ * stage with a margin.
  */
 internal fun restingFrame(size: Size, image: ImageBitmap, hung: Rect): Rect {
-    val fit = min(size.width / image.width, size.height / image.height) * FIT
+    val fit = min(size.width / image.width, size.height / image.height) * (if (hung.isEmpty) FIT else 1f)
     val w0 = if (hung.isEmpty) image.width * fit else hung.width
     val h0 = if (hung.isEmpty) image.height * fit else hung.height
     val k = min(1f, min(image.width * fit / w0, image.height * fit / h0))

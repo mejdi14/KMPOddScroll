@@ -36,7 +36,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.kmp_odd_scroll.showcase.gallerywall.GalleryWallItem
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.decodeToImageBitmap
@@ -75,8 +74,11 @@ private class StageGeometry {
     var stage: LayoutCoordinates? = null
 }
 
-/** Once the study has faded in over the bare painting, the grid spreads out behind it over this long. */
-private const val GRID_AFTER_MS = 400L
+/**
+ * The study fading in over the bare painting, which moves in from where it
+ * hung only if the stage cannot hold it there; then the grid spreading out.
+ */
+private const val SETTLE_MS = 400
 private const val GRID_MS = 1300
 
 /**
@@ -155,20 +157,23 @@ internal fun PaintingInspection(
     BackHandler(enabled = !leaving) {
         if (requested != null || active != null) requested = null else leaving = true
     }
+    // The painting settles from where it hung into the stage as the study fades in, and only then
+    // does the grid spread out behind it.
+    val settle = remember { Animatable(0f) }
     val grid = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
-        delay(GRID_AFTER_MS)
+        settle.animateTo(1f, tween(SETTLE_MS))
         grid.animateTo(1f, tween(GRID_MS, easing = LinearEasing))
     }
     // Where the painting hung, in the stage's own coordinates; read as the stage is drawn.
-    val rest: DrawScope.() -> Rect = {
+    val hungAt: DrawScope.() -> Rect = {
         val root = geometry.root
         val stage = geometry.stage
-        val at = if (root != null && stage != null && root.isAttached && stage.isAttached) {
+        if (root != null && stage != null && root.isAttached && stage.isAttached) {
             hung().translate(-root.localPositionOf(stage, Offset.Zero))
         } else Rect.Zero
-        restingFrame(size, item.image, at)
     }
+    val rest: DrawScope.() -> Rect = { restingFrame(size, item.image, hungAt()) }
     BoxWithConstraints(Modifier.fillMaxSize().background(background).onPlaced { geometry.root = it }) {
         val compact = maxWidth < 620.dp
         val short = maxHeight < 440.dp
@@ -240,7 +245,8 @@ internal fun PaintingInspection(
                     }
                 ) {
                     val t = progress.value
-                    val home = rest()
+                    val from = hungAt()
+                    val home = if (from.isEmpty) rest() else lerp(from, rest(), ease(settle.value))
                     val frame = lerp(home, toolFrame(home, active), ease(t))
                     geometry.frame = frame
                     if (!frame.isEmpty) {
