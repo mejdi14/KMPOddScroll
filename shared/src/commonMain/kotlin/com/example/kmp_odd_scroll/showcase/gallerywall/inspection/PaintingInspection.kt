@@ -69,7 +69,8 @@ internal class AnalysisCache {
         }
         val result = analyzePainting(item.image, item.depth, mask)
         if (entries.size >= 3) entries.removeAt(0)
-        entries.add(item to result)
+        // Analysis uses the depth and mask. Let the room release the much larger scene textures.
+        entries.add(item.copy(scene = null) to result)
         return result
     }
 }

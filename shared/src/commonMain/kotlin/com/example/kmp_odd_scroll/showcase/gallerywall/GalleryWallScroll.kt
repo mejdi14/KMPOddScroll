@@ -21,10 +21,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,6 +55,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
@@ -271,6 +274,10 @@ private const val ARC = CORNER * (PI.toFloat() / 2f)
 /** Painting pixels per card height, against the back wall's own on screen; the edges come in 2.3x nearer. */
 private const val BITMAP_SCALE = 1.6f
 
+// Bound the set of 18 wall textures on high-DPI displays. Close-ups use the original image.
+private const val MAX_WALL_RESOLUTION = 640
+private const val WALL_RESOLUTION_STEP = 64
+
 /** A notch of the wheel, in card heights along the wall. */
 private const val WHEEL_STEP = 0.6f
 
@@ -390,6 +397,8 @@ fun rememberGalleryWallScrollState(walkIn: Boolean = true): GalleryWallScrollSta
  *   painting while it is face up, or null for none. A host can show its own off
  *   [GalleryWallScrollState.canStepInside].
  * @param state also lets a host's own controls move it.
+ * @param detailsReady whether the selected painting's inspection assets are available.
+ * @param onWallReady called when the gallery-resolution bitmaps are ready to draw.
  */
 @Composable
 fun GalleryWallScroll(
@@ -404,6 +413,8 @@ fun GalleryWallScroll(
     flipLabel: String? = "Flip",
     stepInsideLabel: String? = "Step inside",
     state: GalleryWallScrollState = rememberGalleryWallScrollState(),
+    detailsReady: Boolean = true,
+    onWallReady: () -> Unit = {},
 ) {
     if (items.isEmpty()) {
         Box(modifier)
@@ -414,9 +425,19 @@ fun GalleryWallScroll(
     // Kept for as long as what the wall draws is the same: a painting's depth
     // or its scene arriving later leaves its frame as it was, and baking every
     // frame again is the slowest thing the wall does — seconds, in a browser.
-    val look = items.map { WallLook(it.image, it.back, it.frame, it.scale, it.title, it.artist, it.date, it.medium) }
+    val look = remember(items) {
+        items.map { WallLook(it.image, it.back, it.frame, it.scale, it.title, it.artist, it.date, it.medium) }
+    }
     val hang = remember(look, frame) { Hang(items, frame) }
     val art = remember(look, contentColor, frame, measurer) { WallArt(items, contentColor, frame, measurer) }
+    var wallResolution by remember { mutableIntStateOf(0) }
+    val notifyReady by rememberUpdatedState(onWallReady)
+    LaunchedEffect(art, wallResolution) {
+        if (wallResolution > 0) {
+            art.prepare(wallResolution)
+            notifyReady()
+        }
+    }
     val room = remember { Room() }
     val inside = remember { StepInside() }
     val enter = remember { EnterPainting() }
@@ -430,13 +451,15 @@ fun GalleryWallScroll(
     val gridVisible by remember(state) { derivedStateOf { state.inspected || state.lift > 0f } }
     val hasInspectionEffect = remember(painting.image) { mutableStateOf(false) }
     // Start measuring during the walk up so the first tool can use the masks immediately.
-    val analysis = if (state.looking) key(
+    val analysis = if (state.looking && detailsReady) key(
         painting.image, painting.depth, painting.inspectionMask, painting.inspectionMaskResource,
     ) {
         produceState<PaintingAnalysis?>(null) { value = inspectionCache.get(painting) }.value
     } else null
 
-    LaunchedEffect(state) {
+    val wallReady = art.cards.isNotEmpty()
+    LaunchedEffect(state, wallReady) {
+        if (!wallReady) return@LaunchedEffect
         var previous = 0L
         while (true) {
             withFrameNanos { now ->
@@ -448,6 +471,12 @@ fun GalleryWallScroll(
     }
 
     Box(modifier.background(background).fillMaxSize().onPlaced { lens.viewport = it }
+        .onSizeChanged { size ->
+            // Nearby window sizes can share the same textures. The close-up has its own resolution.
+            val pixels = focalLength(size.width.toFloat(), size.height.toFloat()) / DEPTH * BITMAP_SCALE
+            wallResolution = (ceil(pixels / WALL_RESOLUTION_STEP).toInt() * WALL_RESOLUTION_STEP)
+                .coerceIn(0, MAX_WALL_RESOLUTION)
+        }
         .inspectionHover(lens, state.showingInspection && !state.inside)) {
         if (gridVisible) {
             LabGrid(hung::value, state::lift, state::entryWave, lens, Modifier.matchParentSize())
@@ -505,19 +534,15 @@ fun GalleryWallScroll(
                     }
                 }
         ) {
+            if (!wallReady || size.isEmpty()) return@Canvas
             state.tick // read, so the wall repaints as the hang moves
             room.fit(size.width, size.height)
-            art.ensure(room.backPx * BITMAP_SCALE)
             val subject = state.subject
             room.stroll(state.entry, state.walk, state.apart, state.lift, hang, subject)
-            // The painting up close is drawn again at the size it will end at,
-            // and taken apart, as soon as it can be walked up to, so neither
-            // the walk nor the inspection starts on a dropped frame.
-            val close = if (state.canLook || state.walk > 0f) {
-                art.close(hang.wrap(subject), room.closePx).also { it.bare; it.sticks; it.sides }
-            } else {
-                null
-            }
+            // Browsing needs only the wall cards, even after the Look button appears.
+            val close = if (state.looking || state.walk > 0f) {
+                art.close(hang.wrap(subject), room.closePx)
+            } else null
             val item = items[hang.wrap(subject)]
             if (state.arrived) {
                 val card = close ?: art.cards[hang.wrap(subject)]
@@ -571,7 +596,7 @@ fun GalleryWallScroll(
             }
         }
         if (inspectLabel != null) {
-            HudButton(inspectLabel, state.canInspect, background, contentColor,
+            HudButton(inspectLabel, state.canInspect && detailsReady, background, contentColor,
                 Modifier.align(Alignment.BottomEnd).padding(end = HUD_SIDE, bottom = HUD_BOTTOM), state::inspect)
         }
         if (state.showingInspection) CompositionLocalProvider(LocalInspectionLens provides lens) {
@@ -683,6 +708,8 @@ private fun floorDiv(a: Int, b: Int): Int = floor(a.toFloat() / b).toInt()
 
 // --- the room ----------------------------------------------------------------
 
+private fun focalLength(width: Float, height: Float) = min(FOCAL * width, FOCAL_PER_HEIGHT * height)
+
 /** The camera on the room, worked out once per size. */
 private class Room {
     var width = -1f
@@ -743,7 +770,7 @@ private class Room {
         if (w == width && h == height) return
         width = w
         height = h
-        focal = min(FOCAL * w, FOCAL_PER_HEIGHT * h)
+        focal = focalLength(w, h)
         cx = w / 2f
         cy = h * HORIZON
         backPx = focal / DEPTH
@@ -1599,7 +1626,7 @@ private class WallArt(
     private val frame: GalleryWallFrame?,
     private val measurer: TextMeasurer,
 ) {
-    var cards: List<CardArt> = emptyList()
+    var cards by mutableStateOf(emptyList<CardArt>())
         private set
 
     private var builtFor = -1
@@ -1608,11 +1635,14 @@ private class WallArt(
     private var closeIndex = -1
     private var closeFor = -1
 
-    fun ensure(pxPerUnit: Float) {
-        val px = pxPerUnit.roundToInt().coerceAtLeast(8)
+    suspend fun prepare(px: Int) {
         if (px == builtFor) return
+        // Publish the complete hang together. Resizing keeps the last usable set on screen.
+        cards = items.mapIndexed { index, item ->
+            withFrameNanos { }
+            build(item, px.toFloat(), index)
+        }
         builtFor = px
-        cards = items.mapIndexed { n, item -> build(item, px.toFloat(), n) }
     }
 
     /**
@@ -1664,6 +1694,7 @@ private class WallArt(
         fun paint(w: Int, h: Int, block: DrawScope.() -> Unit): ImageBitmap {
             val bitmap = ImageBitmap(w, h)
             CanvasDrawScope().draw(density, LayoutDirection.Ltr, BitmapCanvas(bitmap), Size(w.toFloat(), h.toFloat()), block)
+            bitmap.finishWallTexture()
             return bitmap
         }
         fun DrawScope.canvas(image: ImageBitmap = item.image, x: Int = border) = drawImage(
@@ -1745,6 +1776,7 @@ private fun cut(face: ImageBitmap, border: Int): List<Stick> {
                 clipPath(mitre) { drawImage(face) }
             }
         }
+        bitmap.finishWallTexture()
         Stick(bitmap, at.x, at.y)
     }
 }
