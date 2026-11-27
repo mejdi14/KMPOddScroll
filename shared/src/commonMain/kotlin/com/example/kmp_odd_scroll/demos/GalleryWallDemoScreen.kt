@@ -194,7 +194,9 @@ private suspend fun MuseumPainting.loadDetails(item: GalleryWallItem): GalleryWa
         withContext(Dispatchers.Default) { encoded.decodeToImageBitmap() }
     }
     val scene = geometry?.await()?.let { layout ->
-        withContext(Dispatchers.Default) { GalleryWallScene(layout, images.drop(1)) }
+        withContext(Dispatchers.Default) {
+            GalleryWallScene(layout, images.drop(1), chessFrameEnabled = name == "museum_vermeer")
+        }
     }
     item.copy(depth = images.first(), scene = scene)
 }

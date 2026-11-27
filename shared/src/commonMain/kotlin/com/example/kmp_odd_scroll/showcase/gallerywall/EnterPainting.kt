@@ -1,5 +1,8 @@
 package com.example.kmp_odd_scroll.showcase.gallerywall
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
@@ -62,7 +65,11 @@ import kotlin.math.tan
  * texture coordinates in texture pixels, a weight per vertex and the triangle
  * indices, padded to four bytes.
  */
-class GalleryWallScene(geometry: ByteArray, internal val textures: List<ImageBitmap>) {
+class GalleryWallScene(
+    geometry: ByteArray,
+    internal val textures: List<ImageBitmap>,
+    chessFrameEnabled: Boolean = false,
+) {
     internal val hFov: Float
     internal val tilt: Float
     internal val yawMax: Float
@@ -70,6 +77,8 @@ class GalleryWallScene(geometry: ByteArray, internal val textures: List<ImageBit
     internal val pitchUp: Float
     internal val route: FloatArray
     internal val layers: List<SceneLayer>
+    internal val chessFrameLayer: SceneLayer?
+    internal val chessPicture: ScenePicture?
 
     init {
         val r = LittleEndian(geometry)
@@ -92,8 +101,23 @@ class GalleryWallScene(geometry: ByteArray, internal val textures: List<ImageBit
             if (ni % 2 == 1) r.short()
             SceneLayer(kind, texture, positions, uv, weight, indices)
         }
+        chessFrameLayer = if (chessFrameEnabled) layers.firstOrNull { it.texture == VERMEER_WALL_TEXTURE } else null
+        chessPicture = chessFrameLayer?.let { layer ->
+            val atlas = textures.getOrNull(layer.texture)
+            val first = layer.weight.size - CHESS_FRAME_VERTICES
+            if (atlas == null || first < 0) null else {
+                // Wall atlas UVs point to the centers of the first and last pixels.
+                val x = layer.uv[2 * first].toInt()
+                val y = layer.uv[2 * first + 1].toInt()
+                val width = layer.uv[layer.uv.size - 2].toInt() - x + 1
+                val height = layer.uv.last().toInt() - y + 1
+                ScenePicture(atlas, IntOffset(x, y), IntSize(width, height))
+            }
+        }
     }
 }
+
+internal class ScenePicture(val atlas: ImageBitmap, val origin: IntOffset, val size: IntSize)
 
 internal class SceneLayer(
     val kind: Int,
@@ -107,6 +131,12 @@ internal class SceneLayer(
 private const val SKY = 0
 private const val SOLID = 1
 private const val WATER = 3
+
+// The final surface in the Vermeer wall batch is the frame face, from _chess_frame in walls.py.
+private const val VERMEER_WALL_TEXTURE = 1
+private const val CHESS_FRAME_COLS = 15
+private const val CHESS_FRAME_ROWS = 10
+private const val CHESS_FRAME_VERTICES = CHESS_FRAME_COLS * CHESS_FRAME_ROWS
 
 /**
  * The painting laid back over the ground from where it was painted. Seen from
@@ -145,6 +175,13 @@ internal class EnterPainting {
     private var meshes: List<Mesh> = emptyList()
     private val eye = FloatArray(3)
 
+    /** Frame corners from the last draw in image order, clockwise from the top left. */
+    var chessFrame: List<Offset>? = null
+        private set
+
+    var chessFrameVisible by mutableStateOf(false)
+        private set
+
     /** The focal length the scene was last drawn with, in pixels, so a drag turns it pixel for pixel. */
     var focal = 1f
         private set
@@ -160,6 +197,8 @@ internal class EnterPainting {
 
     fun prepare(scene: GalleryWallScene) {
         if (scene === forScene) return
+        chessFrame = null
+        chessFrameVisible = false
         forScene = scene
         meshes = scene.layers.mapNotNull { layer ->
             val texture = scene.textures.getOrNull(layer.texture) ?: return@mapNotNull null
@@ -201,6 +240,7 @@ internal class EnterPainting {
         pitch: Float,
         time: Float,
     ) {
+        chessFrame = null
         val e = progress.clamped(0f, 1f)
         val reveal = smoothstep(REVEAL_FROM, REVEAL_TO, e)
         // Nothing moves until the painting has given way to the scene.
@@ -230,6 +270,9 @@ internal class EnterPainting {
                 val layer = mesh.layer
                 if (layer.kind == WATER && water <= 0.001f) continue
                 project(mesh, focal, cx, cy, fx, fy, fz, rx, rz, ux, uy, uz, water, walked, time)
+                if (through && reveal == 1f && layer === scene.chessFrameLayer) {
+                    chessFrame = chessFrameCorners(mesh)
+                }
                 drawIntoCanvas { it.drawVertices(mesh.vertices, BlendMode.Modulate, mesh.paint) }
             }
             // The painting itself over the scene until it gives way.
@@ -247,7 +290,49 @@ internal class EnterPainting {
         }
         // Seen through the frame until the eye has gone through it.
         if (through) scope.layers() else scope.clipPath(outline, block = layers)
+        chessFrameVisible = chessFrame?.let { corners ->
+            // The projected center is the intersection of the diagonals.
+            val a = corners[0]
+            val b = corners[2]
+            val c = corners[1]
+            val d = corners[3]
+            val along = cross(c, d, a) / (cross(c, d, a) - cross(c, d, b))
+            val x = lerp(a.x, b.x, along)
+            val y = lerp(a.y, b.y, along)
+            x >= 0f && x < scope.size.width && y >= 0f && y < scope.size.height
+        } ?: false
     }
+
+    fun hitChessFrame(position: Offset): List<Offset>? {
+        val corners = chessFrame ?: return null
+        for (i in corners.indices) {
+            val a = corners[i]
+            val b = corners[(i + 1) % corners.size]
+            if (cross(a, b, position) < 0f) return null
+        }
+        return corners
+    }
+
+    private fun chessFrameCorners(mesh: Mesh): List<Offset>? {
+        val first = mesh.z.size - CHESS_FRAME_VERTICES
+        if (first < 0) return null
+        val last = mesh.z.lastIndex
+        val topLeft = screenCorner(mesh, first) ?: return null
+        val topRight = screenCorner(mesh, first + CHESS_FRAME_COLS - 1) ?: return null
+        val bottomRight = screenCorner(mesh, last) ?: return null
+        val bottomLeft = screenCorner(mesh, last - CHESS_FRAME_COLS + 1) ?: return null
+        if (cross(topLeft, topRight, bottomLeft) <= 0f) return null
+        return listOf(topLeft, topRight, bottomRight, bottomLeft)
+    }
+
+    private fun screenCorner(mesh: Mesh, vertex: Int): Offset? {
+        if (mesh.z[vertex] < NEAR_CLIP) return null
+        val positions = mesh.vertices.positions
+        return Offset(positions[2 * vertex], positions[2 * vertex + 1])
+    }
+
+    private fun cross(a: Offset, b: Offset, p: Offset): Float =
+        (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x)
 
     /**
      * Outlines in [outline] the frame as the eye now sees it: the painting's

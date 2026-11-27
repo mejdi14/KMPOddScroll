@@ -445,6 +445,19 @@ fun GalleryWallScroll(
     val room = remember { Room() }
     val inside = remember { StepInside() }
     val enter = remember { EnterPainting() }
+    var chessEntry by remember(state) { mutableStateOf<List<Offset>?>(null) }
+    var chessPosition by remember(state) { mutableStateOf(ChessPosition.initial()) }
+    val insideStudio by remember(state) {
+        derivedStateOf {
+            state.tick
+            state.inside && state.stepIn == 1f && state.scene?.chessPicture != null
+        }
+    }
+    fun enterChess(corners: List<Offset>) {
+        if (insideStudio && viewport.width > 0 && viewport.height > 0) {
+            chessEntry = corners.map { Offset(it.x / viewport.width, it.y / viewport.height) }
+        }
+    }
     val canvas = remember { FloatArray(4) }
     // Where the bare canvas of the painting walked up to lies on screen, so its study opens on it there.
     val hung = remember { mutableStateOf(Rect.Zero) }
@@ -479,7 +492,8 @@ fun GalleryWallScroll(
             withFrameNanos { now ->
                 val deltaMs = if (previous == 0L) 16.67f else (now - previous) / 1_000_000f
                 previous = now
-                state.advance(deltaMs.clamped(1f, 50f))
+                // Returning from the board should reveal the same studio camera, even mid-turn.
+                if (chessEntry == null) state.advance(deltaMs.clamped(1f, 50f))
             }
         }
     }
@@ -518,7 +532,10 @@ fun GalleryWallScroll(
                         }
                         state.release(dragging)
                         if (state.looking) {
-                            if (!dragging && (exitLabel == null || state.canInspect)) {
+                            val frameHit = if (insideStudio && !dragging) enter.hitChessFrame(down.position) else null
+                            if (frameHit != null) {
+                                enterChess(frameHit)
+                            } else if (!dragging && (exitLabel == null || state.canInspect)) {
                                 if (state.inspected && !state.inside) state.uninspect() else state.leave()
                             }
                         } else if (!dragging) {
@@ -605,6 +622,12 @@ fun GalleryWallScroll(
             HudButton(inspectLabel, state.canInspect && detailsReady, background, contentColor,
                 Modifier.align(Alignment.BottomEnd).padding(end = HUD_SIDE, bottom = HUD_BOTTOM), state::inspect)
         }
+        if (insideStudio && chessEntry == null) {
+            ChessEntryPrompt(enter.chessFrameVisible,
+                Modifier.align(Alignment.BottomCenter).padding(bottom = HUD_BOTTOM + 54.dp)) {
+                enter.chessFrame?.let(::enterChess)
+            }
+        }
         if (state.showingInspection) CompositionLocalProvider(
             LocalInspectionLens provides lens,
             LocalContentColor provides contentColor,
@@ -616,6 +639,11 @@ fun GalleryWallScroll(
                     drawFold(card, bounds, progress, over)
                 }
             }
+        }
+        val entry = chessEntry
+        val picture = painting.scene?.chessPicture
+        if (entry != null && picture != null) {
+            InsideChessPainting(picture, entry, chessPosition, { chessPosition = it }, { chessEntry = null })
         }
     }
 }
@@ -1539,7 +1567,7 @@ private fun DrawScope.drawEdges(card: CardArt, edges: ImageBitmap, left: Float, 
  * written into [out] — the same construction as Lift Stack's. Rows are the
  * input axes.
  */
-private fun quadMatrix(q: FloatArray, w: Float, h: Float, out: Matrix): Boolean {
+internal fun quadMatrix(q: FloatArray, w: Float, h: Float, out: Matrix): Boolean {
     val x0 = q[0]; val y0 = q[1]
     val x1 = q[2]; val y1 = q[3]
     val x2 = q[4]; val y2 = q[5]
