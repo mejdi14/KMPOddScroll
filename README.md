@@ -22,6 +22,8 @@ a closer look, and step inside Vermeer's *The Art of Painting* to explore the st
 
 https://github.com/user-attachments/assets/08fc9408-3106-4a72-b8d9-e6f51ac9ae1a
 
+[Try the live demo](https://mejdi14.github.io/KMPOddScroll/) and choose **Gallery Wall** from the menu.
+
 <br>
 
 ## Flex Carousel
