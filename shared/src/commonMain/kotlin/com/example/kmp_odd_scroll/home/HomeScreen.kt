@@ -161,15 +161,9 @@ private fun Header(
             lineHeight = if (compact) 30.sp else 40.sp,
             letterSpacing = (-0.025).em,
         )
-        Spacer(Modifier.height(if (compact) 16.dp else 24.dp))
-        Text(
-            text = "Unusual scrolling styles for Compose Multiplatform, from liquid glass to pop-up dioramas.",
-            color = colors.muted,
-            fontFamily = Sans,
-            fontSize = 14.sp,
-            lineHeight = 23.sp,
-        )
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(if (compact) 8.dp else 16.dp))
+        SocialLinks(ink = colors.foreground, enabled = enabled)
+        Spacer(Modifier.height(8.dp))
         Text(
             text = "Open a demo to explore its layout and gestures.",
             color = colors.muted,
