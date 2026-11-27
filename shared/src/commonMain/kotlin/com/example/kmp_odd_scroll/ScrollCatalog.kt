@@ -122,7 +122,6 @@ private val allScrollDemos: List<ScrollDemo> = listOf(
         title = "Runway",
         subtitle = "A perspective runway of papercraft dioramas whose cutouts flip upright as you scroll past",
         tech = "Projective transforms",
-        ready = true,
         screen = { RunwayDemoScreen() },
     ),
 )
