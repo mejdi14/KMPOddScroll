@@ -128,6 +128,7 @@ fun GalleryWallDemoScreen() {
                 background = palette.page,
                 contentColor = palette.ink,
                 frame = gilt(YELLOW_GOLD, Shell),
+                stepInsideLabel = if (selected?.let(museum::get)?.name == "museum_vermeer") "Step inside" else null,
                 state = state,
                 detailsReady = selected != null && selected == loaded?.first,
                 onWallReady = { drawn = true },
