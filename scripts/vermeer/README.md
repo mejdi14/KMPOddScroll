@@ -14,6 +14,15 @@ To rebuild the bundled textures and geometry from the checked-in artwork, use Py
 python3 scripts/vermeer/build.py
 ```
 
+The chess close-up uses the supplied reproduction in `art/chess-players-original.jpg`.
+The generator traces eight transparent pieces and fills the board behind them
+with paint sampled from nearby squares. Its output provides the texture under
+a lifted piece and the sprite atlas used for play.
+
+```sh
+python3 scripts/vermeer/chess_layers.py scripts/vermeer/art/chess-players-original.jpg
+```
+
 [Preview the studio](studio-preview.jpg)
 
 <details>

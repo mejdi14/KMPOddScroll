@@ -186,7 +186,9 @@ private fun rememberWallPictures(): WallPictures {
 
 @OptIn(ExperimentalResourceApi::class)
 private suspend fun MuseumPainting.loadDetails(item: GalleryWallItem): GalleryWallItem = coroutineScope {
-    val names = listOf("${name}_depth") + layers.map { "${name}_$it" }
+    val chess = name == "museum_vermeer"
+    val names = listOf("${name}_depth") + layers.map { "${name}_$it" } +
+        if (chess) listOf("museum_chess_plate", "museum_chess_pieces") else emptyList()
     val geometry = if (layers.isEmpty()) null else async { Res.readBytes("files/${name}_scene.bin") }
     val bytes = readPictures(names)
     val images = bytes.map { encoded ->
@@ -195,7 +197,11 @@ private suspend fun MuseumPainting.loadDetails(item: GalleryWallItem): GalleryWa
     }
     val scene = geometry?.await()?.let { layout ->
         withContext(Dispatchers.Default) {
-            GalleryWallScene(layout, images.drop(1), chessFrameEnabled = name == "museum_vermeer")
+            GalleryWallScene(
+                layout, images.subList(1, 1 + layers.size),
+                chessPlate = if (chess) images[1 + layers.size] else null,
+                chessPieces = if (chess) images[2 + layers.size] else null,
+            )
         }
     }
     item.copy(depth = images.first(), scene = scene)

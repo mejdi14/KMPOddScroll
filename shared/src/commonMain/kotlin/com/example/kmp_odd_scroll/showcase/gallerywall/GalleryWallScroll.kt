@@ -446,7 +446,14 @@ fun GalleryWallScroll(
     val inside = remember { StepInside() }
     val enter = remember { EnterPainting() }
     var chessEntry by remember(state) { mutableStateOf<List<Offset>?>(null) }
-    var chessPosition by remember(state) { mutableStateOf(ChessPosition.initial()) }
+    val originalChessPosition = remember(state) { ChessPosition.initial() }
+    var chessPosition by remember(state) { mutableStateOf(originalChessPosition) }
+    val revisedChessPosition by remember(state) {
+        derivedStateOf {
+            val current = chessPosition
+            current.takeIf { (0 until 64).any { square -> current[square] != originalChessPosition[square] } }
+        }
+    }
     val insideStudio by remember(state) {
         derivedStateOf {
             state.tick
@@ -593,7 +600,7 @@ fun GalleryWallScroll(
                     if (canvasOnScreen(card, hang.start(subject) - state.position, room, item, canvas) && scene != null) {
                         enter.draw(
                             this, scene, item.image, canvas[0], canvas[1], canvas[2], canvas[3],
-                            state.stepIn, state.route, state.yaw, state.pitch, state.insideTime,
+                            state.stepIn, state.route, state.yaw, state.pitch, state.insideTime, revisedChessPosition,
                         )
                     } else if (canvasOnScreen(card, hang.start(subject) - state.position, room, item, canvas)) {
                         inside.draw(

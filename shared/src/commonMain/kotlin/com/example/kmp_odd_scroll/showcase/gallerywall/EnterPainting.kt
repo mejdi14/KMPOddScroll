@@ -4,21 +4,28 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.ImageShader
+import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.VertexMode
 import androidx.compose.ui.graphics.Vertices
+import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import com.example.kmp_odd_scroll.showcase.internal.clamped
 import com.example.kmp_odd_scroll.showcase.internal.lerp
 import com.example.kmp_odd_scroll.showcase.internal.smoothstep
@@ -68,7 +75,8 @@ import kotlin.math.tan
 class GalleryWallScene(
     geometry: ByteArray,
     internal val textures: List<ImageBitmap>,
-    chessFrameEnabled: Boolean = false,
+    chessPlate: ImageBitmap? = null,
+    chessPieces: ImageBitmap? = null,
 ) {
     internal val hFov: Float
     internal val tilt: Float
@@ -101,23 +109,29 @@ class GalleryWallScene(
             if (ni % 2 == 1) r.short()
             SceneLayer(kind, texture, positions, uv, weight, indices)
         }
-        chessFrameLayer = if (chessFrameEnabled) layers.firstOrNull { it.texture == VERMEER_WALL_TEXTURE } else null
+        chessFrameLayer = if (chessPlate != null && chessPieces != null) layers.firstOrNull { it.texture == VERMEER_WALL_TEXTURE } else null
         chessPicture = chessFrameLayer?.let { layer ->
             val atlas = textures.getOrNull(layer.texture)
             val first = layer.weight.size - CHESS_FRAME_VERTICES
-            if (atlas == null || first < 0) null else {
+            if (atlas == null || chessPlate == null || chessPieces == null || first < 0) null else {
                 // Wall atlas UVs point to the centers of the first and last pixels.
                 val x = layer.uv[2 * first].toInt()
                 val y = layer.uv[2 * first + 1].toInt()
                 val width = layer.uv[layer.uv.size - 2].toInt() - x + 1
                 val height = layer.uv.last().toInt() - y + 1
-                ScenePicture(atlas, IntOffset(x, y), IntSize(width, height))
+                ScenePicture(atlas, IntOffset(x, y), IntSize(width, height), chessPlate, chessPieces)
             }
         }
     }
 }
 
-internal class ScenePicture(val atlas: ImageBitmap, val origin: IntOffset, val size: IntSize)
+internal class ScenePicture(
+    val atlas: ImageBitmap,
+    val origin: IntOffset,
+    val size: IntSize,
+    val plate: ImageBitmap,
+    val pieces: ImageBitmap,
+)
 
 internal class SceneLayer(
     val kind: Int,
@@ -174,6 +188,10 @@ internal class EnterPainting {
     private var forScene: GalleryWallScene? = null
     private var meshes: List<Mesh> = emptyList()
     private val eye = FloatArray(3)
+    private var revisedChessPosition: ChessPosition? = null
+    private var revisedChessImage: ImageBitmap? = null
+    private val chessFrameQuad = FloatArray(8)
+    private val chessFrameTransform = Matrix()
 
     /** Frame corners from the last draw in image order, clockwise from the top left. */
     var chessFrame: List<Offset>? = null
@@ -199,6 +217,8 @@ internal class EnterPainting {
         if (scene === forScene) return
         chessFrame = null
         chessFrameVisible = false
+        revisedChessPosition = null
+        revisedChessImage = null
         forScene = scene
         meshes = scene.layers.mapNotNull { layer ->
             val texture = scene.textures.getOrNull(layer.texture) ?: return@mapNotNull null
@@ -239,6 +259,7 @@ internal class EnterPainting {
         yaw: Float,
         pitch: Float,
         time: Float,
+        chessPosition: ChessPosition?,
     ) {
         chessFrame = null
         val e = progress.clamped(0f, 1f)
@@ -265,15 +286,21 @@ internal class EnterPainting {
         val walked = smoothstep(DECAL_FROM, DECAL_TO, route)
 
         val through = frame(scene, left, top, right, bottom, cx, cy, focal, fx, fy, fz, rx, rz, ux, uy, uz)
+        val canEnterChess = through && reveal == 1f
         val layers: DrawScope.() -> Unit = {
             for (mesh in meshes) {
                 val layer = mesh.layer
                 if (layer.kind == WATER && water <= 0.001f) continue
                 project(mesh, focal, cx, cy, fx, fy, fz, rx, rz, ux, uy, uz, water, walked, time)
-                if (through && reveal == 1f && layer === scene.chessFrameLayer) {
-                    chessFrame = chessFrameCorners(mesh)
-                }
                 drawIntoCanvas { it.drawVertices(mesh.vertices, BlendMode.Modulate, mesh.paint) }
+                if (layer === scene.chessFrameLayer && (canEnterChess || chessPosition != null)) {
+                    val corners = chessFrameCorners(mesh)
+                    if (canEnterChess) chessFrame = corners
+                    val picture = scene.chessPicture
+                    if (corners != null && picture != null && chessPosition != null) {
+                        drawRevisedChessFrame(picture, chessPosition, corners)
+                    }
+                }
             }
             // The painting itself over the scene until it gives way.
             if (reveal < 1f) {
@@ -301,6 +328,31 @@ internal class EnterPainting {
             val y = lerp(a.y, b.y, along)
             x >= 0f && x < scope.size.width && y >= 0f && y < scope.size.height
         } ?: false
+    }
+
+    private fun DrawScope.drawRevisedChessFrame(
+        picture: ScenePicture,
+        position: ChessPosition,
+        corners: List<Offset>,
+    ) {
+        for (i in corners.indices) {
+            chessFrameQuad[2 * i] = corners[i].x
+            chessFrameQuad[2 * i + 1] = corners[i].y
+        }
+        val width = picture.size.width.toFloat()
+        val height = picture.size.height.toFloat()
+        if (!quadMatrix(chessFrameQuad, width, height, chessFrameTransform)) return
+        val frame = revisedChessImage?.takeIf { revisedChessPosition === position }
+            ?: ImageBitmap(picture.size.width, picture.size.height).also { bitmap ->
+                CanvasDrawScope().draw(Density(1f), LayoutDirection.Ltr, Canvas(bitmap), Size(width, height)) {
+                    drawChessFrame(picture, Matrix(), position)
+                }
+                revisedChessPosition = position
+                revisedChessImage = bitmap
+            }
+        withTransform({ transform(chessFrameTransform) }) {
+            drawImage(frame, dstSize = picture.size, filterQuality = FilterQuality.Medium)
+        }
     }
 
     fun hitChessFrame(position: Offset): List<Offset>? {

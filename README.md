@@ -213,10 +213,14 @@ Painting* as a worn paper print. Turn it over to see an imagined chalk study of
 the model holding her book, created for the demo with ImageGen.
 Step inside to see a girl leaning against the wall beside a Delft vase, watching
 the model pose. An unfinished painting of two girls playing chess rests on the
-artist’s desk, with a silver ewer on a side table nearby. A framed chess picture
-hangs between the windows. Tap it to approach the painted board and play chess
-with another person on the same device. Return to the studio and revisit the
-board to continue the game. On the door wall, a celestial globe
+artist’s desk, with a silver ewer on a side table nearby. Hildur Nilsen Prahl’s *Mat i tre træk* (1885)
+hangs between the windows. Tap the frame to zoom in on the painted table.
+White has mate in three. Tap or drag the eight original painted chessmen on
+the board to explore the puzzle with another player. The frame shows your
+position when you return to the studio.
+[Oseana’s painting and puzzle notes](https://www.oseana.no/manedens-bilde-mat-i-tre-traek-av-hildur-nilsen-prahl/).
+
+On the door wall, a celestial globe
 stands on the linen chest and an elderly woman sits beside the peeking child.
 ImageGen supplied the imagined studio furnishings and the views beyond the
 original frame.

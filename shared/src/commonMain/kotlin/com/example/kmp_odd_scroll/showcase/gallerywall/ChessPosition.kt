@@ -13,7 +13,10 @@ internal enum class ChessSide(val pawnStep: Int, val backRank: Int) {
 
 internal enum class ChessKind { PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING }
 
-internal data class ChessPiece(val side: ChessSide, val kind: ChessKind)
+internal data class ChessPiece(val side: ChessSide, val kind: ChessKind, val id: Int)
+
+// Corners of the checker grid in the 508 × 604 painting, clockwise from a8.
+internal val paintedGridCorners = floatArrayOf(361.6f, 352.9f, 322.8f, 410.3f, 197f, 387.5f, 259.8f, 341.3f)
 
 internal enum class ChessStatus { PLAYING, CHECK, CHECKMATE, STALEMATE }
 
@@ -79,7 +82,7 @@ internal class ChessPosition private constructor(
     }
 
     private fun kingIsAttacked(side: ChessSide): Boolean {
-        val king = squares.indexOf(ChessPiece(side, ChessKind.KING))
+        val king = squares.indexOfFirst { it?.side == side && it.kind == ChessKind.KING }
         return squares.indices.any { from ->
             val piece = squares[from]
             piece != null && piece.side != side && attacks(from, king, piece)
@@ -141,20 +144,20 @@ internal class ChessPosition private constructor(
 
     companion object {
         fun initial(): ChessPosition {
-            val backRank = listOf(
-                ChessKind.ROOK, ChessKind.KNIGHT, ChessKind.BISHOP, ChessKind.QUEEN,
-                ChessKind.KING, ChessKind.BISHOP, ChessKind.KNIGHT, ChessKind.ROOK,
-            )
+            // Hermann von Gottschall's problem 4874 (1881), as shown in the painting.
             val squares = List(64) { square ->
-                when (square / 8) {
-                    0 -> ChessPiece(ChessSide.BLACK, backRank[square % 8])
-                    1 -> ChessPiece(ChessSide.BLACK, ChessKind.PAWN)
-                    6 -> ChessPiece(ChessSide.WHITE, ChessKind.PAWN)
-                    7 -> ChessPiece(ChessSide.WHITE, backRank[square % 8])
+                when (square) {
+                    4 -> ChessPiece(ChessSide.WHITE, ChessKind.QUEEN, square) // e8
+                    16 -> ChessPiece(ChessSide.BLACK, ChessKind.PAWN, square) // a6
+                    28 -> ChessPiece(ChessSide.WHITE, ChessKind.PAWN, square) // e5
+                    33 -> ChessPiece(ChessSide.WHITE, ChessKind.KNIGHT, square) // b4
+                    41, 49 -> ChessPiece(ChessSide.BLACK, ChessKind.PAWN, square) // b3, b2
+                    52 -> ChessPiece(ChessSide.WHITE, ChessKind.KING, square) // e2
+                    57 -> ChessPiece(ChessSide.BLACK, ChessKind.KING, square) // b1
                     else -> null
                 }
             }
-            return ChessPosition(squares, ChessSide.WHITE, setOf(0, 7, 56, 63), null)
+            return ChessPosition(squares, ChessSide.WHITE, emptySet(), null)
         }
     }
 }
